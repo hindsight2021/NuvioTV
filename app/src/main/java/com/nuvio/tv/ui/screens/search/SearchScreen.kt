@@ -687,9 +687,9 @@ fun SearchScreen(
                 }
             }
 
-            if (uiState.aiCatalogRow != null && uiState.aiCatalogRow.items.isNotEmpty()) {
+            val aiCatalogRow = uiState.aiCatalogRow
+            if (aiCatalogRow != null && aiCatalogRow.items.isNotEmpty()) {
                 item(key = "ai_catalog_row") {
-                    val aiRow = uiState.aiCatalogRow
                     val aiCatalogKey = "ai_catalog_row"
                     val aiRowState = searchRowStates.getOrPut(aiCatalogKey) {
                         LazyListState()
@@ -698,7 +698,7 @@ fun SearchScreen(
                     val aiEntryFocusRequester = searchRowEntryFocusRequesters.getOrPut(aiCatalogKey) { FocusRequester() }
 
                     CatalogRowSection(
-                        catalogRow = aiRow,
+                        catalogRow = aiCatalogRow,
                         posterCardStyle = posterCardStyle,
                         showSeeAll = false,
                         showPosterLabels = uiState.posterLabelsEnabled,
@@ -711,7 +711,7 @@ fun SearchScreen(
                         listState = aiRowState,
                         isItemWatched = { false },
                         onItemClick = { id, type, addonBaseUrl ->
-                            val clickedItem = aiRow.items.firstOrNull { it.id == id }
+                            val clickedItem = aiCatalogRow.items.firstOrNull { it.id == id }
                             val backdrop = clickedItem?.background
                             HeroBackdropState.update(backdrop)
                             onNavigateToDetail(id, type, addonBaseUrl)

@@ -487,9 +487,9 @@ fun HomeScreen(
             onPlayRandomEpisode = {
                 viewModel.playRandomEpisode(item, selectedPoster.addonBaseUrl) { id, type, addon, season, episode ->
                     if (onPlaySeriesEpisode != null) {
-                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                        onPlaySeriesEpisode(id, type, addon.orEmpty(), season, episode)
                     } else {
-                        onNavigateToDetail(id, type, addon)
+                        onNavigateToDetail(id, type, addon.orEmpty())
                     }
                 }
                 posterOptionsTarget = null
@@ -497,9 +497,9 @@ fun HomeScreen(
             onStartChannelShuffle = {
                 viewModel.startChannel(item, selectedPoster.addonBaseUrl, shuffle = true) { id, type, addon, season, episode ->
                     if (onPlaySeriesEpisode != null) {
-                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                        onPlaySeriesEpisode(id, type, addon.orEmpty(), season, episode)
                     } else {
-                        onNavigateToDetail(id, type, addon)
+                        onNavigateToDetail(id, type, addon.orEmpty())
                     }
                 }
                 posterOptionsTarget = null
@@ -507,9 +507,9 @@ fun HomeScreen(
             onStartChannelOrder = {
                 viewModel.startChannel(item, selectedPoster.addonBaseUrl, shuffle = false) { id, type, addon, season, episode ->
                     if (onPlaySeriesEpisode != null) {
-                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                        onPlaySeriesEpisode(id, type, addon.orEmpty(), season, episode)
                     } else {
-                        onNavigateToDetail(id, type, addon)
+                        onNavigateToDetail(id, type, addon.orEmpty())
                     }
                 }
                 posterOptionsTarget = null

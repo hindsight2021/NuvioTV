@@ -1278,7 +1278,7 @@ class SearchViewModel @Inject constructor(
                 background = null,
                 logo = null,
                 description = rec.rationale,
-                releaseInfo = rec.year,
+                releaseInfo = rec.year?.toString(),
                 imdbRating = null,
                 genres = listOf("AI Pick")
             )
@@ -1339,7 +1339,7 @@ class SearchViewModel @Inject constructor(
                             } ?: result.data.items.first()
 
                             val updatedItem = matched.copy(
-                                description = rec.rationale.ifBlank { matched.description },
+                                description = rec.rationale?.ifBlank { matched.description } ?: matched.description,
                                 sourceAddonBaseUrl = addon.baseUrl
                             )
 
