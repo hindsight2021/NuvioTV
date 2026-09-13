@@ -114,20 +114,18 @@ jobs:
 
           if [[ ! -s release-notes.md ]] || grep -q "Traceback" release-notes.md || (( generation_status != 0 )); then
             echo "Generating release notes for Nuvio+..."
-            cat << 'EOF' > release-notes.md
-### Nuvio+ Release
-
-Custom build featuring:
-- **Local NAS & Storage**: Playback from local folders and mounted SMB/NFS network shares
-- **Smart Channels & Play Random**: Long-press any show or episode to play random or create continuous shuffle / chronological binge channels
-- **Trakt / Simkl Quick Toggle**: 1-click add/remove from your watchlist directly in episode/show context menus
-- **Custom Playlists**: "Play Next" and queued playlist manager with save/load capability
-- **Startup Chime**: Ambient modern audio chime on cold launch
-- **Dual Installation**: Installs cleanly as `com.nuvio.tv.plus` alongside the official Nuvio app
-EOF
-            cat << 'EOF' > release-note-quality.md
-Release notes generated successfully for Nuvio+.
-EOF
+            {
+              echo "### Nuvio+ Release"
+              echo ""
+              echo "Custom build featuring:"
+              echo "- Local NAS & Storage: Playback from local folders and mounted SMB/NFS shares"
+              echo "- Smart Channels & Play Random: Long-press any show/episode for random or continuous channels"
+              echo "- Trakt / Simkl Quick Toggle: 1-click add/remove watchlist from context menus"
+              echo "- Custom Playlists: Play Next and queue manager with save/load capability"
+              echo "- Startup Chime: Ambient modern audio chime on cold launch"
+              echo "- Dual Installation: Installs cleanly as com.nuvio.tv.plus alongside official Nuvio"
+            } > release-notes.md
+            echo "Release notes generated successfully for Nuvio+." > release-note-quality.md
           fi
 
           {
