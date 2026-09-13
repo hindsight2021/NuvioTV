@@ -89,11 +89,11 @@ val useLocalFfmpegDecoder = truthy(
 val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_FILE")
 val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuvioplus")
 val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "nuvio2026plus")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "nuvio2026plus")
 
 android {
     namespace = "com.nuvio.tv"
@@ -145,14 +145,18 @@ android {
         buildConfigField("String", "SENTRY_DSN", buildConfigString(sentryDsn))
 
         // In-app updater (GitHub Releases)
-        buildConfigField("String", "GITHUB_OWNER", "\"NuvioMedia\"")
-        buildConfigField("String", "GITHUB_REPO", "\"NuvioTV\"")
+        val githubOwner = env("NUVIO_GITHUB_OWNER") ?: localProperties.getProperty("GITHUB_OWNER", "hindsight2021")
+        val githubRepo = env("NUVIO_GITHUB_REPO") ?: localProperties.getProperty("GITHUB_REPO", "NuvioTV")
+        buildConfigField("String", "GITHUB_OWNER", "\"$githubOwner\"")
+        buildConfigField("String", "GITHUB_REPO", "\"$githubRepo\"")
     }
 
     flavorDimensions += "distribution"
     productFlavors {
         create("full") {
             dimension = "distribution"
+            applicationIdSuffix = ".plus"
+            resValue("string", "app_name", "Nuvio+")
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
@@ -199,8 +203,8 @@ android {
             buildConfigField("String", "SENTRY_ENVIRONMENT", buildConfigString("debug"))
 
             // Dev environment (from local.dev.properties)
-            buildConfigField("String", "SUPABASE_URL", buildConfigString(resolveProperty(devProperties, localProperties, "NUVIO_SUPABASE_URL")))
-            buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(resolveProperty(devProperties, localProperties, "NUVIO_SUPABASE_ANON_KEY")))
+            buildConfigField("String", "SUPABASE_URL", buildConfigString(resolveProperty(devProperties, localProperties, "NUVIO_SUPABASE_URL", "https://api.nuvio.tv")))
+            buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(resolveProperty(devProperties, localProperties, "NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI")))
             buildConfigField("String", "SUPABASE_FALLBACK_URL", buildConfigString(resolveProperty(devProperties, localProperties, "NUVIO_SUPABASE_FALLBACK_URL")))
             buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${devProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://nuvio.tv/tv-login")}\"")
             buildConfigField("String", "DEVICE_LOGIN_WEB_BASE_URL", "\"${devProperties.getProperty("DEVICE_LOGIN_WEB_BASE_URL", "https://nuvio.tv/link")}\"")
@@ -234,8 +238,8 @@ android {
             buildConfigField("String", "SENTRY_ENVIRONMENT", buildConfigString("production"))
 
             // Production environment (from local.properties)
-            buildConfigField("String", "SUPABASE_URL", buildConfigString(localProperties.getProperty("NUVIO_SUPABASE_URL", "")))
-            buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(localProperties.getProperty("NUVIO_SUPABASE_ANON_KEY", "")))
+            buildConfigField("String", "SUPABASE_URL", buildConfigString(localProperties.getProperty("NUVIO_SUPABASE_URL", "https://api.nuvio.tv")))
+            buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(localProperties.getProperty("NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI")))
             buildConfigField("String", "SUPABASE_FALLBACK_URL", buildConfigString(localProperties.getProperty("NUVIO_SUPABASE_FALLBACK_URL", "")))
             buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://nuvio.tv/tv-login")}\"")
             buildConfigField("String", "DEVICE_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("DEVICE_LOGIN_WEB_BASE_URL", "https://nuvio.tv/link")}\"")

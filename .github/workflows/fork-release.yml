@@ -1,0 +1,157 @@
+name: Build Nuvio+ Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. 0.9.2-plus.1)'
+        required: false
+        default: '0.9.2-plus.1'
+      title:
+        description: 'Release title'
+        required: false
+        default: 'Nuvio+ 0.9.2 Release 1'
+      prerelease:
+        description: 'Mark as prerelease'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        default: '0.9.2-plus.auto'
+      title:
+        type: string
+        default: 'Nuvio+ Auto-Synced Release'
+      prerelease:
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nuvio-plus-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: Build & Publish Nuvio+ APK
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LOCAL_PROPERTIES_BASE64: ${{ secrets.LOCAL_PROPERTIES_BASE64 }}
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS || 'nuvioplus' }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD || 'nuvio2026plus' }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD || 'nuvio2026plus' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure Keystore & Properties
+        run: |
+          keystore_path="${RUNNER_TEMP}/nuvioplus.jks"
+          if [[ -n "${RELEASE_KEYSTORE_BASE64}" ]]; then
+            printf '%s' "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
+          else
+            echo "Generating fallback build keystore..."
+            keytool -genkeypair -v -keystore "${keystore_path}" -storepass nuvio2026plus -alias nuvioplus -keypass nuvio2026plus -dname "CN=Nuvio Plus,O=Nuvio,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
+
+          if [[ -n "${LOCAL_PROPERTIES_BASE64}" ]]; then
+            printf '%s' "${LOCAL_PROPERTIES_BASE64}" | base64 --decode > local.properties
+          else
+            touch local.properties
+          fi
+
+          set_prop() {
+            local key="$1"
+            local val="$2"
+            sed -i -E "/^[[:space:]]*${key}[[:space:]]*=/d" local.properties
+            printf '\n%s=%s\n' "${key}" "${val}" >> local.properties
+          }
+
+          set_prop NUVIO_RELEASE_STORE_FILE "${keystore_path}"
+          set_prop NUVIO_RELEASE_KEY_ALIAS "${RELEASE_KEY_ALIAS}"
+          set_prop NUVIO_RELEASE_KEY_PASSWORD "${RELEASE_KEY_PASSWORD}"
+          set_prop NUVIO_RELEASE_STORE_PASSWORD "${RELEASE_STORE_PASSWORD}"
+          set_prop GITHUB_OWNER "hindsight2021"
+          set_prop GITHUB_REPO "NuvioTV"
+          set_prop NUVIO_SUPABASE_URL "https://api.nuvio.tv"
+          set_prop NUVIO_SUPABASE_ANON_KEY "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI"
+
+          # Defaults if not provided
+          grep -Eq "^[[:space:]]*TRAKT_CLIENT_ID[[:space:]]*=" local.properties || set_prop TRAKT_CLIENT_ID ""
+          grep -Eq "^[[:space:]]*TRAKT_CLIENT_SECRET[[:space:]]*=" local.properties || set_prop TRAKT_CLIENT_SECRET ""
+          grep -Eq "^[[:space:]]*SIMKL_CLIENT_ID[[:space:]]*=" local.properties || set_prop SIMKL_CLIENT_ID ""
+          grep -Eq "^[[:space:]]*SIMKL_APP_NAME[[:space:]]*=" local.properties || set_prop SIMKL_APP_NAME "nuvio"
+
+      - name: Build full release APKs
+        run: ./gradlew :app:assembleFullRelease --stacktrace
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvioplus-release-apks
+          path: app/build/outputs/apk/full/release/*.apk
+          if-no-files-found: error
+
+      - name: Determine Release Metadata
+        id: meta
+        run: |
+          tag="${{ inputs.tag || '0.9.2-plus.1' }}"
+          title="${{ inputs.title || 'Nuvio+ Release' }}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "title=${title}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.meta.outputs.title }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          mapfile -t apks < <(find app/build/outputs/apk/full/release -maxdepth 1 -type f -name '*.apk' -print | sort)
+          if (( ${#apks[@]} == 0 )); then
+            echo "No release APKs found!" >&2
+            exit 1
+          fi
+
+          args=(
+            "${RELEASE_TAG}"
+            --title "${RELEASE_TITLE}"
+            --notes "### Nuvio+ Custom Release
+- Built for Nvidia Shield with package ID `com.nuvio.tv.plus` (installs alongside official Nuvio)
+- Connected to official Nuvio backend (`api.nuvio.tv`)
+- Local NAS & mounted storage playback support
+- Long-press episode context menu with Play Random Episode and Show Channel streaming
+- Quick Add/Remove Watchlist for Trakt & Simkl
+- Play Next / Playlist Queue Builder
+- Modern startup sound
+- Automated OTA updates from hindsight2021/NuvioTV"
+          )
+
+          if [[ "${IS_PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          else
+            args+=(--latest)
+          fi
+
+          # Delete existing release with same tag if present
+          gh release delete "${RELEASE_TAG}" --yes || true
+          git tag -d "${RELEASE_TAG}" 2>/dev/null || true
+          git push origin ":refs/tags/${RELEASE_TAG}" 2>/dev/null || true
+
+          gh release create "${args[@]}" "${apks[@]}"

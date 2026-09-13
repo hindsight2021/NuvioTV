@@ -103,7 +103,14 @@ internal fun EpisodeOptionsOverlay(
     onToggleWatched: () -> Unit,
     onMarkSeasonWatched: () -> Unit = {},
     onMarkSeasonUnwatched: () -> Unit = {},
-    onMarkPreviousEpisodesWatched: () -> Unit = {}
+    onMarkPreviousEpisodesWatched: () -> Unit = {},
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
+    onPlayRandomEpisode: (() -> Unit)? = null,
+    onStartChannelShuffle: (() -> Unit)? = null,
+    onStartChannelOrder: (() -> Unit)? = null,
+    onToggleWatchlist: (() -> Unit)? = null,
+    isInWatchlist: Boolean = false
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -238,6 +245,31 @@ internal fun EpisodeOptionsOverlay(
                 EpisodeOverlayAction(
                     label = stringResource(R.string.cw_action_start_from_beginning),
                     onClick = onStartFromBeginning
+                )
+            )
+        }
+        if (isPlayEnabled) {
+            onPlayNext?.let {
+                add(EpisodeOverlayAction(label = "Play Next", onClick = it))
+            }
+            onAddToQueue?.let {
+                add(EpisodeOverlayAction(label = "Add to Playlist Queue", onClick = it))
+            }
+            onPlayRandomEpisode?.let {
+                add(EpisodeOverlayAction(label = "Play Random Episode", onClick = it))
+            }
+            onStartChannelShuffle?.let {
+                add(EpisodeOverlayAction(label = "Create Show Channel (Shuffle)", onClick = it))
+            }
+            onStartChannelOrder?.let {
+                add(EpisodeOverlayAction(label = "Create Show Channel (In Order)", onClick = it))
+            }
+        }
+        onToggleWatchlist?.let {
+            add(
+                EpisodeOverlayAction(
+                    label = if (isInWatchlist) "Remove from Watchlist" else "Add to Watchlist",
+                    onClick = it
                 )
             )
         }

@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.widget.Toast
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
@@ -293,13 +294,18 @@ fun EpisodesRow(
     onRestoreFocusHandled: () -> Unit = {},
     onEpisodeFocused: (episodeId: String) -> Unit = {},
     scrollToEpisodeId: String? = null,
-    onScrollToEpisodeHandled: () -> Unit = {}
+    onScrollToEpisodeHandled: () -> Unit = {},
+    contentId: String = "",
+    seriesTitle: String = "",
+    onToggleWatchlist: (() -> Unit)? = null,
+    isInWatchlist: Boolean = false
 ) {
     val dedupedEpisodes = remember(episodes) { episodes.distinctBy { it.id } }
     val restoreTargetRequester = restoreEpisodeId?.let { episodeFocusRequesters[it] }
     var optionsEpisode by remember { mutableStateOf<Video?>(null) }
     val isOverlayOpen = optionsEpisode != null
     val cardMetrics = rememberEpisodeCardMetrics(posterCardCornerRadiusDp)
+    val context = LocalContext.current
     val density = LocalDensity.current
     val rowPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
     val initialEpisodeIndex = remember(dedupedEpisodes, restoreEpisodeId, scrollToEpisodeId) {
@@ -481,7 +487,74 @@ fun EpisodesRow(
             onMarkPreviousEpisodesWatched = {
                 onMarkPreviousEpisodesWatched(selectedEpisode)
                 optionsEpisode = null
-            }
+            },
+            onPlayNext = {
+                val item = com.nuvio.tv.core.playlist.PlaylistItem(
+                    contentId = contentId,
+                    videoId = selectedEpisode.id,
+                    title = selectedEpisode.title.ifBlank { "Episode ${selectedEpisode.episode}" },
+                    seriesTitle = seriesTitle,
+                    season = selectedEpisode.season,
+                    episode = selectedEpisode.episode,
+                    thumbnail = selectedEpisode.thumbnail,
+                    mediaType = "series"
+                )
+                com.nuvio.tv.core.playlist.PlaylistManager.playNext(item)
+                Toast.makeText(context, "Added to Play Next", Toast.LENGTH_SHORT).show()
+                optionsEpisode = null
+            },
+            onAddToQueue = {
+                val item = com.nuvio.tv.core.playlist.PlaylistItem(
+                    contentId = contentId,
+                    videoId = selectedEpisode.id,
+                    title = selectedEpisode.title.ifBlank { "Episode ${selectedEpisode.episode}" },
+                    seriesTitle = seriesTitle,
+                    season = selectedEpisode.season,
+                    episode = selectedEpisode.episode,
+                    thumbnail = selectedEpisode.thumbnail,
+                    mediaType = "series"
+                )
+                com.nuvio.tv.core.playlist.PlaylistManager.addToQueue(item)
+                Toast.makeText(context, "Added to Playlist Queue", Toast.LENGTH_SHORT).show()
+                optionsEpisode = null
+            },
+            onPlayRandomEpisode = {
+                val playable = dedupedEpisodes.filter { canPlayEpisode(it) }
+                val randomEp = playable.randomOrNull() ?: selectedEpisode
+                onEpisodeClick(randomEp)
+                optionsEpisode = null
+            },
+            onStartChannelShuffle = {
+                val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                    contentId = contentId,
+                    seriesTitle = seriesTitle,
+                    episodes = dedupedEpisodes,
+                    startEpisode = selectedEpisode,
+                    shuffle = true
+                )
+                val targetEp = dedupedEpisodes.firstOrNull { it.id == first?.videoId } ?: selectedEpisode
+                onEpisodeClick(targetEp)
+                optionsEpisode = null
+            },
+            onStartChannelOrder = {
+                val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                    contentId = contentId,
+                    seriesTitle = seriesTitle,
+                    episodes = dedupedEpisodes,
+                    startEpisode = selectedEpisode,
+                    shuffle = false
+                )
+                val targetEp = dedupedEpisodes.firstOrNull { it.id == first?.videoId } ?: selectedEpisode
+                onEpisodeClick(targetEp)
+                optionsEpisode = null
+            },
+            onToggleWatchlist = onToggleWatchlist?.let { toggle ->
+                {
+                    toggle()
+                    optionsEpisode = null
+                }
+            },
+            isInWatchlist = isInWatchlist
         )
     }
 }

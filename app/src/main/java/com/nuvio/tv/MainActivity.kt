@@ -347,7 +347,9 @@ open class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         isFirstResumeAfterCreate = true
-        window?.setBackgroundDrawable(null)
+        if (savedInstanceState == null) {
+            com.nuvio.tv.core.sound.StartupSoundPlayer.play(this)
+        }
 
         // Wire the Activity-level launcher to the tracker
         externalPlaybackTracker.activityLauncher = externalPlayerLauncher
