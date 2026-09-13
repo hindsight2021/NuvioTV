@@ -1,4 +1,4 @@
-name: Nuvio+ Build & Release
+name: "Nuvio Plus Release"
 
 on:
   schedule:
@@ -7,12 +7,14 @@ on:
     inputs:
       force_build:
         description: 'Force release build even if no upstream changes'
+        required: false
         type: boolean
         default: true
       tag:
-        description: 'Release tag (leave empty for auto-versioning)'
+        description: 'Release tag'
+        required: false
         type: string
-        default: ''
+        default: '0.9.2-plus.1'
 
 permissions:
   contents: write
