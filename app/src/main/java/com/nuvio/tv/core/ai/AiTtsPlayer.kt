@@ -67,6 +67,8 @@ class AiTtsPlayer(private val context: Context) {
         isInitialized = false
     }
 
+    fun shutdown() = release()
+
     companion object {
         private const val TAG = "AiTtsPlayer"
     }

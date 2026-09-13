@@ -94,8 +94,9 @@ fun AiSettingsContent(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item(key = "ai_provider") {
-                        SettingsValueRow(
+                        SettingsActionRow(
                             title = "AI Provider",
+                            subtitle = null,
                             value = activeProvider.displayName,
                             onClick = { showProviderDialog = true },
                             modifier = Modifier
@@ -116,16 +117,18 @@ fun AiSettingsContent(
                         } else {
                             "••••" + currentKey.takeLast(4)
                         }
-                        SettingsValueRow(
+                        SettingsActionRow(
                             title = "${activeProvider.displayName} API Key",
+                            subtitle = null,
                             value = maskedKey,
                             onClick = { showApiKeyDialog = true }
                         )
                     }
 
                     item(key = "ai_model") {
-                        SettingsValueRow(
+                        SettingsActionRow(
                             title = "Model",
+                            subtitle = null,
                             value = currentModel,
                             onClick = { showModelDialog = true }
                         )
@@ -245,10 +248,10 @@ private fun AiApiKeyDialog(
             Card(
                 onClick = {},
                 colors = CardDefaults.colors(
-                    containerColor = NuvioTheme.colors.BackgroundSecondary,
-                    contentColor = NuvioTheme.colors.TextPrimary
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    focusedContainerColor = NuvioTheme.colors.BackgroundCard
                 ),
-                shape = CardDefaults.shape(NuvioTheme.shapes.small),
+                shape = CardDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 BasicTextField(
