@@ -1,33 +1,30 @@
-name: Build Nuvio+ Release
+name: Nuvio+ Build & Release
 
 on:
+  schedule:
+    - cron: '0 4 * * *' # Daily check at 4 AM UTC
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag (e.g. 0.9.2-plus.1)'
-        required: false
-        type: string
-        default: '0.9.2-plus.1'
-      title:
-        description: 'Release title'
-        required: false
-        type: string
-        default: 'Nuvio+ 0.9.2 Release 1'
-      prerelease:
-        description: 'Mark as prerelease'
+      force_build:
+        description: 'Force release build even if no upstream changes'
         type: boolean
-        default: false
+        default: true
+      tag:
+        description: 'Release tag (leave empty for auto-versioning)'
+        type: string
+        default: ''
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
-  group: nuvio-plus-release-${{ github.ref }}
+  group: nuvioplus-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build-release:
-    name: Build & Publish Nuvio+ APK
+  build-and-release:
+    name: Build & Publish Release
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -43,16 +40,64 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check and Sync Upstream
+        id: sync
+        run: |
+          git remote add upstream https://github.com/NuvioMedia/NuvioTV.git || true
+          git fetch upstream dev --tags
+
+          UPSTREAM_HEAD=$(git rev-parse upstream/dev)
+          COMMON_ANCESTOR=$(git merge-base HEAD upstream/dev)
+
+          if [ "$UPSTREAM_HEAD" != "$COMMON_ANCESTOR" ]; then
+            echo "New upstream commits found. Attempting merge..."
+            if git merge upstream/dev --no-edit -m "chore(upstream): sync upstream/dev into fork"; then
+              echo "Merge clean!"
+              git push origin HEAD || true
+              echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Merge conflict detected!"
+              git merge --abort
+              gh issue create --repo ${{ github.repository }} \
+                --title "⚠️ Upstream Merge Conflict in Nuvio+" \
+                --body "Automated sync encountered conflicts when merging upstream/dev. Please resolve manually."
+              exit 1
+            fi
+          else
+            echo "No new upstream commits."
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine if build is needed
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_build }}" = "true" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.sync.outputs.has_updates }}" = "true" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No build needed today."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Java
+        if: steps.gate.outputs.should_build == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: Set up Gradle
+        if: steps.gate.outputs.should_build == 'true'
         uses: gradle/actions/setup-gradle@v4
 
       - name: Configure Keystore & Properties
+        if: steps.gate.outputs.should_build == 'true'
         run: |
           keystore_path="${RUNNER_TEMP}/nuvioplus.jks"
           if [[ -n "${RELEASE_KEYSTORE_BASE64}" ]]; then
@@ -84,35 +129,42 @@ jobs:
           set_prop NUVIO_SUPABASE_URL "https://api.nuvio.tv"
           set_prop NUVIO_SUPABASE_ANON_KEY "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI"
 
-          # Defaults if not provided
+          # Defaults for optional integrations
           grep -Eq "^[[:space:]]*TRAKT_CLIENT_ID[[:space:]]*=" local.properties || set_prop TRAKT_CLIENT_ID ""
           grep -Eq "^[[:space:]]*TRAKT_CLIENT_SECRET[[:space:]]*=" local.properties || set_prop TRAKT_CLIENT_SECRET ""
           grep -Eq "^[[:space:]]*SIMKL_CLIENT_ID[[:space:]]*=" local.properties || set_prop SIMKL_CLIENT_ID ""
           grep -Eq "^[[:space:]]*SIMKL_APP_NAME[[:space:]]*=" local.properties || set_prop SIMKL_APP_NAME "nuvio"
 
       - name: Build full release APKs
+        if: steps.gate.outputs.should_build == 'true'
         run: ./gradlew :app:assembleFullRelease --stacktrace
 
       - name: Upload build artifacts
+        if: steps.gate.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: nuvioplus-release-apks
+          name: nuvioplus-apks
           path: app/build/outputs/apk/full/release/*.apk
           if-no-files-found: error
 
-      - name: Determine Release Metadata
+      - name: Determine Release Tag & Title
+        if: steps.gate.outputs.should_build == 'true'
         id: meta
         run: |
-          tag="${{ inputs.tag || '0.9.2-plus.1' }}"
-          title="${{ inputs.title || 'Nuvio+ Release' }}"
+          custom_tag="${{ inputs.tag }}"
+          if [[ -n "${custom_tag}" ]]; then
+            tag="${custom_tag}"
+          else
+            tag="0.9.2-plus.${{ github.run_number }}"
+          fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "title=${title}" >> "$GITHUB_OUTPUT"
+          echo "title=Nuvio+ ${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
+        if: steps.gate.outputs.should_build == 'true'
         env:
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_TITLE: ${{ steps.meta.outputs.title }}
-          IS_PRERELEASE: ${{ inputs.prerelease }}
         run: |
           mapfile -t apks < <(find app/build/outputs/apk/full/release -maxdepth 1 -type f -name '*.apk' -print | sort)
           if (( ${#apks[@]} == 0 )); then
@@ -123,22 +175,19 @@ jobs:
           args=(
             "${RELEASE_TAG}"
             --title "${RELEASE_TITLE}"
-            --notes "### Nuvio+ Custom Release
-- Built for Nvidia Shield with package ID `com.nuvio.tv.plus` (installs alongside official Nuvio)
-- Connected to official Nuvio backend (`api.nuvio.tv`)
-- Local NAS & mounted storage playback support
-- Long-press episode context menu with Play Random Episode and Show Channel streaming
-- Quick Add/Remove Watchlist for Trakt & Simkl
-- Play Next / Playlist Queue Builder
-- Modern startup sound
-- Automated OTA updates from hindsight2021/NuvioTV"
+            --latest
+            --notes "### 🚀 Nuvio+ Custom Release (${RELEASE_TAG})
+- **Side-by-side on Nvidia Shield**: Package ID \`com.nuvio.tv.plus\` (installs alongside official Nuvio).
+- **Official Nuvio Account**: Connects to \`api.nuvio.tv\` so your profiles, add-ons, and home catalogs load seamlessly.
+- **Local NAS & Storage Support**: Direct playback of local and Shield mounted network storage (/storage).
+- **Episode & Show Long-Press Context Menu**:
+  - 🎲 **Play Random Episode**: Instantly picks and plays a random episode of the series.
+  - 📺 **Continuous Show Channels**: Stream all episodes continuously in Shuffle or Chronological Binge order.
+- **1-Click Watchlist**: Toggle Trakt and Simkl watchlist from the context menu.
+- **Play Next & Playlist Builder**: Add episodes to queue, reorder, and save playlists.
+- **Startup Chime**: Sleek modern sonic chime on launch.
+- **Automated OTA Updates**: Updates directly on your TV from hindsight2021/NuvioTV."
           )
-
-          if [[ "${IS_PRERELEASE}" == "true" ]]; then
-            args+=(--prerelease)
-          else
-            args+=(--latest)
-          fi
 
           # Delete existing release with same tag if present
           gh release delete "${RELEASE_TAG}" --yes || true
