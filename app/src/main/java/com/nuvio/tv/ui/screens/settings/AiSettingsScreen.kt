@@ -326,35 +326,125 @@ private fun AiModelDialog(
     onDismiss: () -> Unit
 ) {
     val presets = when (provider) {
-        AiProvider.GEMINI -> listOf("gemini-2.0-flash", "gemini-2.0-pro-exp-02-05", "gemini-1.5-pro", "gemini-1.5-flash")
-        AiProvider.OPENAI -> listOf("gpt-4o-mini", "gpt-4o", "o3-mini")
-        AiProvider.ANTHROPIC -> listOf("claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022")
+        AiProvider.GEMINI -> listOf("gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro")
+        AiProvider.OPENAI -> listOf("gpt-4o-mini", "gpt-4o", "o3-mini", "gpt-4.5-preview")
+        AiProvider.ANTHROPIC -> listOf("claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022")
         AiProvider.GROK -> listOf("grok-2-latest", "grok-beta")
         AiProvider.OPENROUTER -> listOf("google/gemini-2.0-flash-001", "deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct")
     }
 
+    var isCustomMode by remember { mutableStateOf(!presets.contains(currentModel)) }
+    var customModelText by remember { mutableStateOf(currentModel) }
     val initialFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { initialFocus.requestFocus() }
+    val customFocus = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(isCustomMode) {
+        if (isCustomMode) customFocus.requestFocus() else initialFocus.requestFocus()
+    }
 
     NuvioDialog(
         title = "${provider.displayName} Model",
-        subtitle = "Select default model or choose a preset.",
+        subtitle = "Select preset or enter custom model identifier.",
         onDismiss = onDismiss
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            presets.forEachIndexed { index, model ->
-                val isSelected = model == currentModel
+            if (!isCustomMode) {
+                presets.forEachIndexed { index, model ->
+                    val isSelected = model == currentModel
+                    Button(
+                        onClick = { onSave(model) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier),
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (isSelected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        )
+                    ) {
+                        Text(text = if (isSelected) "✓  $model" else model)
+                    }
+                }
+
                 Button(
-                    onClick = { onSave(model) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier),
+                    onClick = { isCustomMode = true },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.colors(
-                        containerColor = if (isSelected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
-                        contentColor = NuvioTheme.colors.TextPrimary
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextSecondary
                     )
                 ) {
-                    Text(text = if (isSelected) "✓  $model" else model)
+                    Text(text = "✏️  Enter Custom Model...")
+                }
+            } else {
+                Card(
+                    onClick = {},
+                    colors = CardDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        focusedContainerColor = NuvioTheme.colors.BackgroundCard
+                    ),
+                    shape = CardDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    BasicTextField(
+                        value = customModelText,
+                        onValueChange = { customModelText = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = NuvioTheme.colors.TextPrimary
+                        ),
+                        cursorBrush = SolidColor(NuvioTheme.colors.Primary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                keyboardController?.hide()
+                                if (customModelText.isNotBlank()) onSave(customModelText.trim())
+                            }
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .focusRequester(customFocus)
+                            .onKeyEvent { event ->
+                                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
+                                    event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER
+                                ) {
+                                    keyboardController?.hide()
+                                    if (customModelText.isNotBlank()) onSave(customModelText.trim())
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { isCustomMode = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextSecondary
+                        )
+                    ) {
+                        Text("Presets")
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Button(
+                        onClick = {
+                            keyboardController?.hide()
+                            if (customModelText.isNotBlank()) onSave(customModelText.trim())
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.FocusBackground,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        )
+                    ) {
+                        Text("Save")
+                    }
                 }
             }
         }

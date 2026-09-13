@@ -23,8 +23,12 @@ class AiPreferences(context: Context) {
     }
 
     fun getModel(provider: AiProvider): String {
-        return prefs.getString("${KEY_MODEL_PREFIX}${provider.name}", provider.defaultModel)
+        val stored = prefs.getString("${KEY_MODEL_PREFIX}${provider.name}", provider.defaultModel)
             ?.ifBlank { provider.defaultModel } ?: provider.defaultModel
+        if (provider == AiProvider.GEMINI && (stored == "gemini-2.0-flash" || stored == "gemini-2.0-flash-exp")) {
+            return provider.defaultModel
+        }
+        return stored
     }
 
     fun setModel(provider: AiProvider, model: String) {

@@ -45,7 +45,7 @@ class AiManager @Inject constructor(
 
         try {
             val rawJson = when (provider) {
-                AiProvider.GEMINI -> callGemini(apiKey, model, systemPrompt, prompt, history)
+                AiProvider.GEMINI -> callGemini(prefs, apiKey, model, systemPrompt, prompt, history)
                 AiProvider.OPENAI -> callOpenAiCompatible(
                     url = "https://api.openai.com/v1/chat/completions",
                     apiKey = apiKey,
@@ -86,6 +86,55 @@ class AiManager @Inject constructor(
     }
 
     private fun callGemini(
+        prefs: AiPreferences,
+        apiKey: String,
+        initialModel: String,
+        systemPrompt: String,
+        prompt: String,
+        history: List<AiChatMessage>
+    ): String {
+        val candidateModels = linkedSetOf(
+            initialModel,
+            "gemini-3.6-flash",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
+        )
+        var lastException: Exception? = null
+
+        for (curModel in candidateModels) {
+            try {
+                val result = executeGeminiCall(apiKey, curModel, systemPrompt, prompt, history)
+                if (curModel != initialModel) {
+                    prefs.setModel(AiProvider.GEMINI, curModel)
+                }
+                return result
+            } catch (e: Exception) {
+                lastException = e
+                val errorMsg = e.message.orEmpty()
+                if (errorMsg.contains("404") || errorMsg.contains("no longer available") || errorMsg.contains("NOT_FOUND")) {
+                    val suggestedModel = Regex("""models/([a-zA-Z0-9.\-_]+)""").findAll(errorMsg)
+                        .map { it.groupValues[1] }
+                        .firstOrNull { it != curModel }
+                    if (suggestedModel != null && !candidateModels.contains(suggestedModel)) {
+                        try {
+                            val result = executeGeminiCall(apiKey, suggestedModel, systemPrompt, prompt, history)
+                            prefs.setModel(AiProvider.GEMINI, suggestedModel)
+                            return result
+                        } catch (inner: Exception) {
+                            lastException = inner
+                        }
+                    }
+                } else {
+                    // For auth or quota errors, rethrow immediately
+                    throw e
+                }
+            }
+        }
+        throw lastException ?: IllegalStateException("Gemini API call failed")
+    }
+
+    private fun executeGeminiCall(
         apiKey: String,
         model: String,
         systemPrompt: String,
@@ -245,6 +294,12 @@ class AiManager @Inject constructor(
             clean = clean.removePrefix("```json").substringBeforeLast("```").trim()
         } else if (clean.startsWith("```")) {
             clean = clean.removePrefix("```").substringBeforeLast("```").trim()
+        }
+
+        val firstBrace = clean.indexOf('{')
+        val lastBrace = clean.lastIndexOf('}')
+        if (firstBrace != -1 && lastBrace > firstBrace) {
+            clean = clean.substring(firstBrace, lastBrace + 1).trim()
         }
 
         return try {
