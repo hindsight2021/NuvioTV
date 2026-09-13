@@ -56,7 +56,7 @@ class SearchViewModel @Inject constructor(
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
-    private val aiManager: com.nuvio.tv.core.ai.AiManager,
+    private val aiManager: com.nuvio.tv.core.ai.AiManager = com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()),
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
