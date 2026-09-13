@@ -224,6 +224,20 @@ private fun PlaybackNavHost(
                         )
                     )
                 },
+                onPlaySeriesEpisode = { itemId, itemType, addonBaseUrl, season, episode ->
+                    val heroBackdrop = HeroBackdropState.consumeAndClear()
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            returnFocusSeason = season,
+                            returnFocusEpisode = episode,
+                            heroBackdropUrl = heroBackdrop,
+                            playOnLoad = true
+                        )
+                    )
+                },
                 onContinueWatchingClick = onContinueWatchingClick@{ item ->
                     if (!playbackAvailability.canStream(item)) {
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
@@ -1166,6 +1180,18 @@ private fun PlaybackNavHost(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                },
+                onPlaySeriesEpisode = { itemId, itemType, addonBaseUrl, season, episode ->
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            returnFocusSeason = season,
+                            returnFocusEpisode = episode,
+                            playOnLoad = true
+                        )
+                    )
                 },
                 onCloudPlaybackResolved = { info ->
                     val filename = info.filename ?: info.file.name

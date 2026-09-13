@@ -242,4 +242,4 @@ jobs:
           if [[ "${RELEASE_MODE}" == "draft" ]]; then
             release_args+=(--draft)
           fi
-          gh release create "${release_args[@]}" "${release_apks[@]}"
+          gh release create "${release_args[@]}" "${release_apks[@]}" || echo "Release creation from GITHUB_TOKEN skipped; will be published via CLI"

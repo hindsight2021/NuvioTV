@@ -177,8 +177,12 @@ fun SearchScreen(
     val onVoiceQueryResultState = rememberUpdatedState<(String) -> Unit> { recognized ->
         if (recognized.isNotBlank()) {
             backToFieldLatched = false
-            viewModel.onEvent(SearchEvent.QueryChanged(recognized))
-            viewModel.onEvent(SearchEvent.SubmitSearch)
+            if (viewModel.aiPreferences.isConfigured()) {
+                viewModel.onEvent(SearchEvent.QueryAi(recognized))
+            } else {
+                viewModel.onEvent(SearchEvent.QueryChanged(recognized))
+                viewModel.onEvent(SearchEvent.SubmitSearch)
+            }
             focusResults = false
             pendingFocusMoveToResultsQuery = recognized
             pendingFocusMoveSawSearching = false
@@ -653,8 +657,70 @@ fun SearchScreen(
                     showDiscoverButton = uiState.discoverLocation == DiscoverLocation.IN_SEARCH,
                     keyboardController = keyboardController,
                     clearHistoryFocusRequester = if (showRecentSearches) recentClearHistoryFocusRequester else null,
-                    isScreenActive = isScreenActive
+                    isScreenActive = isScreenActive,
+                    onAiSearch = {
+                        val q = uiState.query.trim()
+                        if (q.isNotBlank()) {
+                            viewModel.onEvent(SearchEvent.QueryAi(q))
+                        } else {
+                            launchVoiceSearch()
+                        }
+                    }
                 )
+            }
+
+            if (uiState.isAiThinking || uiState.aiResponse != null || uiState.aiError != null) {
+                item(key = "ai_card") {
+                    AiConversationalCard(
+                        isThinking = uiState.isAiThinking,
+                        response = uiState.aiResponse,
+                        error = uiState.aiError,
+                        providerName = viewModel.aiPreferences.activeProvider.displayName,
+                        onQuestionClick = { question ->
+                            viewModel.onEvent(SearchEvent.QueryAi(question))
+                        },
+                        onDismiss = {
+                            viewModel.onEvent(SearchEvent.ClearAiChat)
+                        }
+                    )
+                }
+            }
+
+            if (uiState.aiCatalogRow != null && uiState.aiCatalogRow.items.isNotEmpty()) {
+                item(key = "ai_catalog_row") {
+                    val aiRow = uiState.aiCatalogRow
+                    val aiCatalogKey = "ai_catalog_row"
+                    val aiRowState = searchRowStates.getOrPut(aiCatalogKey) {
+                        LazyListState()
+                    }
+                    val aiRowFocusRequester = searchRowFocusRequesters.getOrPut(aiCatalogKey) { FocusRequester() }
+                    val aiEntryFocusRequester = searchRowEntryFocusRequesters.getOrPut(aiCatalogKey) { FocusRequester() }
+
+                    CatalogRowSection(
+                        catalogRow = aiRow,
+                        posterCardStyle = posterCardStyle,
+                        showSeeAll = false,
+                        showPosterLabels = uiState.posterLabelsEnabled,
+                        showAddonName = true,
+                        showCatalogTypeSuffix = false,
+                        enableRowFocusRestorer = true,
+                        rowFocusRequester = aiRowFocusRequester,
+                        entryFocusRequester = aiEntryFocusRequester,
+                        upFocusRequester = searchFocusRequester,
+                        listState = aiRowState,
+                        isItemWatched = { false },
+                        onItemClick = { id, type, addonBaseUrl ->
+                            val clickedItem = aiRow.items.firstOrNull { it.id == id }
+                            val backdrop = clickedItem?.background
+                            HeroBackdropState.update(backdrop)
+                            onNavigateToDetail(id, type, addonBaseUrl)
+                        },
+                        onItemLongPress = { item, addonBaseUrl ->
+                            viewModel.posterOptions.show(item, addonBaseUrl)
+                        },
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+                }
             }
 
             if (isDiscoverMode) {
@@ -1176,7 +1242,10 @@ private fun SearchInputField(
     showDiscoverButton: Boolean,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?,
     clearHistoryFocusRequester: FocusRequester?,
-    isScreenActive: Boolean = true
+    isScreenActive: Boolean = true,
+    onAiSearch: () -> Unit = {},
+    showAiButton: Boolean = true,
+    aiFocusRequester: FocusRequester? = null
 ) {
     var isDiscoverButtonFocused by remember { mutableStateOf(false) }
     var isVoiceButtonFocused by remember { mutableStateOf(false) }
@@ -1307,6 +1376,35 @@ private fun SearchInputField(
                         tint = if (isVoiceListening) themeAccent else NuvioTheme.colors.TextPrimary
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.width(NuvioTheme.spacing.md))
+        }
+
+        if (showAiButton) {
+            var isAiButtonFocused by remember { mutableStateOf(false) }
+            IconButton(
+                onClick = onAiSearch,
+                modifier = Modifier
+                    .then(
+                        aiFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier
+                    )
+                    .onFocusChanged { isAiButtonFocused = it.isFocused }
+                    .size(NuvioTheme.spacing.huge)
+                    .border(
+                        width = if (isAiButtonFocused) NuvioTheme.spacing.xxs else NuvioTheme.spacing.hairline,
+                        color = if (isAiButtonFocused) NuvioTheme.colors.FocusRing else NuvioTheme.colors.Border,
+                        shape = RoundedCornerShape(NuvioTheme.radii.md)
+                    )
+                    .background(
+                        color = NuvioTheme.colors.BackgroundCard,
+                        shape = RoundedCornerShape(NuvioTheme.radii.md)
+                    )
+            ) {
+                Text(
+                    text = "\u2728",
+                    fontSize = 18.sp
+                )
             }
 
             Spacer(modifier = Modifier.width(NuvioTheme.spacing.md))

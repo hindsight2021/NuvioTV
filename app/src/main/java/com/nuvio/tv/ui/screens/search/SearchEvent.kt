@@ -20,4 +20,8 @@ sealed interface SearchEvent {
     data object LoadNextDiscoverResults : SearchEvent
 
     data object Retry : SearchEvent
+
+    data class QueryAi(val prompt: String) : SearchEvent
+    data object ClearAiChat : SearchEvent
+    data object StopAiTts : SearchEvent
 }

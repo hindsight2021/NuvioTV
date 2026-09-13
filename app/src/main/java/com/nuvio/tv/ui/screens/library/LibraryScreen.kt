@@ -127,7 +127,8 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     showBuiltInHeader: Boolean = true,
     onNavigateToDetail: (String, String, String?) -> Unit,
-    onCloudPlaybackResolved: (CloudLibraryPlaybackInfo) -> Unit = {}
+    onCloudPlaybackResolved: (CloudLibraryPlaybackInfo) -> Unit = {},
+    onPlaySeriesEpisode: ((id: String, type: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
@@ -647,6 +648,13 @@ fun LibraryScreen(
         controller = viewModel.posterOptions,
         onNavigateToDetail = { id, type, addonBaseUrl ->
             onNavigateToDetail(id, type, addonBaseUrl.takeIf { it.isNotBlank() })
+        },
+        onPlaySeriesEpisode = { id, type, addonBaseUrl, season, episode ->
+            if (onPlaySeriesEpisode != null) {
+                onPlaySeriesEpisode(id, type, addonBaseUrl.takeIf { it.isNotBlank() }, season, episode)
+            } else {
+                onNavigateToDetail(id, type, addonBaseUrl.takeIf { it.isNotBlank() })
+            }
         }
     )
 }

@@ -56,8 +56,17 @@ class SearchViewModel @Inject constructor(
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
+    private val aiManager: com.nuvio.tv.core.ai.AiManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    val aiPreferences = com.nuvio.tv.core.ai.AiPreferences(context)
+    private var aiTtsPlayer: com.nuvio.tv.core.ai.AiTtsPlayer? = null
+    private var aiJob: Job? = null
+
+    init {
+        aiTtsPlayer = com.nuvio.tv.core.ai.AiTtsPlayer(context)
+    }
 
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
@@ -251,6 +260,9 @@ class SearchViewModel @Inject constructor(
                 cancelSearchRun()
                 performSearch(uiState.value.submittedQuery.ifBlank { uiState.value.query })
             }
+            is SearchEvent.QueryAi -> queryAi(event.prompt)
+            SearchEvent.ClearAiChat -> clearAiChat()
+            SearchEvent.StopAiTts -> stopAiTts()
         }
     }
 
@@ -1159,6 +1171,193 @@ class SearchViewModel @Inject constructor(
 
     private fun catalogKey(addonId: String, addonBaseUrl: String, type: String, catalogId: String): String {
         return catalogRowStableKey(addonId, addonBaseUrl, type, catalogId)
+    }
+
+    fun queryAi(prompt: String) {
+        val trimmed = prompt.trim()
+        if (trimmed.isBlank()) return
+
+        if (!aiPreferences.isConfigured()) {
+            _uiState.update {
+                it.copy(
+                    isAiThinking = false,
+                    aiError = "Please configure an API key for ${aiPreferences.activeProvider.displayName} in Settings -> AI Assistant"
+                )
+            }
+            return
+        }
+
+        aiJob?.cancel()
+        aiJob = viewModelScope.launch {
+            val userMsg = com.nuvio.tv.core.ai.AiChatMessage(
+                role = "user",
+                content = trimmed
+            )
+            val currentHistory = _uiState.value.aiHistory + userMsg
+
+            _uiState.update {
+                it.copy(
+                    isAiThinking = true,
+                    aiError = null,
+                    query = trimmed,
+                    aiHistory = currentHistory
+                )
+            }
+
+            val result = aiManager.query(context, trimmed, currentHistory)
+            result.onSuccess { response ->
+                val assistantMsg = com.nuvio.tv.core.ai.AiChatMessage(
+                    role = "assistant",
+                    content = response.spokenResponse
+                )
+
+                val initialCatalogRow = buildAiCatalogRow(response)
+
+                _uiState.update {
+                    it.copy(
+                        isAiThinking = false,
+                        aiResponse = response,
+                        aiCatalogRow = initialCatalogRow,
+                        aiHistory = currentHistory + assistantMsg
+                    )
+                }
+
+                if (aiPreferences.isTtsEnabled) {
+                    aiTtsPlayer?.speak(response.spokenResponse)
+                }
+
+                enrichAiCatalogRow(response)
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        isAiThinking = false,
+                        aiError = error.message ?: "Failed to get AI response"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearAiChat() {
+        aiJob?.cancel()
+        aiTtsPlayer?.stop()
+        _uiState.update {
+            it.copy(
+                isAiThinking = false,
+                aiResponse = null,
+                aiCatalogRow = null,
+                aiError = null,
+                aiHistory = emptyList()
+            )
+        }
+    }
+
+    fun stopAiTts() {
+        aiTtsPlayer?.stop()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        aiJob?.cancel()
+        aiTtsPlayer?.shutdown()
+    }
+
+    private fun buildAiCatalogRow(response: com.nuvio.tv.core.ai.AiResponse): CatalogRow {
+        val items = response.recommendations.mapIndexed { index, rec ->
+            val contentType = if (rec.type.equals("series", ignoreCase = true) || rec.type.equals("tv", ignoreCase = true)) {
+                ContentType.SERIES
+            } else {
+                ContentType.MOVIE
+            }
+            MetaPreview(
+                id = "ai_rec_${index}_${rec.title.hashCode()}",
+                type = contentType,
+                name = rec.title,
+                poster = null,
+                posterShape = PosterShape.POSTER,
+                background = null,
+                logo = null,
+                description = rec.rationale,
+                releaseInfo = rec.year,
+                imdbRating = null,
+                genres = listOf("AI Pick")
+            )
+        }
+
+        return CatalogRow(
+            addonId = "ai_assistant",
+            addonName = "AI Assistant (${aiPreferences.activeProvider.displayName})",
+            addonBaseUrl = "",
+            catalogId = "ai_recommendations",
+            catalogName = response.catalogTitle.ifBlank { "🤖 AI Recommendations" },
+            type = ContentType.MOVIE,
+            items = items,
+            isLoading = false,
+            hasMore = false
+        )
+    }
+
+    private fun enrichAiCatalogRow(response: com.nuvio.tv.core.ai.AiResponse) {
+        viewModelScope.launch {
+            val addons = try {
+                addonRepository.getInstalledAddons().first().enabledAddons()
+            } catch (_: Exception) {
+                return@launch
+            }
+            val targets = buildSearchTargets(addons)
+            if (targets.isEmpty()) return@launch
+
+            val primaryTarget = targets.firstOrNull {
+                it.first.displayName.contains("Cinemeta", ignoreCase = true)
+            } ?: targets.first()
+
+            val (addon, catalog) = primaryTarget
+
+            for ((index, rec) in response.recommendations.withIndex()) {
+                val apiType = if (rec.type.equals("series", ignoreCase = true) || rec.type.equals("tv", ignoreCase = true)) {
+                    "series"
+                } else {
+                    "movie"
+                }
+
+                try {
+                    catalogRepository.getCatalog(
+                        addonBaseUrl = addon.baseUrl,
+                        addonId = addon.id,
+                        addonName = addon.displayName,
+                        catalogId = catalog.id,
+                        catalogName = catalog.name,
+                        type = apiType,
+                        skip = 0,
+                        skipStep = 10,
+                        extraArgs = mapOf("search" to rec.title),
+                        supportsSkip = false
+                    ).collect { result ->
+                        if (result is NetworkResult.Success && result.data.items.isNotEmpty()) {
+                            val matched = result.data.items.firstOrNull {
+                                it.name.equals(rec.title, ignoreCase = true)
+                            } ?: result.data.items.first()
+
+                            val updatedItem = matched.copy(
+                                description = rec.rationale.ifBlank { matched.description },
+                                sourceAddonBaseUrl = addon.baseUrl
+                            )
+
+                            _uiState.update { state ->
+                                val row = state.aiCatalogRow ?: return@update state
+                                val newItems = row.items.toMutableList()
+                                if (index in newItems.indices) {
+                                    newItems[index] = updatedItem
+                                }
+                                state.copy(aiCatalogRow = row.copy(items = newItems))
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Ignore per-item enrichment errors
+                }
+            }
+        }
     }
 }
 

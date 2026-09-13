@@ -49,7 +49,10 @@ fun PosterOptionsDialog(
     onDismiss: () -> Unit,
     onDetails: () -> Unit,
     onToggleLibrary: () -> Unit,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    onPlayRandomEpisode: (() -> Unit)? = null,
+    onStartChannelShuffle: (() -> Unit)? = null,
+    onStartChannelOrder: (() -> Unit)? = null
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -114,6 +117,45 @@ fun PosterOptionsDialog(
                         stringResource(R.string.hero_mark_watched)
                     }
                 )
+            }
+        }
+
+        if (isSeries) {
+            if (onPlayRandomEpisode != null) {
+                Button(
+                    onClick = onPlayRandomEpisode,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text("🎲 Play Random Episode")
+                }
+            }
+            if (onStartChannelShuffle != null) {
+                Button(
+                    onClick = onStartChannelShuffle,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text("📺 Play Show Channel (Shuffle)")
+                }
+            }
+            if (onStartChannelOrder != null) {
+                Button(
+                    onClick = onStartChannelOrder,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text("🎬 Play Show Channel (In Order)")
+                }
             }
         }
     }
@@ -205,7 +247,8 @@ fun PosterListPickerDialog(
 fun PosterOptionsHost(
     state: PosterOptionsState,
     controller: PosterOptionsController,
-    onNavigateToDetail: (id: String, type: String, addonBaseUrl: String) -> Unit
+    onNavigateToDetail: (id: String, type: String, addonBaseUrl: String) -> Unit,
+    onPlaySeriesEpisode: ((id: String, type: String, addonBaseUrl: String, season: Int, episode: Int) -> Unit)? = null
 ) {
     val target = state.target
     if (target != null) {
@@ -242,6 +285,33 @@ fun PosterOptionsHost(
                     controller.toggleSeriesWatched()
                 }
                 controller.dismiss()
+            },
+            onPlayRandomEpisode = {
+                controller.playRandomEpisode { id, type, addon, season, episode ->
+                    if (onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                    } else {
+                        onNavigateToDetail(id, type, addon)
+                    }
+                }
+            },
+            onStartChannelShuffle = {
+                controller.startChannel(shuffle = true) { id, type, addon, season, episode ->
+                    if (onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                    } else {
+                        onNavigateToDetail(id, type, addon)
+                    }
+                }
+            },
+            onStartChannelOrder = {
+                controller.startChannel(shuffle = false) { id, type, addon, season, episode ->
+                    if (onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                    } else {
+                        onNavigateToDetail(id, type, addon)
+                    }
+                }
             }
         )
     }

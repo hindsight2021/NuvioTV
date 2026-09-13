@@ -95,7 +95,8 @@ fun HomeScreen(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = onContinueWatchingClick,
     onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit = onContinueWatchingClick,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> },
-    onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> }
+    onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
+    onPlaySeriesEpisode: ((id: String, type: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -482,6 +483,36 @@ fun HomeScreen(
                     viewModel.togglePosterSeriesWatched(item)
                 }
                 posterOptionsTarget = null
+            },
+            onPlayRandomEpisode = {
+                viewModel.playRandomEpisode(item, selectedPoster.addonBaseUrl) { id, type, addon, season, episode ->
+                    if (onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                    } else {
+                        onNavigateToDetail(id, type, addon)
+                    }
+                }
+                posterOptionsTarget = null
+            },
+            onStartChannelShuffle = {
+                viewModel.startChannel(item, selectedPoster.addonBaseUrl, shuffle = true) { id, type, addon, season, episode ->
+                    if (onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                    } else {
+                        onNavigateToDetail(id, type, addon)
+                    }
+                }
+                posterOptionsTarget = null
+            },
+            onStartChannelOrder = {
+                viewModel.startChannel(item, selectedPoster.addonBaseUrl, shuffle = false) { id, type, addon, season, episode ->
+                    if (onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(id, type, addon, season, episode)
+                    } else {
+                        onNavigateToDetail(id, type, addon)
+                    }
+                }
+                posterOptionsTarget = null
             }
         )
     }
@@ -724,7 +755,10 @@ private fun HomePosterOptionsDialog(
     onDismiss: () -> Unit,
     onDetails: () -> Unit,
     onToggleLibrary: () -> Unit,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    onPlayRandomEpisode: (() -> Unit)? = null,
+    onStartChannelShuffle: (() -> Unit)? = null,
+    onStartChannelOrder: (() -> Unit)? = null
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -789,6 +823,45 @@ private fun HomePosterOptionsDialog(
                         stringResource(R.string.hero_mark_watched)
                     }
                 )
+            }
+        }
+
+        if (isSeries) {
+            if (onPlayRandomEpisode != null) {
+                Button(
+                    onClick = onPlayRandomEpisode,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text("🎲 Play Random Episode")
+                }
+            }
+            if (onStartChannelShuffle != null) {
+                Button(
+                    onClick = onStartChannelShuffle,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text("📺 Play Show Channel (Shuffle)")
+                }
+            }
+            if (onStartChannelOrder != null) {
+                Button(
+                    onClick = onStartChannelOrder,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text("🎬 Play Show Channel (In Order)")
+                }
             }
         }
     }

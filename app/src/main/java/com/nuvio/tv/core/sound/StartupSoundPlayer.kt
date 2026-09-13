@@ -11,13 +11,18 @@ object StartupSoundPlayer {
 
     fun play(context: Context) {
         try {
+            val prefs = context.getSharedPreferences("nuvio_plus_prefs", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("enable_startup_sound", true)) {
+                return
+            }
             val mediaPlayer = MediaPlayer.create(context, R.raw.nuvio_startup) ?: return
             mediaPlayer.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .build()
             )
+            mediaPlayer.setVolume(0.95f, 0.95f)
             mediaPlayer.setOnCompletionListener { player ->
                 try {
                     player.release()

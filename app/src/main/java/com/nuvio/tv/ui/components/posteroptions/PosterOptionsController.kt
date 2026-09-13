@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.components.posteroptions
 
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.playlist.PlaylistManager
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
 import com.nuvio.tv.core.tracking.mergeTrackingMembershipWithTabs
@@ -524,6 +525,75 @@ class PosterOptionsController @Inject constructor(
                 }
             }
         return episodes
+    }
+
+    fun playRandomEpisode(
+        onLaunchEpisode: (contentId: String, contentType: String, addonBaseUrl: String, season: Int, episode: Int) -> Unit
+    ) {
+        val state = _state.value
+        val item = state.target ?: return
+        val scope = this.scope ?: return
+        dismiss()
+        scope.launch {
+            var episodes = fetchSeriesEpisodes(item)
+            if (episodes.isEmpty()) {
+                val type = if (item.apiType.equals("tv", ignoreCase = true) ||
+                    item.apiType.equals("anime", ignoreCase = true)
+                ) "series" else item.apiType
+                metaRepository.getMetaFromAllAddons(type, item.id).collect { res ->
+                    if (res is NetworkResult.Success) {
+                        episodes = res.data.videos
+                    }
+                }
+            }
+            val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
+            if (validEpisodes.isNotEmpty()) {
+                val randomEp = validEpisodes.random()
+                PlaylistManager.startChannel(
+                    contentId = item.id,
+                    seriesTitle = item.name,
+                    episodes = validEpisodes,
+                    startEpisode = randomEp,
+                    shuffle = true
+                )
+                onLaunchEpisode(item.id, item.apiType, state.addonBaseUrl, randomEp.season!!, randomEp.episode!!)
+            }
+        }
+    }
+
+    fun startChannel(
+        shuffle: Boolean,
+        onLaunchEpisode: (contentId: String, contentType: String, addonBaseUrl: String, season: Int, episode: Int) -> Unit
+    ) {
+        val state = _state.value
+        val item = state.target ?: return
+        val scope = this.scope ?: return
+        dismiss()
+        scope.launch {
+            var episodes = fetchSeriesEpisodes(item)
+            if (episodes.isEmpty()) {
+                val type = if (item.apiType.equals("tv", ignoreCase = true) ||
+                    item.apiType.equals("anime", ignoreCase = true)
+                ) "series" else item.apiType
+                metaRepository.getMetaFromAllAddons(type, item.id).collect { res ->
+                    if (res is NetworkResult.Success) {
+                        episodes = res.data.videos
+                    }
+                }
+            }
+            val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
+            if (validEpisodes.isNotEmpty()) {
+                val startEp = if (shuffle) validEpisodes.random() else validEpisodes.first()
+                PlaylistManager.startChannel(
+                    contentId = item.id,
+                    seriesTitle = item.name,
+                    episodes = validEpisodes,
+                    startEpisode = startEp,
+                    shuffle = shuffle
+                )
+                onLaunchEpisode(item.id, item.apiType, state.addonBaseUrl, startEp.season!!, startEp.episode!!)
+            }
+        }
     }
 
     private var activeListPickerInput: LibraryEntryInput? = null

@@ -38,6 +38,7 @@ docs/tv_qr_login.sql
 docss
 benchmark
 .mcp.json
+build-artifacts/
 db/
 backups/
 .supabase_db.env

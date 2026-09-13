@@ -118,7 +118,8 @@ private enum class IntegrationSettingsSection {
     Debrid,
     Tmdb,
     MdbList,
-    AnimeSkip
+    AnimeSkip,
+    AiAssistant
 }
 
 internal enum class SettingsSectionDestination {
@@ -1166,6 +1167,7 @@ private fun IntegrationSettingsContent(
         onSelectSection(IntegrationSettingsSection.Hub)
     }
     val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
+    val aiAssistantFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(selectedSection, autoFocusEnabled) {
         if (!autoFocusEnabled) return@LaunchedEffect
@@ -1175,6 +1177,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
+            IntegrationSettingsSection.AiAssistant -> aiAssistantFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -1209,6 +1212,13 @@ private fun IntegrationSettingsContent(
                                     modifier = Modifier.focusRequester(hubEntryFocusRequester)
                                 )
                             }
+                            item(key = "integration_hub_ai") {
+                                SettingsActionRow(
+                                    title = "AI Assistant (Gemini / OpenAI / Claude / Grok)",
+                                    subtitle = "Conversational search and real-time movie curation",
+                                    onClick = { onSelectSection(IntegrationSettingsSection.AiAssistant) }
+                                )
+                            }
                             item(key = "integration_hub_tmdb") {
                                 SettingsActionRow(
                                     title = "TMDB",
@@ -1240,6 +1250,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Debrid -> {
             DebridSettingsContent(
                 initialFocusRequester = debridFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.AiAssistant -> {
+            AiSettingsContent(
+                initialFocusRequester = aiAssistantFocusRequester
             )
         }
 
