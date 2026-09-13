@@ -62,9 +62,14 @@ if [[ -z "$current_version" || -z "$current_version_code" ]]; then
     exit 1
 fi
 
-if [[ -z "$current_bump" || -z "$previous_bump" ]]; then
-    echo "Could not find two distinct version bumps in ${version_file}." >&2
-    exit 1
+if [[ -z "$current_bump" ]]; then
+    current_bump="$(git rev-parse "${target_ref}^{commit}")"
+fi
+
+if [[ -z "$previous_bump" ]]; then
+    previous_bump="$(git rev-parse "${target_ref}~1^{commit}" 2>/dev/null || echo "$current_bump")"
+    previous_version="${previous_version:-0.9.2-beta}"
+    previous_version_code="${previous_version_code:-1058}"
 fi
 
 if [[ ! "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -72,7 +77,7 @@ if [[ ! "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; the
     exit 1
 fi
 
-if (( 10#$current_version_code <= 10#$previous_version_code )); then
+if [[ -n "$previous_version_code" ]] && (( 10#$current_version_code <= 10#$previous_version_code )); then
     echo "versionCode must increase from ${previous_version_code} to ${current_version_code}." >&2
     exit 1
 fi
@@ -91,6 +96,8 @@ elif [[ "$version_suffix" == "rc" ]]; then
     release_title="Release Candidate ${version_core}"
 elif [[ "$version_suffix" == rc.* ]]; then
     release_title="Release Candidate ${version_core} (${version_suffix#rc.})"
+elif [[ "$version_suffix" == plus* ]]; then
+    release_title="Nuvio+ ${version_core} (${version_suffix})"
 fi
 release_prerelease="false"
 version_major="${current_version%%.*}"

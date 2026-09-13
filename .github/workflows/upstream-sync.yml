@@ -1,0 +1,81 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    - cron: '0 4 * * *' # Daily at 4:00 AM UTC
+  workflow_dispatch:
+    inputs:
+      trigger_release:
+        description: 'Trigger release build if changes synced'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+jobs:
+  sync:
+    name: Sync with Upstream
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: plus-dev
+          fetch-depth: 0
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check Upstream Changes
+        id: upstream
+        run: |
+          git remote add upstream https://github.com/NuvioMedia/NuvioTV.git || true
+          git fetch upstream dev --tags
+
+          UPSTREAM_HEAD=$(git rev-parse upstream/dev)
+          COMMON_ANCESTOR=$(git merge-base HEAD upstream/dev)
+
+          echo "upstream_head=$UPSTREAM_HEAD" >> "$GITHUB_OUTPUT"
+          echo "common_ancestor=$COMMON_ANCESTOR" >> "$GITHUB_OUTPUT"
+
+          if [ "$UPSTREAM_HEAD" != "$COMMON_ANCESTOR" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "New commits detected in upstream/dev."
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "Already up-to-date with upstream/dev."
+          fi
+
+      - name: Merge Upstream Changes
+        if: steps.upstream.outputs.has_changes == 'true'
+        id: merge
+        run: |
+          if git merge upstream/dev -m "chore(sync): merge upstream/dev into plus-dev" --no-edit; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+            git push origin plus-dev
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            echo "Merge conflict detected!"
+            git merge --abort
+            gh issue create \
+              --title "⚠️ Upstream Sync Conflict detected" \
+              --body "Automatic merge of upstream/dev into plus-dev failed due to conflicts. Please resolve manually." \
+              --label "bug" || true
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Trigger Android TV Release Build
+        if: (steps.upstream.outputs.has_changes == 'true' && steps.merge.outputs.merged == 'true') || inputs.trigger_release == true
+        run: |
+          echo "Triggering Android TV release build workflow..."
+          gh workflow run android-release.yml --ref plus-dev -f mode=publish
+        env:
+          GH_TOKEN: ${{ github.token }}
