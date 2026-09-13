@@ -17,17 +17,6 @@ on:
         description: 'Mark as prerelease'
         type: boolean
         default: false
-  workflow_call:
-    inputs:
-      tag:
-        type: string
-        default: '0.9.2-plus.auto'
-      title:
-        type: string
-        default: 'Nuvio+ Auto-Synced Release'
-      prerelease:
-        type: boolean
-        default: false
 
 permissions:
   contents: write
