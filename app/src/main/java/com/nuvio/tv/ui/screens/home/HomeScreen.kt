@@ -77,24 +77,14 @@ import com.nuvio.tv.core.ai.ChicCriticReviewService
 import com.nuvio.tv.core.ai.ThematicChannelGenerator
 import com.nuvio.tv.core.playlist.PlaylistManager
 import com.nuvio.tv.core.playlist.PlaylistItem
-import com.nuvio.tv.ui.components.ChicReviewDialog
-import com.nuvio.tv.ui.components.ThematicChannelDialog
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private data class HomePosterOptionsTarget(
     val item: MetaPreview,
     val addonBaseUrl: String
-)
-
-private data class ChicReviewTarget(
-    val title: String,
-    val type: String,
-    val year: String? = null,
-    val genre: String? = null,
-    val overview: String? = null,
-    val season: Int? = null,
-    val episode: Int? = null
 )
 
 private const val HOME_STABLE_GATE_TIMEOUT_MS = 5_000L
@@ -157,9 +147,6 @@ fun HomeScreen(
     // Track that catalog loading has started at least once (isLoading went true→false).
     var catalogLoadingStarted by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
-    val context = LocalContext.current
-    var chicReviewTarget by remember { mutableStateOf<ChicReviewTarget?>(null) }
-    var showThematicChannelDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.homeLayout) {
         if (uiState.homeLayout != HomeLayout.MODERN) {
@@ -200,6 +187,41 @@ fun HomeScreen(
     }
 
     val context = LocalContext.current
+    val homeCoroutineScope = rememberCoroutineScope()
+    val aiManager = remember { com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()) }
+    val chicCriticReviewService = remember(aiManager) { com.nuvio.tv.core.ai.ChicCriticReviewService(aiManager) }
+    var showChicReviewDialog by remember { mutableStateOf(false) }
+    var chicReview by remember { mutableStateOf<com.nuvio.tv.core.ai.ChicCriticReview?>(null) }
+    var isChicReviewLoading by remember { mutableStateOf(false) }
+    var chicReviewError by remember { mutableStateOf<String?>(null) }
+    var chicReviewTargetTitle by remember { mutableStateOf("") }
+    var showThematicChannelDialog by remember { mutableStateOf(false) }
+
+    val openChicReview: (String, String?, List<String>?, String?, Boolean, String?, Int?, Int?) -> Unit = { rTitle, rOverview, rGenre, rYear, isEp, epTitle, sNum, epNum ->
+        chicReviewTargetTitle = if (isEp) "$rTitle: ${epTitle ?: "Episode $epNum"}" else rTitle
+        showChicReviewDialog = true
+        isChicReviewLoading = true
+        chicReviewError = null
+        chicReview = null
+        homeCoroutineScope.launch {
+            val res = chicCriticReviewService.generateReview(
+                context = context,
+                title = rTitle,
+                overview = rOverview,
+                genre = rGenre,
+                year = rYear,
+                isEpisode = isEp,
+                episodeTitle = epTitle,
+                seasonNumber = sNum,
+                episodeNumber = epNum
+            )
+            isChicReviewLoading = false
+            res.fold(
+                onSuccess = { chicReview = it },
+                onFailure = { chicReviewError = it.message ?: "Failed to generate chic review" }
+            )
+        }
+    }
     val onCwPlayNext = remember(context) {
         { item: ContinueWatchingItem ->
             val playlistItem = PlaylistItem(
@@ -282,29 +304,25 @@ fun HomeScreen(
             }
         }
     }
-    val onCwChicReview = remember {
+    val onCwChicReview = remember(context) {
         { item: ContinueWatchingItem ->
             val title = when (item) {
                 is ContinueWatchingItem.InProgress -> item.progress.name
                 is ContinueWatchingItem.NextUp -> item.info.name
             }
-            val type = when (item) {
-                is ContinueWatchingItem.InProgress -> item.progress.contentType
-                is ContinueWatchingItem.NextUp -> item.info.contentType
-            }
-            val season = when (item) {
-                is ContinueWatchingItem.InProgress -> item.progress.season
-                is ContinueWatchingItem.NextUp -> item.info.season
-            }
-            val episode = when (item) {
-                is ContinueWatchingItem.InProgress -> item.progress.episode
-                is ContinueWatchingItem.NextUp -> item.info.episode
-            }
-            chicReviewTarget = ChicReviewTarget(
-                title = title,
-                type = type,
-                season = season,
-                episode = episode
+            val isEp = item.isSeries()
+            val epTitle = item.episodeTitle()
+            val sNum = item.season()
+            val epNum = item.episode()
+            openChicReview(
+                title,
+                null,
+                null,
+                null,
+                isEp,
+                epTitle,
+                sNum,
+                epNum
             )
         }
     }
@@ -687,12 +705,15 @@ fun HomeScreen(
                 posterOptionsTarget = null
             },
             onChicReview = {
-                chicReviewTarget = ChicReviewTarget(
-                    title = item.name,
-                    type = item.apiType,
-                    year = item.releaseInfo,
-                    genre = item.genres?.firstOrNull(),
-                    overview = item.description
+                openChicReview(
+                    item.name,
+                    item.description,
+                    item.genres,
+                    item.releaseInfo,
+                    false,
+                    null,
+                    null,
+                    null
                 )
                 posterOptionsTarget = null
             },
@@ -735,24 +756,14 @@ fun HomeScreen(
         )
     }
 
-    val activeChicTarget = chicReviewTarget
-    if (activeChicTarget != null) {
-        val aiManager = remember { AiManager(OkHttpClient()) }
-        val criticService = remember { ChicCriticReviewService(aiManager) }
-        val ttsPlayer = remember { AiTtsPlayer(context) }
-        ChicReviewDialog(
-            title = activeChicTarget.title,
-            type = activeChicTarget.type,
-            year = activeChicTarget.year,
-            genre = activeChicTarget.genre,
-            overview = activeChicTarget.overview,
-            season = activeChicTarget.season,
-            episode = activeChicTarget.episode,
-            criticService = criticService,
-            ttsPlayer = ttsPlayer,
-            onDismiss = { chicReviewTarget = null }
-        )
-    }
+    com.nuvio.tv.ui.components.ChicReviewDialog(
+        visible = showChicReviewDialog,
+        title = chicReviewTargetTitle,
+        review = chicReview,
+        isLoading = isChicReviewLoading,
+        errorMessage = chicReviewError,
+        onDismiss = { showChicReviewDialog = false }
+    )
 
     if (showThematicChannelDialog) {
         val aiManager = remember { AiManager(OkHttpClient()) }
