@@ -100,7 +100,9 @@ class PlayerRuntimeController(
     internal val tvRecommendationManager: com.nuvio.tv.core.recommendations.TvRecommendationManager,
     internal val profileId: Int,
     savedStateHandle: SavedStateHandle,
-    internal val scope: CoroutineScope
+    internal val scope: CoroutineScope,
+    internal val cinemaLightingController: com.nuvio.tv.core.ha.CinemaLightingController = com.nuvio.tv.core.ha.CinemaLightingController(),
+    internal val fourDCinemaAnalyzer: com.nuvio.tv.core.ha.FourDCinemaAnalyzer = com.nuvio.tv.core.ha.FourDCinemaAnalyzer(cinemaLightingController)
 ) {
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
@@ -219,6 +221,9 @@ class PlayerRuntimeController(
         currentHeaders = initialPlaybackRequest.headers
         streamSubtitles = StreamSidecarSubtitles.forUrl(initialStreamUrl)
             .ifEmpty { StreamSidecarSubtitles.forUrl(currentStreamUrl) }
+        val isMovieMedia = contentType.equals("movie", ignoreCase = true) ||
+            (initialSeason == null && initialEpisode == null && !contentType.equals("series", ignoreCase = true))
+        cinemaLightingController.configure(isMovie = isMovieMedia)
     }
 
     fun getCurrentStreamUrl(): String = currentStreamUrl

@@ -921,7 +921,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                     )
                     applyCenterMixLevel(_uiState.value.centerMixLevelDb)
                     updateAudioControlAvailability()
-                }
+                },
+                onCueInspected = { text -> fourDCinemaAnalyzer.inspectSubtitleText(text) }
             ).setExtensionRendererMode(effectiveDecoderPriority)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector(codecSelector)
@@ -1323,6 +1324,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         )
                         _uiState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
+                            cinemaLightingController.onPlaybackStarted()
                             userPausedManually = false
                             cancelPauseOverlay()
                             startProgressUpdates()
@@ -1334,6 +1336,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                             if (userPausedManually) schedulePauseOverlay() else cancelPauseOverlay()
                             if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
                                 stopProgressUpdates()
+                                cinemaLightingController.onPlaybackStopped()
+                            } else {
+                                cinemaLightingController.onPlaybackPaused()
                             }
                             stopWatchProgressSaving()
                             if (playbackState == Player.STATE_BUFFERING) {
@@ -2129,7 +2134,8 @@ private class SubtitleOffsetRenderersFactory(
      */
     private val preferSoftwareAudioOnly: Boolean = false,
     private val onPlaybackSpeedAwareAudioSinkCreated: (PlaybackSpeedAwareAudioSink) -> Unit,
-    private val onFfmpegAudioRendererChanged: (FfmpegAudioRenderer?) -> Unit
+    private val onFfmpegAudioRendererChanged: (FfmpegAudioRenderer?) -> Unit,
+    private val onCueInspected: ((String) -> Unit)? = null
 ) : DefaultRenderersFactory(context) {
 
     override fun buildVideoRenderers(
@@ -2244,7 +2250,8 @@ private class SubtitleOffsetRenderersFactory(
             shouldNormalizeCuePositionProvider = shouldNormalizeCuePositionProvider,
             isBuiltInSubtitleProvider = isBuiltInSubtitleProvider,
             isSidecarAddonSubtitleActiveProvider = isSidecarAddonSubtitleActiveProvider,
-            videoBoundsFractionProvider = videoBoundsFractionProvider
+            videoBoundsFractionProvider = videoBoundsFractionProvider,
+            onCueInspected = onCueInspected
         )
         val startIndex = out.size
         super.buildTextRenderers(context, normalizingOutput, outputLooper, extensionRendererMode, out)
@@ -2294,7 +2301,8 @@ private class CueNormalizingTextOutput(
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
     private val isBuiltInSubtitleProvider: () -> Boolean,
     private val isSidecarAddonSubtitleActiveProvider: () -> Boolean,
-    private val videoBoundsFractionProvider: () -> RectF?
+    private val videoBoundsFractionProvider: () -> RectF?,
+    private val onCueInspected: ((String) -> Unit)? = null
 ) : TextOutput {
 
     override fun onCues(cueGroup: CueGroup) {
@@ -2305,6 +2313,14 @@ private class CueNormalizingTextOutput(
         if (cues.isEmpty()) {
             delegate.onCues(cueGroup)
             return
+        }
+        if (onCueInspected != null) {
+            for (i in 0 until cues.size) {
+                val t = cues[i].text?.toString()
+                if (!t.isNullOrBlank()) {
+                    onCueInspected(t)
+                }
+            }
         }
         var modifiedList: ArrayList<Cue>? = null
         val count = cues.size

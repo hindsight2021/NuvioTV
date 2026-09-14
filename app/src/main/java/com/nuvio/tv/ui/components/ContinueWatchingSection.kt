@@ -139,6 +139,8 @@ fun ContinueWatchingSection(
     onPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     title: String? = null,
     focusedItemIndex: Int = -1,
@@ -330,7 +332,9 @@ fun ContinueWatchingSection(
             onAddToQueue = onAddToQueue?.let { { it(menuItem); optionsItem = null } },
             onPlayRandomEpisode = onPlayRandomEpisode?.let { { it(menuItem); optionsItem = null } },
             onStartChannelShuffle = onStartChannelShuffle?.let { { it(menuItem); optionsItem = null } },
-            onStartChannelOrder = onStartChannelOrder?.let { { it(menuItem); optionsItem = null } }
+            onStartChannelOrder = onStartChannelOrder?.let { { it(menuItem); optionsItem = null } },
+            onChicReview = onChicReview?.let { { it(menuItem); optionsItem = null } },
+            onStartThematicChannel = onStartThematicChannel?.let { { it(menuItem); optionsItem = null } }
         )
     }
 
@@ -1124,7 +1128,9 @@ fun ContinueWatchingOptionsDialog(
     onAddToQueue: (() -> Unit)? = null,
     onPlayRandomEpisode: (() -> Unit)? = null,
     onStartChannelShuffle: (() -> Unit)? = null,
-    onStartChannelOrder: (() -> Unit)? = null
+    onStartChannelOrder: (() -> Unit)? = null,
+    onChicReview: (() -> Unit)? = null,
+    onStartThematicChannel: (() -> Unit)? = null
 ) {
     val isPlayEnabled = LocalPlaybackAvailability.current.canStream(item)
     val title = when (item) {
@@ -1254,6 +1260,32 @@ fun ContinueWatchingOptionsDialog(
                     ) {
                         Text("🎬 Create Show Channel (In Order)")
                     }
+                }
+            }
+
+            if (onChicReview != null) {
+                Button(
+                    onClick = onChicReview,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🍸 Chic AI Review")
+                }
+            }
+
+            if (onStartThematicChannel != null) {
+                Button(
+                    onClick = onStartThematicChannel,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("✨ AI Thematic Channels")
                 }
             }
 

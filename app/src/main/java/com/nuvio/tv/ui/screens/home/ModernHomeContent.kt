@@ -133,6 +133,8 @@ fun ModernHomeContent(
     onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
@@ -1239,7 +1241,9 @@ fun ModernHomeContent(
             onAddToQueue = onContinueWatchingAddToQueue?.let { { it(selectedOptionsItem); optionsItem.value = null } },
             onPlayRandomEpisode = onContinueWatchingPlayRandomEpisode?.let { { it(selectedOptionsItem); optionsItem.value = null } },
             onStartChannelShuffle = onContinueWatchingStartChannelShuffle?.let { { it(selectedOptionsItem); optionsItem.value = null } },
-            onStartChannelOrder = onContinueWatchingStartChannelOrder?.let { { it(selectedOptionsItem); optionsItem.value = null } }
+            onStartChannelOrder = onContinueWatchingStartChannelOrder?.let { { it(selectedOptionsItem); optionsItem.value = null } },
+            onChicReview = onContinueWatchingChicReview?.let { { it(selectedOptionsItem); optionsItem.value = null } },
+            onStartThematicChannel = onContinueWatchingStartThematicChannel?.let { { it(selectedOptionsItem); optionsItem.value = null } }
         )
     }
 }

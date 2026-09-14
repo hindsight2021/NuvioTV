@@ -28,7 +28,8 @@ class SkipIntroRepository @Inject constructor(
     private val aniSkipApi: AniSkipApi,
     private val animeSkipApi: AnimeSkipApi,
     private val simklResolver: SimklIdResolver,
-    private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore
+    private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
+    private val enhancedIntroDetector: com.nuvio.tv.core.player.EnhancedIntroDetector = com.nuvio.tv.core.player.EnhancedIntroDetector()
 ) {
     private val cache = ConcurrentHashMap<String, List<SkipInterval>>()
     private val animeSkipShowIdCache = ConcurrentHashMap<String, String>()
@@ -68,11 +69,19 @@ class SkipIntroRepository @Inject constructor(
             if (anilistId != null) fetchFromAnimeSkip(anilistId, animeEpisode, season = null) else emptyList()
         }
 
-        return@coroutineScope mergeByPriority(
+        val merged = mergeByPriority(
             introDbDeferred.await(),
             animeSkipDeferred.await(),
             aniSkipDeferred.await()
-        ).also { cache[cacheKey] = it }
+        )
+        if (merged.isNotEmpty()) {
+            return@coroutineScope merged.also { cache[cacheKey] = it }
+        }
+
+        // Smart fallback for uncatalogued reality TV / network series (e.g. Below Deck)
+        val learned = enhancedIntroDetector.getLearnedIntro(imdbId, season)
+        val result = if (learned != null) listOf(learned) else emptyList()
+        return@coroutineScope result.also { cache[cacheKey] = it }
     }
 
     suspend fun getSkipIntervalsForMal(

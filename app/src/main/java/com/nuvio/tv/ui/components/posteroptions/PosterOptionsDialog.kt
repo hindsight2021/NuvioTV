@@ -55,7 +55,9 @@ fun PosterOptionsDialog(
     onToggleWatched: () -> Unit,
     onPlayRandomEpisode: (() -> Unit)? = null,
     onStartChannelShuffle: (() -> Unit)? = null,
-    onStartChannelOrder: (() -> Unit)? = null
+    onStartChannelOrder: (() -> Unit)? = null,
+    onChicReview: (() -> Unit)? = null,
+    onStartThematicChannel: (() -> Unit)? = null
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
@@ -166,6 +168,32 @@ fun PosterOptionsDialog(
                 ) {
                     Text("🎬 Play Show Channel (In Order)")
                 }
+            }
+        }
+
+        if (onChicReview != null) {
+            Button(
+                onClick = onChicReview,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text("🍸 Chic AI Review")
+            }
+        }
+
+        if (onStartThematicChannel != null) {
+            Button(
+                onClick = onStartThematicChannel,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text("✨ AI Thematic Channels")
             }
         }
         }

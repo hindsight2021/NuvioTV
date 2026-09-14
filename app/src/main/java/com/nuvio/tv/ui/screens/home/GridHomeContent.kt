@@ -108,6 +108,8 @@ fun GridHomeContent(
     onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
@@ -536,6 +538,8 @@ fun GridHomeContent(
                         onPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
                         onStartChannelShuffle = onContinueWatchingStartChannelShuffle,
                         onStartChannelOrder = onContinueWatchingStartChannelOrder,
+                        onChicReview = onContinueWatchingChicReview,
+                        onStartThematicChannel = onContinueWatchingStartThematicChannel,
                         onDetailsClick = { item ->
                             onNavigateToDetail(
                                 when (item) {
@@ -606,6 +610,8 @@ fun GridHomeContent(
                         onPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
                         onStartChannelShuffle = onContinueWatchingStartChannelShuffle,
                         onStartChannelOrder = onContinueWatchingStartChannelOrder,
+                        onChicReview = onContinueWatchingChicReview,
+                        onStartThematicChannel = onContinueWatchingStartThematicChannel,
                         onDetailsClick = { item ->
                             onNavigateToDetail(
                                 when (item) {

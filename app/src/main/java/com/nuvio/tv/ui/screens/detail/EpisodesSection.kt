@@ -299,7 +299,8 @@ fun EpisodesRow(
     contentId: String = "",
     seriesTitle: String = "",
     onToggleWatchlist: (() -> Unit)? = null,
-    isInWatchlist: Boolean = false
+    isInWatchlist: Boolean = false,
+    onChicReview: ((Video) -> Unit)? = null
 ) {
     val dedupedEpisodes = remember(episodes) { episodes.distinctBy { it.id } }
     val restoreTargetRequester = restoreEpisodeId?.let { episodeFocusRequesters[it] }
@@ -561,7 +562,8 @@ fun EpisodesRow(
                     optionsEpisode = null
                 }
             },
-            isInWatchlist = isInWatchlist
+            isInWatchlist = isInWatchlist,
+            onChicReview = onChicReview?.let { callback -> { callback(selectedEpisode); optionsEpisode = null } }
         )
     }
 }

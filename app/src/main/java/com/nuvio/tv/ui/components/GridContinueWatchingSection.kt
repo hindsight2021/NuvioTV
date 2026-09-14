@@ -53,6 +53,8 @@ fun GridContinueWatchingSection(
     onPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     title: String? = null,
     fullWidth: Dp = Dp.Unspecified,
@@ -215,7 +217,9 @@ fun GridContinueWatchingSection(
             onAddToQueue = onAddToQueue?.let { { it(menuItem); optionsItem = null } },
             onPlayRandomEpisode = onPlayRandomEpisode?.let { { it(menuItem); optionsItem = null } },
             onStartChannelShuffle = onStartChannelShuffle?.let { { it(menuItem); optionsItem = null } },
-            onStartChannelOrder = onStartChannelOrder?.let { { it(menuItem); optionsItem = null } }
+            onStartChannelOrder = onStartChannelOrder?.let { { it(menuItem); optionsItem = null } },
+            onChicReview = onChicReview?.let { { it(menuItem); optionsItem = null } },
+            onStartThematicChannel = onStartThematicChannel?.let { { it(menuItem); optionsItem = null } }
         )
     }
 

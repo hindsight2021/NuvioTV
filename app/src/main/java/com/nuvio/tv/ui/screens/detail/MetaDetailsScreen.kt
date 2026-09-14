@@ -1523,6 +1523,45 @@ private fun MetaDetailsContent(
     // Tracks whether the initial auto-scroll to the "next to play" episode has fired.
     // Once it fires, no more auto-scrolls happen for the lifetime of this detail screen.
     var initialEpisodeScrollDone by remember(meta.id) { mutableStateOf(false) }
+    val localCtx = LocalContext.current
+    val aiManager = remember { com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()) }
+    val chicCriticReviewService = remember(aiManager) { com.nuvio.tv.core.ai.ChicCriticReviewService(aiManager) }
+    val moviePreShowService = remember(aiManager) { com.nuvio.tv.core.preshow.MoviePreShowService(aiManager) }
+    var showChicReviewDialog by remember { mutableStateOf(false) }
+    var chicReview by remember { mutableStateOf<com.nuvio.tv.core.ai.ChicCriticReview?>(null) }
+    var isChicReviewLoading by remember { mutableStateOf(false) }
+    var chicReviewError by remember { mutableStateOf<String?>(null) }
+    var chicReviewTargetTitle by remember { mutableStateOf("") }
+
+    var showPreShowDialog by remember { mutableStateOf(false) }
+    var movieTrivia by remember { mutableStateOf<List<com.nuvio.tv.core.preshow.MovieTriviaItem>>(emptyList()) }
+    var isMovieTriviaLoading by remember { mutableStateOf(false) }
+
+    val openChicReview: (String, String?, List<String>?, String?, Boolean, String?, Int?, Int?) -> Unit = { rTitle, rOverview, rGenre, rYear, isEp, epTitle, sNum, epNum ->
+        chicReviewTargetTitle = if (isEp) "${meta.name}: ${epTitle ?: "Episode $epNum"}" else meta.name
+        showChicReviewDialog = true
+        isChicReviewLoading = true
+        chicReviewError = null
+        chicReview = null
+        coroutineScope.launch {
+            val res = chicCriticReviewService.generateReview(
+                context = localCtx,
+                title = meta.name,
+                overview = rOverview,
+                genre = rGenre,
+                year = rYear,
+                isEpisode = isEp,
+                episodeTitle = epTitle,
+                seasonNumber = sNum,
+                episodeNumber = epNum
+            )
+            isChicReviewLoading = false
+            res.fold(
+                onSuccess = { chicReview = it },
+                onFailure = { chicReviewError = it.message ?: "Failed to generate review" }
+            )
+        }
+    }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
     val seasonEpisodeFocusRequesters = remember(selectedSeason, episodesForSeason) {
         val byEpisodeId = episodeFocusRequestersBySeason.getOrPut(selectedSeason) { mutableMapOf() }
@@ -1603,11 +1642,24 @@ private fun MetaDetailsContent(
     // Pre-compute gradient brushes once
 
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick, isPlayEnabled) {
+    val heroPlayClick = remember(heroVideo, meta.id, meta.apiType, onEpisodeClick, onPlayClick, isPlayEnabled) {
         {
             if (isPlayEnabled) markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
+            } else if (meta.apiType.equals("movie", ignoreCase = true)) {
+                showPreShowDialog = true
+                if (movieTrivia.isEmpty()) {
+                    isMovieTriviaLoading = true
+                    coroutineScope.launch {
+                        val res = moviePreShowService.generateTrivia(localCtx, meta.name, meta.year, meta.genres)
+                        isMovieTriviaLoading = false
+                        res.fold(
+                            onSuccess = { movieTrivia = it },
+                            onFailure = { /* fallback to direct play */ }
+                        )
+                    }
+                }
             } else {
                 onPlayClick(meta.id)
             }
@@ -1889,7 +1941,8 @@ private fun MetaDetailsContent(
                             initialHeroFocusRequested = true
                             clearPendingRestore()
                         },
-                        onShowFullDescription = { showSynopsisOverlay = true }
+                        onShowFullDescription = { showSynopsisOverlay = true },
+                        onChicReviewClick = { openChicReview(meta.name, meta.description, meta.genres, meta.year, false, null, null, null) }
                     )
                 }
             }
@@ -1930,6 +1983,18 @@ private fun MetaDetailsContent(
                             seriesTitle = meta.name,
                             onToggleWatchlist = onToggleLibrary,
                             isInWatchlist = isInLibrary,
+                            onChicReview = { ep ->
+                                openChicReview(
+                                    meta.name,
+                                    ep.overview,
+                                    meta.genres,
+                                    meta.year,
+                                    true,
+                                    ep.title,
+                                    ep.season,
+                                    ep.episode
+                                )
+                            },
                             onEpisodeClick = episodeClick,
                             canPlayEpisode = canPlayEpisode,
                             onEpisodeManualPlayClick = episodeManualClick,
@@ -2349,6 +2414,27 @@ private fun MetaDetailsContent(
                 onDismiss = { showSynopsisOverlay = false }
             )
         }
+
+        com.nuvio.tv.ui.components.ChicReviewDialog(
+            visible = showChicReviewDialog,
+            title = chicReviewTargetTitle.ifBlank { meta.name },
+            review = chicReview,
+            isLoading = isChicReviewLoading,
+            errorMessage = chicReviewError,
+            onDismiss = { showChicReviewDialog = false }
+        )
+
+        com.nuvio.tv.ui.components.CinemaPreShowDialog(
+            visible = showPreShowDialog,
+            movieTitle = meta.name,
+            trivia = movieTrivia,
+            isLoading = isMovieTriviaLoading,
+            onStartMovie = {
+                showPreShowDialog = false
+                onPlayClick(meta.id)
+            },
+            onDismiss = { showPreShowDialog = false }
+        )
     }
 }
 

@@ -118,6 +118,15 @@ object PlaylistManager {
         return finalQueue.firstOrNull()
     }
 
+    fun startThematicChannel(items: List<PlaylistItem>): PlaylistItem? {
+        if (items.isEmpty()) return null
+        _channelMode.value = ChannelMode.BINGE_ORDER
+        _queue.value = items
+        _currentIndex.value = 0
+        Log.d(TAG, "Started thematic channel with ${items.size} items")
+        return items.firstOrNull()
+    }
+
     fun next(): PlaylistItem? {
         val nextIdx = _currentIndex.value + 1
         val items = _queue.value

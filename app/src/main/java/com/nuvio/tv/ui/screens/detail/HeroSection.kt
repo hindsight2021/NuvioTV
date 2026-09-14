@@ -45,6 +45,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.tv.material3.Border
@@ -110,7 +111,8 @@ fun HeroContentSection(
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
-    onShowFullDescription: () -> Unit = {}
+    onShowFullDescription: () -> Unit = {},
+    onChicReviewClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -291,6 +293,17 @@ fun HeroContentSection(
                                 contentDescription = stringResource(R.string.hero_play_trailer),
                                 onClick = onTrailerClick,
                                 onFocused = onHeroActionFocused
+                            )
+                        }
+
+                        if (onChicReviewClick != null) {
+                            ActionIconButton(
+                                contentDescription = "🍸 Chic AI Review",
+                                onClick = onChicReviewClick,
+                                onFocused = onHeroActionFocused,
+                                customContent = {
+                                    Text("🍸", fontSize = 18.sp)
+                                }
                             )
                         }
                     }
@@ -510,7 +523,8 @@ private fun ActionIconButton(
     selected: Boolean = false,
     selectedContainerColor: Color = Color(0xFF7CFF9B),
     selectedContentColor: Color = Color.Black,
-    onFocused: () -> Unit = {}
+    onFocused: () -> Unit = {},
+    customContent: (@Composable () -> Unit)? = null
 ) {
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
@@ -576,6 +590,7 @@ private fun ActionIconButton(
         )
     ) {
         when {
+            customContent != null -> customContent()
             painter != null -> Icon(
                 painter = painter,
                 contentDescription = contentDescription,

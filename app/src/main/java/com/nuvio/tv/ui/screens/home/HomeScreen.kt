@@ -69,12 +69,32 @@ import com.nuvio.tv.core.tracking.LOCAL_LIBRARY_LIST_KEY
 import com.nuvio.tv.core.tracking.supportsMembershipFor
 import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.ui.components.posteroptions.TrackingRemovalConfirmationDialog
+import androidx.compose.ui.platform.LocalContext
+import okhttp3.OkHttpClient
+import com.nuvio.tv.core.ai.AiManager
+import com.nuvio.tv.core.ai.AiTtsPlayer
+import com.nuvio.tv.core.ai.ChicCriticReviewService
+import com.nuvio.tv.core.ai.ThematicChannelGenerator
+import com.nuvio.tv.core.playlist.PlaylistManager
+import com.nuvio.tv.core.playlist.PlaylistItem
+import com.nuvio.tv.ui.components.ChicReviewDialog
+import com.nuvio.tv.ui.components.ThematicChannelDialog
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private data class HomePosterOptionsTarget(
     val item: MetaPreview,
     val addonBaseUrl: String
+)
+
+private data class ChicReviewTarget(
+    val title: String,
+    val type: String,
+    val year: String? = null,
+    val genre: String? = null,
+    val overview: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null
 )
 
 private const val HOME_STABLE_GATE_TIMEOUT_MS = 5_000L
@@ -137,6 +157,9 @@ fun HomeScreen(
     // Track that catalog loading has started at least once (isLoading went true→false).
     var catalogLoadingStarted by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
+    val context = LocalContext.current
+    var chicReviewTarget by remember { mutableStateOf<ChicReviewTarget?>(null) }
+    var showThematicChannelDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.homeLayout) {
         if (uiState.homeLayout != HomeLayout.MODERN) {
@@ -257,6 +280,37 @@ fun HomeScreen(
                     onNavigateToDetailStable(id, type, addon.orEmpty())
                 }
             }
+        }
+    }
+    val onCwChicReview = remember {
+        { item: ContinueWatchingItem ->
+            val title = when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.name
+                is ContinueWatchingItem.NextUp -> item.info.name
+            }
+            val type = when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.contentType
+                is ContinueWatchingItem.NextUp -> item.info.contentType
+            }
+            val season = when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.season
+                is ContinueWatchingItem.NextUp -> item.info.season
+            }
+            val episode = when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.episode
+                is ContinueWatchingItem.NextUp -> item.info.episode
+            }
+            chicReviewTarget = ChicReviewTarget(
+                title = title,
+                type = type,
+                season = season,
+                episode = episode
+            )
+        }
+    }
+    val onCwStartThematicChannel = remember {
+        { _: ContinueWatchingItem ->
+            showThematicChannelDialog = true
         }
     }
 
@@ -468,6 +522,8 @@ fun HomeScreen(
                                 onContinueWatchingPlayRandomEpisode = onCwPlayRandomEpisode,
                                 onContinueWatchingStartChannelShuffle = onCwStartChannelShuffle,
                                 onContinueWatchingStartChannelOrder = onCwStartChannelOrder,
+                                onContinueWatchingChicReview = onCwChicReview,
+                                onContinueWatchingStartThematicChannel = onCwStartThematicChannel,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAllStable,
                                 onNavigateToFolderDetail = onNavigateToFolderDetailStable,
                                 isCatalogItemWatched = isCatalogItemWatched,
@@ -488,6 +544,8 @@ fun HomeScreen(
                                 onContinueWatchingPlayRandomEpisode = onCwPlayRandomEpisode,
                                 onContinueWatchingStartChannelShuffle = onCwStartChannelShuffle,
                                 onContinueWatchingStartChannelOrder = onCwStartChannelOrder,
+                                onContinueWatchingChicReview = onCwChicReview,
+                                onContinueWatchingStartThematicChannel = onCwStartThematicChannel,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAllStable,
                                 onNavigateToFolderDetail = onNavigateToFolderDetailStable,
                                 isCatalogItemWatched = isCatalogItemWatched,
@@ -507,6 +565,8 @@ fun HomeScreen(
                                 onContinueWatchingPlayRandomEpisode = onCwPlayRandomEpisode,
                                 onContinueWatchingStartChannelShuffle = onCwStartChannelShuffle,
                                 onContinueWatchingStartChannelOrder = onCwStartChannelOrder,
+                                onContinueWatchingChicReview = onCwChicReview,
+                                onContinueWatchingStartThematicChannel = onCwStartThematicChannel,
                                 onNavigateToFolderDetail = onNavigateToFolderDetailStable,
                                 isCatalogItemWatched = isCatalogItemWatched,
                                 onCatalogItemLongPress = onCatalogItemLongPress
@@ -625,6 +685,20 @@ fun HomeScreen(
                     }
                 }
                 posterOptionsTarget = null
+            },
+            onChicReview = {
+                chicReviewTarget = ChicReviewTarget(
+                    title = item.name,
+                    type = item.apiType,
+                    year = item.releaseInfo,
+                    genre = item.genres?.firstOrNull(),
+                    overview = item.description
+                )
+                posterOptionsTarget = null
+            },
+            onStartThematicChannel = {
+                showThematicChannelDialog = true
+                posterOptionsTarget = null
             }
         )
     }
@@ -660,6 +734,50 @@ fun HomeScreen(
             onDismiss = viewModel::cancelPosterListPickerRemoval
         )
     }
+
+    val activeChicTarget = chicReviewTarget
+    if (activeChicTarget != null) {
+        val aiManager = remember { AiManager(OkHttpClient()) }
+        val criticService = remember { ChicCriticReviewService(aiManager) }
+        val ttsPlayer = remember { AiTtsPlayer(context) }
+        ChicReviewDialog(
+            title = activeChicTarget.title,
+            type = activeChicTarget.type,
+            year = activeChicTarget.year,
+            genre = activeChicTarget.genre,
+            overview = activeChicTarget.overview,
+            season = activeChicTarget.season,
+            episode = activeChicTarget.episode,
+            criticService = criticService,
+            ttsPlayer = ttsPlayer,
+            onDismiss = { chicReviewTarget = null }
+        )
+    }
+
+    if (showThematicChannelDialog) {
+        val aiManager = remember { AiManager(OkHttpClient()) }
+        val generator = remember { ThematicChannelGenerator(aiManager) }
+        ThematicChannelDialog(
+            visible = true,
+            generator = generator,
+            onStartChannel = { result ->
+                showThematicChannelDialog = false
+                val playlistItems = result.tracks.map { track ->
+                    PlaylistItem(
+                        contentId = track.title,
+                        videoId = null,
+                        title = track.title,
+                        seriesTitle = track.title,
+                        season = track.season,
+                        episode = track.episode,
+                        mediaType = track.type
+                    )
+                }
+                PlaylistManager.startThematicChannel(playlistItems)
+            },
+            onDismiss = { showThematicChannelDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -677,6 +795,8 @@ private fun ClassicHomeRoute(
     onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -701,6 +821,8 @@ private fun ClassicHomeRoute(
         onContinueWatchingPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
         onContinueWatchingStartChannelShuffle = onContinueWatchingStartChannelShuffle,
         onContinueWatchingStartChannelOrder = onContinueWatchingStartChannelOrder,
+        onContinueWatchingChicReview = onContinueWatchingChicReview,
+        onContinueWatchingStartThematicChannel = onContinueWatchingStartThematicChannel,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onNavigateToFolderDetail = onNavigateToFolderDetail,
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
@@ -743,6 +865,8 @@ private fun GridHomeRoute(
     onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -768,6 +892,8 @@ private fun GridHomeRoute(
         onContinueWatchingPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
         onContinueWatchingStartChannelShuffle = onContinueWatchingStartChannelShuffle,
         onContinueWatchingStartChannelOrder = onContinueWatchingStartChannelOrder,
+        onContinueWatchingChicReview = onContinueWatchingChicReview,
+        onContinueWatchingStartThematicChannel = onContinueWatchingStartThematicChannel,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onNavigateToFolderDetail = onNavigateToFolderDetail,
         onRemoveContinueWatching = remember(viewModel) {
@@ -804,6 +930,8 @@ private fun ModernHomeRoute(
     onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingChicReview: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartThematicChannel: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
@@ -863,6 +991,8 @@ private fun ModernHomeRoute(
         onContinueWatchingPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
         onContinueWatchingStartChannelShuffle = onContinueWatchingStartChannelShuffle,
         onContinueWatchingStartChannelOrder = onContinueWatchingStartChannelOrder,
+        onContinueWatchingChicReview = onContinueWatchingChicReview,
+        onContinueWatchingStartThematicChannel = onContinueWatchingStartThematicChannel,
         onRequestTrailerPreview = requestTrailerPreview,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,
@@ -900,7 +1030,9 @@ private fun HomePosterOptionsDialog(
     onToggleWatched: () -> Unit,
     onPlayRandomEpisode: (() -> Unit)? = null,
     onStartChannelShuffle: (() -> Unit)? = null,
-    onStartChannelOrder: (() -> Unit)? = null
+    onStartChannelOrder: (() -> Unit)? = null,
+    onChicReview: (() -> Unit)? = null,
+    onStartThematicChannel: (() -> Unit)? = null
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -1004,6 +1136,32 @@ private fun HomePosterOptionsDialog(
                 ) {
                     Text("🎬 Play Show Channel (In Order)")
                 }
+            }
+        }
+
+        if (onChicReview != null) {
+            Button(
+                onClick = onChicReview,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text("🍸 Chic AI Review")
+            }
+        }
+
+        if (onStartThematicChannel != null) {
+            Button(
+                onClick = onStartThematicChannel,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text("✨ AI Thematic Channels")
             }
         }
     }

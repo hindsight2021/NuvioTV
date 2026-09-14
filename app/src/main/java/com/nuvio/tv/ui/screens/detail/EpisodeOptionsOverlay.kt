@@ -111,6 +111,7 @@ internal fun EpisodeOptionsOverlay(
     onPlayRandomEpisode: (() -> Unit)? = null,
     onStartChannelShuffle: (() -> Unit)? = null,
     onStartChannelOrder: (() -> Unit)? = null,
+    onChicReview: (() -> Unit)? = null,
     onToggleWatchlist: (() -> Unit)? = null,
     isInWatchlist: Boolean = false
 ) {
@@ -266,6 +267,9 @@ internal fun EpisodeOptionsOverlay(
             }
             onStartChannelOrder?.let {
                 add(EpisodeOverlayAction(label = "🎬 Create Show Channel (In Order)", onClick = it))
+            }
+            onChicReview?.let {
+                add(EpisodeOverlayAction(label = "🍸 Chic AI Review", onClick = it))
             }
         }
         onToggleWatchlist?.let {

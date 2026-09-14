@@ -85,6 +85,63 @@ class AiManager @Inject constructor(
         }
     }
 
+    suspend fun queryRaw(
+        context: Context,
+        systemPrompt: String,
+        prompt: String,
+        expectJson: Boolean = true
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val prefs = AiPreferences(context)
+        val provider = prefs.activeProvider
+        val apiKey = prefs.getApiKey(provider)
+        val model = prefs.getModel(provider)
+
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(
+                IllegalStateException("Please configure an API key for ${provider.displayName} in Settings -> AI Assistant")
+            )
+        }
+
+        try {
+            val raw = when (provider) {
+                AiProvider.GEMINI -> callGemini(prefs, apiKey, model, systemPrompt, prompt, emptyList())
+                AiProvider.OPENAI -> callOpenAiCompatible(
+                    url = "https://api.openai.com/v1/chat/completions",
+                    apiKey = apiKey,
+                    model = model,
+                    systemPrompt = systemPrompt,
+                    prompt = prompt,
+                    history = emptyList()
+                )
+                AiProvider.ANTHROPIC -> callAnthropic(apiKey, model, systemPrompt, prompt, emptyList())
+                AiProvider.GROK -> callOpenAiCompatible(
+                    url = "https://api.x.ai/v1/chat/completions",
+                    apiKey = apiKey,
+                    model = model,
+                    systemPrompt = systemPrompt,
+                    prompt = prompt,
+                    history = emptyList()
+                )
+                AiProvider.OPENROUTER -> callOpenAiCompatible(
+                    url = "https://openrouter.ai/api/v1/chat/completions",
+                    apiKey = apiKey,
+                    model = model,
+                    systemPrompt = systemPrompt,
+                    prompt = prompt,
+                    history = emptyList(),
+                    extraHeaders = mapOf(
+                        "HTTP-Referer" to "https://nuvio.tv",
+                        "X-Title" to "Nuvio+ TV"
+                    )
+                )
+            }
+            Result.success(raw)
+        } catch (e: Exception) {
+            Log.e(TAG, "AI raw query failed for provider $provider: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
     private fun callGemini(
         prefs: AiPreferences,
         apiKey: String,

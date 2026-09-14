@@ -49,10 +49,24 @@ class AiTtsPlayer(private val context: Context) {
     fun speak(text: String) {
         if (!isInitialized || text.isBlank()) return
         stop()
+        tts?.setPitch(1.0f)
+        tts?.setSpeechRate(1.0f)
         val params = Bundle().apply {
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
         }
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "nuvio_ai_${System.currentTimeMillis()}")
+    }
+
+    fun speakChic(text: String) {
+        if (!isInitialized || text.isBlank()) return
+        stop()
+        tts?.setPitch(1.08f)
+        tts?.setSpeechRate(1.02f)
+        val cleanText = text.replace("*", "").replace("#", "").replace("`", "").trim()
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+        }
+        tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, params, "nuvio_chic_${System.currentTimeMillis()}")
     }
 
     fun stop() {
