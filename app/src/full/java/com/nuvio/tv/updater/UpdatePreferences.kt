@@ -37,7 +37,7 @@ class UpdatePreferences @Inject constructor(
     }
 
     val updateBannerEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[updateBannerEnabledKey] ?: true
+        prefs[updateBannerEnabledKey] ?: false
     }
 
     val updateChannel: Flow<UpdateChannel> = dataStore.data.map { prefs ->

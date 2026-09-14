@@ -182,6 +182,8 @@ jobs:
           set_property NUVIO_RELEASE_KEY_ALIAS "${RELEASE_KEY_ALIAS}"
           set_property NUVIO_RELEASE_KEY_PASSWORD "${RELEASE_KEY_PASSWORD}"
           set_property NUVIO_RELEASE_STORE_PASSWORD "${RELEASE_STORE_PASSWORD}"
+          set_property GITHUB_OWNER "hindsight2021"
+          set_property GITHUB_REPO "NuvioTV"
 
           for optional_prop in TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET SIMKL_CLIENT_ID; do
             if ! grep -Eq "^[[:space:]]*${optional_prop}[[:space:]]*=" local.properties; then

@@ -22,7 +22,12 @@ internal object ReleaseSelector {
                 prerelease = isPrerelease(release, version)
             )
         }
-        .filter { candidate -> channel == UpdateChannel.BETA || !candidate.prerelease }
+        .filter { candidate ->
+            val isPlusRelease = candidate.version.prerelease.contains("plus") ||
+                candidate.release.tagName?.contains("plus", ignoreCase = true) == true ||
+                candidate.release.name?.contains("plus", ignoreCase = true) == true
+            isPlusRelease && (channel == UpdateChannel.BETA || !candidate.prerelease || candidate.version.prerelease.contains("plus"))
+        }
         .sortedByDescending(ReleaseCandidate::version)
         .map(ReleaseCandidate::release)
         .toList()

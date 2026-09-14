@@ -104,8 +104,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1063
-        versionName = "0.9.2-plus.5"
+        versionCode = 1064
+        versionName = "0.9.2-plus.6"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -144,9 +144,9 @@ android {
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
         buildConfigField("String", "SENTRY_DSN", buildConfigString(sentryDsn))
 
-        // In-app updater (GitHub Releases)
-        val githubOwner = env("NUVIO_GITHUB_OWNER") ?: localProperties.getProperty("GITHUB_OWNER", "hindsight2021")
-        val githubRepo = env("NUVIO_GITHUB_REPO") ?: localProperties.getProperty("GITHUB_REPO", "NuvioTV")
+        // In-app updater (GitHub Releases - points exclusively to fork)
+        val githubOwner = "hindsight2021"
+        val githubRepo = "NuvioTV"
         buildConfigField("String", "GITHUB_OWNER", "\"$githubOwner\"")
         buildConfigField("String", "GITHUB_REPO", "\"$githubRepo\"")
     }
