@@ -96,6 +96,11 @@ fun ClassicHomeContent(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit = {},
     showContinueWatchingManualPlayOption: Boolean = false,
+    onContinueWatchingPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
@@ -631,6 +636,11 @@ fun ClassicHomeContent(
                     onStartFromBeginning = onContinueWatchingStartFromBeginning,
                     showManualPlayOption = showContinueWatchingManualPlayOption,
                     onPlayManually = onContinueWatchingPlayManually,
+                    onPlayNext = onContinueWatchingPlayNext,
+                    onAddToQueue = onContinueWatchingAddToQueue,
+                    onPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
+                    onStartChannelShuffle = onContinueWatchingStartChannelShuffle,
+                    onStartChannelOrder = onContinueWatchingStartChannelOrder,
                     onDetailsClick = { item ->
                         onNavigateToDetail(
                             when (item) {
@@ -710,6 +720,11 @@ fun ClassicHomeContent(
                     onStartFromBeginning = onContinueWatchingStartFromBeginning,
                     showManualPlayOption = showContinueWatchingManualPlayOption,
                     onPlayManually = onContinueWatchingPlayManually,
+                    onPlayNext = onContinueWatchingPlayNext,
+                    onAddToQueue = onContinueWatchingAddToQueue,
+                    onPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
+                    onStartChannelShuffle = onContinueWatchingStartChannelShuffle,
+                    onStartChannelOrder = onContinueWatchingStartChannelOrder,
                     onDetailsClick = { item ->
                         onNavigateToDetail(
                             when (item) {

@@ -6,6 +6,10 @@ import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import com.nuvio.tv.core.playlist.PlaylistItem
+import com.nuvio.tv.core.playlist.PlaylistManager
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -168,6 +172,90 @@ fun HomeScreen(
     val onRemoveContinueWatchingStable = remember(viewModel) {
         { contentId: String, season: Int?, episode: Int?, isNextUp: Boolean ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
+        }
+    }
+
+    val context = LocalContext.current
+    val onCwPlayNext = remember(context) {
+        { item: ContinueWatchingItem ->
+            val playlistItem = PlaylistItem(
+                contentId = item.contentId(),
+                videoId = item.videoId(),
+                title = item.episodeTitle() ?: item.title(),
+                seriesTitle = if (item.isSeries()) item.title() else null,
+                season = item.season(),
+                episode = item.episode(),
+                thumbnail = item.thumbnail(),
+                mediaType = item.contentType()
+            )
+            PlaylistManager.playNext(playlistItem)
+            Toast.makeText(context, "Added to Play Next", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val onCwAddToQueue = remember(context) {
+        { item: ContinueWatchingItem ->
+            val playlistItem = PlaylistItem(
+                contentId = item.contentId(),
+                videoId = item.videoId(),
+                title = item.episodeTitle() ?: item.title(),
+                seriesTitle = if (item.isSeries()) item.title() else null,
+                season = item.season(),
+                episode = item.episode(),
+                thumbnail = item.thumbnail(),
+                mediaType = item.contentType()
+            )
+            PlaylistManager.addToQueue(playlistItem)
+            Toast.makeText(context, "Added to Playlist Queue", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val onCwPlayRandomEpisode = remember(viewModel, onPlaySeriesEpisode, onNavigateToDetailStable) {
+        { item: ContinueWatchingItem ->
+            viewModel.playRandomEpisode(
+                contentId = item.contentId(),
+                contentType = item.contentType(),
+                title = item.title(),
+                addonBaseUrl = item.addonBaseUrl()
+            ) { id, type, addon, season, episode ->
+                if (onPlaySeriesEpisode != null) {
+                    onPlaySeriesEpisode(id, type, addon.orEmpty(), season, episode)
+                } else {
+                    onNavigateToDetailStable(id, type, addon.orEmpty())
+                }
+            }
+        }
+    }
+    val onCwStartChannelShuffle = remember(viewModel, onPlaySeriesEpisode, onNavigateToDetailStable) {
+        { item: ContinueWatchingItem ->
+            viewModel.startChannel(
+                contentId = item.contentId(),
+                contentType = item.contentType(),
+                title = item.title(),
+                addonBaseUrl = item.addonBaseUrl(),
+                shuffle = true
+            ) { id, type, addon, season, episode ->
+                if (onPlaySeriesEpisode != null) {
+                    onPlaySeriesEpisode(id, type, addon.orEmpty(), season, episode)
+                } else {
+                    onNavigateToDetailStable(id, type, addon.orEmpty())
+                }
+            }
+        }
+    }
+    val onCwStartChannelOrder = remember(viewModel, onPlaySeriesEpisode, onNavigateToDetailStable) {
+        { item: ContinueWatchingItem ->
+            viewModel.startChannel(
+                contentId = item.contentId(),
+                contentType = item.contentType(),
+                title = item.title(),
+                addonBaseUrl = item.addonBaseUrl(),
+                shuffle = false
+            ) { id, type, addon, season, episode ->
+                if (onPlaySeriesEpisode != null) {
+                    onPlaySeriesEpisode(id, type, addon.orEmpty(), season, episode)
+                } else {
+                    onNavigateToDetailStable(id, type, addon.orEmpty())
+                }
+            }
         }
     }
 
@@ -374,6 +462,11 @@ fun HomeScreen(
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
                                 onContinueWatchingPlayManually = onContinueWatchingPlayManuallyStable,
                                 showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
+                                onContinueWatchingPlayNext = onCwPlayNext,
+                                onContinueWatchingAddToQueue = onCwAddToQueue,
+                                onContinueWatchingPlayRandomEpisode = onCwPlayRandomEpisode,
+                                onContinueWatchingStartChannelShuffle = onCwStartChannelShuffle,
+                                onContinueWatchingStartChannelOrder = onCwStartChannelOrder,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAllStable,
                                 onNavigateToFolderDetail = onNavigateToFolderDetailStable,
                                 isCatalogItemWatched = isCatalogItemWatched,
@@ -389,6 +482,11 @@ fun HomeScreen(
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
                                 onContinueWatchingPlayManually = onContinueWatchingPlayManuallyStable,
                                 showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
+                                onContinueWatchingPlayNext = onCwPlayNext,
+                                onContinueWatchingAddToQueue = onCwAddToQueue,
+                                onContinueWatchingPlayRandomEpisode = onCwPlayRandomEpisode,
+                                onContinueWatchingStartChannelShuffle = onCwStartChannelShuffle,
+                                onContinueWatchingStartChannelOrder = onCwStartChannelOrder,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAllStable,
                                 onNavigateToFolderDetail = onNavigateToFolderDetailStable,
                                 isCatalogItemWatched = isCatalogItemWatched,
@@ -403,6 +501,11 @@ fun HomeScreen(
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
                                 onContinueWatchingPlayManually = onContinueWatchingPlayManuallyStable,
                                 showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
+                                onContinueWatchingPlayNext = onCwPlayNext,
+                                onContinueWatchingAddToQueue = onCwAddToQueue,
+                                onContinueWatchingPlayRandomEpisode = onCwPlayRandomEpisode,
+                                onContinueWatchingStartChannelShuffle = onCwStartChannelShuffle,
+                                onContinueWatchingStartChannelOrder = onCwStartChannelOrder,
                                 onNavigateToFolderDetail = onNavigateToFolderDetailStable,
                                 isCatalogItemWatched = isCatalogItemWatched,
                                 onCatalogItemLongPress = onCatalogItemLongPress
@@ -560,6 +663,11 @@ private fun ClassicHomeRoute(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
     onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit,
     showContinueWatchingManualPlayOption: Boolean,
+    onContinueWatchingPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -579,6 +687,11 @@ private fun ClassicHomeRoute(
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
         onContinueWatchingPlayManually = onContinueWatchingPlayManually,
         showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
+        onContinueWatchingPlayNext = onContinueWatchingPlayNext,
+        onContinueWatchingAddToQueue = onContinueWatchingAddToQueue,
+        onContinueWatchingPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
+        onContinueWatchingStartChannelShuffle = onContinueWatchingStartChannelShuffle,
+        onContinueWatchingStartChannelOrder = onContinueWatchingStartChannelOrder,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onNavigateToFolderDetail = onNavigateToFolderDetail,
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
@@ -616,6 +729,11 @@ private fun GridHomeRoute(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
     onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit,
     showContinueWatchingManualPlayOption: Boolean,
+    onContinueWatchingPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -636,6 +754,11 @@ private fun GridHomeRoute(
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
         onContinueWatchingPlayManually = onContinueWatchingPlayManually,
         showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
+        onContinueWatchingPlayNext = onContinueWatchingPlayNext,
+        onContinueWatchingAddToQueue = onContinueWatchingAddToQueue,
+        onContinueWatchingPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
+        onContinueWatchingStartChannelShuffle = onContinueWatchingStartChannelShuffle,
+        onContinueWatchingStartChannelOrder = onContinueWatchingStartChannelOrder,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onNavigateToFolderDetail = onNavigateToFolderDetail,
         onRemoveContinueWatching = remember(viewModel) {
@@ -667,6 +790,11 @@ private fun ModernHomeRoute(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
     onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit,
     showContinueWatchingManualPlayOption: Boolean,
+    onContinueWatchingPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
@@ -721,6 +849,11 @@ private fun ModernHomeRoute(
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
         onContinueWatchingPlayManually = onContinueWatchingPlayManually,
         showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
+        onContinueWatchingPlayNext = onContinueWatchingPlayNext,
+        onContinueWatchingAddToQueue = onContinueWatchingAddToQueue,
+        onContinueWatchingPlayRandomEpisode = onContinueWatchingPlayRandomEpisode,
+        onContinueWatchingStartChannelShuffle = onContinueWatchingStartChannelShuffle,
+        onContinueWatchingStartChannelOrder = onContinueWatchingStartChannelOrder,
         onRequestTrailerPreview = requestTrailerPreview,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,

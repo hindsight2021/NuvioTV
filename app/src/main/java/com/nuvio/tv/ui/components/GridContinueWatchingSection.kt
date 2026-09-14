@@ -48,6 +48,11 @@ fun GridContinueWatchingSection(
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     showManualPlayOption: Boolean = false,
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
+    onPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     title: String? = null,
     fullWidth: Dp = Dp.Unspecified,
@@ -205,7 +210,12 @@ fun GridContinueWatchingSection(
             onPlayManually = {
                 onPlayManually(menuItem)
                 optionsItem = null
-            }
+            },
+            onPlayNext = onPlayNext?.let { { it(menuItem); optionsItem = null } },
+            onAddToQueue = onAddToQueue?.let { { it(menuItem); optionsItem = null } },
+            onPlayRandomEpisode = onPlayRandomEpisode?.let { { it(menuItem); optionsItem = null } },
+            onStartChannelShuffle = onStartChannelShuffle?.let { { it(menuItem); optionsItem = null } },
+            onStartChannelOrder = onStartChannelOrder?.let { { it(menuItem); optionsItem = null } }
         )
     }
 

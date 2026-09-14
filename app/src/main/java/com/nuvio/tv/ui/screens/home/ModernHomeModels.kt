@@ -662,31 +662,3 @@ internal fun extractYearText(type: ContentType, releaseInfo: String?, released: 
     }
     return extractYearOrRange(releaseInfo)
 }
-
-internal fun ContinueWatchingItem.contentId(): String {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.contentId
-        is ContinueWatchingItem.NextUp -> info.contentId
-    }
-}
-
-internal fun ContinueWatchingItem.contentType(): String {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.contentType
-        is ContinueWatchingItem.NextUp -> info.contentType
-    }
-}
-
-internal fun ContinueWatchingItem.season(): Int? {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.season
-        is ContinueWatchingItem.NextUp -> info.seedSeason
-    }
-}
-
-internal fun ContinueWatchingItem.episode(): Int? {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.episode
-        is ContinueWatchingItem.NextUp -> info.seedEpisode
-    }
-}

@@ -87,6 +87,58 @@ sealed class ContinueWatchingItem {
     data class NextUp(val info: NextUpInfo) : ContinueWatchingItem()
 }
 
+fun ContinueWatchingItem.contentId(): String = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.contentId
+    is ContinueWatchingItem.NextUp -> info.contentId
+}
+
+fun ContinueWatchingItem.contentType(): String = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.contentType
+    is ContinueWatchingItem.NextUp -> info.contentType
+}
+
+fun ContinueWatchingItem.title(): String = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.name
+    is ContinueWatchingItem.NextUp -> info.name
+}
+
+fun ContinueWatchingItem.season(): Int? = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.season
+    is ContinueWatchingItem.NextUp -> info.seedSeason ?: info.season
+}
+
+fun ContinueWatchingItem.episode(): Int? = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.episode
+    is ContinueWatchingItem.NextUp -> info.seedEpisode ?: info.episode
+}
+
+fun ContinueWatchingItem.videoId(): String = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.videoId
+    is ContinueWatchingItem.NextUp -> info.videoId
+}
+
+fun ContinueWatchingItem.thumbnail(): String? = when (this) {
+    is ContinueWatchingItem.InProgress -> episodeThumbnail ?: progress.poster
+    is ContinueWatchingItem.NextUp -> info.thumbnail ?: info.poster
+}
+
+fun ContinueWatchingItem.addonBaseUrl(): String? = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.addonBaseUrl
+    is ContinueWatchingItem.NextUp -> null
+}
+
+fun ContinueWatchingItem.episodeTitle(): String? = when (this) {
+    is ContinueWatchingItem.InProgress -> progress.episodeTitle ?: progress.name
+    is ContinueWatchingItem.NextUp -> info.episodeTitle ?: "${info.name} S${info.season}E${info.episode}"
+}
+
+fun ContinueWatchingItem.isSeries(): Boolean {
+    val type = contentType()
+    return type.equals("series", ignoreCase = true) ||
+        type.equals("tv", ignoreCase = true) ||
+        type.equals("anime", ignoreCase = true)
+}
+
 @Immutable
 data class NextUpInfo(
     val contentId: String,

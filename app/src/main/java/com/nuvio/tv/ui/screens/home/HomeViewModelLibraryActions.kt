@@ -463,31 +463,76 @@ private suspend fun HomeViewModel.fetchSeriesEpisodes(item: MetaPreview): List<c
 }
 
 fun HomeViewModel.playRandomEpisode(
-    item: MetaPreview,
+    contentId: String,
+    contentType: String,
+    title: String,
     addonBaseUrl: String?,
     onLaunchEpisode: (contentId: String, contentType: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit
 ) {
     viewModelScope.launch {
-        var episodes = fetchSeriesEpisodes(item)
-        if (episodes.isEmpty()) {
-            val type = if (item.apiType.equals("tv", ignoreCase = true)) "series" else item.apiType
-            metaRepository.getMetaFromAllAddons(type, item.id).collect { res ->
-                if (res is com.nuvio.tv.core.network.NetworkResult.Success) {
-                    episodes = res.data.watchableEpisodes()
-                }
+        var episodes = emptyList<com.nuvio.tv.domain.model.Video>()
+        val type = if (contentType.equals("tv", ignoreCase = true)) "series" else contentType
+        metaRepository.getMetaFromAllAddons(type, contentId).collect { res ->
+            if (res is com.nuvio.tv.core.network.NetworkResult.Success) {
+                episodes = res.data.watchableEpisodes()
             }
         }
         val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
         if (validEpisodes.isNotEmpty()) {
             val randomEp = validEpisodes.random()
             com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
-                contentId = item.id,
-                seriesTitle = item.name,
+                contentId = contentId,
+                seriesTitle = title,
                 episodes = validEpisodes,
                 startEpisode = randomEp,
                 shuffle = true
             )
-            onLaunchEpisode(item.id, item.apiType, addonBaseUrl, randomEp.season!!, randomEp.episode!!)
+            onLaunchEpisode(contentId, contentType, addonBaseUrl, randomEp.season!!, randomEp.episode!!)
+        }
+    }
+}
+
+fun HomeViewModel.playRandomEpisode(
+    item: MetaPreview,
+    addonBaseUrl: String?,
+    onLaunchEpisode: (contentId: String, contentType: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit
+) {
+    playRandomEpisode(
+        contentId = item.id,
+        contentType = item.apiType,
+        title = item.name,
+        addonBaseUrl = addonBaseUrl,
+        onLaunchEpisode = onLaunchEpisode
+    )
+}
+
+fun HomeViewModel.startChannel(
+    contentId: String,
+    contentType: String,
+    title: String,
+    addonBaseUrl: String?,
+    shuffle: Boolean,
+    onLaunchEpisode: (contentId: String, contentType: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit
+) {
+    viewModelScope.launch {
+        var episodes = emptyList<com.nuvio.tv.domain.model.Video>()
+        val type = if (contentType.equals("tv", ignoreCase = true)) "series" else contentType
+        metaRepository.getMetaFromAllAddons(type, contentId).collect { res ->
+            if (res is com.nuvio.tv.core.network.NetworkResult.Success) {
+                episodes = res.data.watchableEpisodes()
+            }
+        }
+        val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
+        if (validEpisodes.isNotEmpty()) {
+            val startEp = if (shuffle) validEpisodes.random() else validEpisodes.first()
+            com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                contentId = contentId,
+                seriesTitle = title,
+                episodes = validEpisodes,
+                startEpisode = startEp,
+                shuffle = shuffle
+            )
+            onLaunchEpisode(contentId, contentType, addonBaseUrl, startEp.season!!, startEp.episode!!)
         }
     }
 }
@@ -498,29 +543,14 @@ fun HomeViewModel.startChannel(
     shuffle: Boolean,
     onLaunchEpisode: (contentId: String, contentType: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit
 ) {
-    viewModelScope.launch {
-        var episodes = fetchSeriesEpisodes(item)
-        if (episodes.isEmpty()) {
-            val type = if (item.apiType.equals("tv", ignoreCase = true)) "series" else item.apiType
-            metaRepository.getMetaFromAllAddons(type, item.id).collect { res ->
-                if (res is com.nuvio.tv.core.network.NetworkResult.Success) {
-                    episodes = res.data.watchableEpisodes()
-                }
-            }
-        }
-        val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
-        if (validEpisodes.isNotEmpty()) {
-            val startEp = if (shuffle) validEpisodes.random() else validEpisodes.first()
-            com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
-                contentId = item.id,
-                seriesTitle = item.name,
-                episodes = validEpisodes,
-                startEpisode = startEp,
-                shuffle = shuffle
-            )
-            onLaunchEpisode(item.id, item.apiType, addonBaseUrl, startEp.season!!, startEp.episode!!)
-        }
-    }
+    startChannel(
+        contentId = item.id,
+        contentType = item.apiType,
+        title = item.name,
+        addonBaseUrl = addonBaseUrl,
+        shuffle = shuffle,
+        onLaunchEpisode = onLaunchEpisode
+    )
 }
 
 private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntryInput {

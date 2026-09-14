@@ -128,6 +128,11 @@ fun ModernHomeContent(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit = {},
     showContinueWatchingManualPlayOption: Boolean = false,
+    onContinueWatchingPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onContinueWatchingStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
@@ -1229,7 +1234,12 @@ fun ModernHomeContent(
             onPlayManually = {
                 onContinueWatchingPlayManually(selectedOptionsItem)
                 optionsItem.value = null
-            }
+            },
+            onPlayNext = onContinueWatchingPlayNext?.let { { it(selectedOptionsItem); optionsItem.value = null } },
+            onAddToQueue = onContinueWatchingAddToQueue?.let { { it(selectedOptionsItem); optionsItem.value = null } },
+            onPlayRandomEpisode = onContinueWatchingPlayRandomEpisode?.let { { it(selectedOptionsItem); optionsItem.value = null } },
+            onStartChannelShuffle = onContinueWatchingStartChannelShuffle?.let { { it(selectedOptionsItem); optionsItem.value = null } },
+            onStartChannelOrder = onContinueWatchingStartChannelOrder?.let { { it(selectedOptionsItem); optionsItem.value = null } }
         )
     }
 }

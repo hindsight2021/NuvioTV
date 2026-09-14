@@ -82,6 +82,9 @@ import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import com.nuvio.tv.ui.util.computeAirDateBadgeText
 import com.nuvio.tv.ui.util.computeAirDateBadgeTextShort
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.nuvio.tv.ui.screens.home.isSeries
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -131,6 +134,11 @@ fun ContinueWatchingSection(
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     showManualPlayOption: Boolean = false,
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
+    onPlayNext: ((ContinueWatchingItem) -> Unit)? = null,
+    onAddToQueue: ((ContinueWatchingItem) -> Unit)? = null,
+    onPlayRandomEpisode: ((ContinueWatchingItem) -> Unit)? = null,
+    onStartChannelShuffle: ((ContinueWatchingItem) -> Unit)? = null,
+    onStartChannelOrder: ((ContinueWatchingItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     title: String? = null,
     focusedItemIndex: Int = -1,
@@ -317,7 +325,12 @@ fun ContinueWatchingSection(
             onPlayManually = {
                 onPlayManually(menuItem)
                 optionsItem = null
-            }
+            },
+            onPlayNext = onPlayNext?.let { { it(menuItem); optionsItem = null } },
+            onAddToQueue = onAddToQueue?.let { { it(menuItem); optionsItem = null } },
+            onPlayRandomEpisode = onPlayRandomEpisode?.let { { it(menuItem); optionsItem = null } },
+            onStartChannelShuffle = onStartChannelShuffle?.let { { it(menuItem); optionsItem = null } },
+            onStartChannelOrder = onStartChannelOrder?.let { { it(menuItem); optionsItem = null } }
         )
     }
 
@@ -1106,15 +1119,22 @@ fun ContinueWatchingOptionsDialog(
     onDetails: () -> Unit,
     onStartFromBeginning: () -> Unit = {},
     showPlayManually: Boolean = false,
-    onPlayManually: () -> Unit = {}
+    onPlayManually: () -> Unit = {},
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
+    onPlayRandomEpisode: (() -> Unit)? = null,
+    onStartChannelShuffle: (() -> Unit)? = null,
+    onStartChannelOrder: (() -> Unit)? = null
 ) {
     val isPlayEnabled = LocalPlaybackAvailability.current.canStream(item)
     val title = when (item) {
         is ContinueWatchingItem.InProgress -> item.progress.name
         is ContinueWatchingItem.NextUp -> item.info.name
     }
+    val isSeries = item.isSeries()
 
     val detailsFocusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         detailsFocusRequester.requestFocus()
@@ -1125,54 +1145,128 @@ fun ContinueWatchingOptionsDialog(
         title = title,
         subtitle = stringResource(R.string.cw_dialog_subtitle)
     ) {
-        Button(
-            onClick = onDetails,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(detailsFocusRequester),
-            colors = ButtonDefaults.colors(
-                containerColor = NuvioTheme.colors.BackgroundCard,
-                contentColor = NuvioTheme.colors.TextPrimary
-            )
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(stringResource(R.string.cw_action_go_to_details))
-        }
-
-        if (showPlayManually && isPlayEnabled) {
             Button(
-                onClick = onPlayManually,
+                onClick = onDetails,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(detailsFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.cw_action_go_to_details))
+            }
+
+            if (showPlayManually && isPlayEnabled) {
+                Button(
+                    onClick = onPlayManually,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.play_manually))
+                }
+            }
+
+            if (item is ContinueWatchingItem.InProgress && isPlayEnabled) {
+                Button(
+                    onClick = onStartFromBeginning,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.cw_action_start_from_beginning))
+                }
+            }
+
+            if (isPlayEnabled && onPlayNext != null) {
+                Button(
+                    onClick = onPlayNext,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Play Next")
+                }
+            }
+
+            if (isPlayEnabled && onAddToQueue != null) {
+                Button(
+                    onClick = onAddToQueue,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add to Playlist Queue")
+                }
+            }
+
+            if (isSeries) {
+                if (onPlayRandomEpisode != null) {
+                    Button(
+                        onClick = onPlayRandomEpisode,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🎲 Play Random Episode")
+                    }
+                }
+
+                if (onStartChannelShuffle != null) {
+                    Button(
+                        onClick = onStartChannelShuffle,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("📺 Create Show Channel (Shuffle)")
+                    }
+                }
+
+                if (onStartChannelOrder != null) {
+                    Button(
+                        onClick = onStartChannelOrder,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🎬 Create Show Channel (In Order)")
+                    }
+                }
+            }
+
+            Button(
+                onClick = onRemove,
                 colors = ButtonDefaults.colors(
                     containerColor = NuvioTheme.colors.BackgroundCard,
                     contentColor = NuvioTheme.colors.TextPrimary
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(stringResource(R.string.play_manually))
+                Text(stringResource(R.string.cw_action_remove))
             }
-        }
-
-        if (item is ContinueWatchingItem.InProgress && isPlayEnabled) {
-            Button(
-                onClick = onStartFromBeginning,
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioTheme.colors.BackgroundCard,
-                    contentColor = NuvioTheme.colors.TextPrimary
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.cw_action_start_from_beginning))
-            }
-        }
-
-        Button(
-            onClick = onRemove,
-            colors = ButtonDefaults.colors(
-                containerColor = NuvioTheme.colors.BackgroundCard,
-                contentColor = NuvioTheme.colors.TextPrimary
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.cw_action_remove))
         }
     }
 }

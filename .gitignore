@@ -39,6 +39,7 @@ docss
 benchmark
 .mcp.json
 build-artifacts/
+build-artifacts-v2/
 db/
 backups/
 .supabase_db.env

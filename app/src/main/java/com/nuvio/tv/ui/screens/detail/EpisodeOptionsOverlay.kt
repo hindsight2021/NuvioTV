@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -120,6 +122,7 @@ internal fun EpisodeOptionsOverlay(
     val primaryFocusRequester = remember { FocusRequester() }
     val detailsFocusRequester = remember { FocusRequester() }
     val detailsScrollState = rememberScrollState()
+    val actionsScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val title = episode.title.localizeEpisodeTitle(context)
     val description = episode.overview?.trim().orEmpty()
@@ -128,7 +131,7 @@ internal fun EpisodeOptionsOverlay(
     val isNoneStyle = !shouldShowEpisodeOverlayBackdrop(style)
     val isCompactLayout = configuration.screenWidthDp < 1200 || configuration.screenHeightDp < 700
     val horizontalPadding = if (isNoneStyle || !isCompactLayout) 64.dp else 32.dp
-    val verticalPadding = if (isNoneStyle || !isCompactLayout) 48.dp else 24.dp
+    val verticalPadding = if (isNoneStyle || !isCompactLayout) 28.dp else 16.dp
     val contentSpacing = if (isNoneStyle || !isCompactLayout) 72.dp else 40.dp
     val actionsWidth = if (isNoneStyle || !isCompactLayout) 360.dp else 320.dp
     val blurBackdrop = shouldBlurEpisodeOverlayBackdrop(
@@ -256,13 +259,13 @@ internal fun EpisodeOptionsOverlay(
                 add(EpisodeOverlayAction(label = "Add to Playlist Queue", onClick = it))
             }
             onPlayRandomEpisode?.let {
-                add(EpisodeOverlayAction(label = "Play Random Episode", onClick = it))
+                add(EpisodeOverlayAction(label = "🎲 Play Random Episode", onClick = it))
             }
             onStartChannelShuffle?.let {
-                add(EpisodeOverlayAction(label = "Create Show Channel (Shuffle)", onClick = it))
+                add(EpisodeOverlayAction(label = "📺 Create Show Channel (Shuffle)", onClick = it))
             }
             onStartChannelOrder?.let {
-                add(EpisodeOverlayAction(label = "Create Show Channel (In Order)", onClick = it))
+                add(EpisodeOverlayAction(label = "🎬 Create Show Channel (In Order)", onClick = it))
             }
         }
         onToggleWatchlist?.let {
@@ -464,8 +467,10 @@ internal fun EpisodeOptionsOverlay(
                 Column(
                     modifier = Modifier
                         .width(actionsWidth)
+                        .fillMaxHeight()
+                        .verticalScroll(actionsScrollState)
                         .focusGroup(),
-                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     actions.forEachIndexed { index, action ->
                         Button(
@@ -501,6 +506,7 @@ internal fun EpisodeOptionsOverlay(
                             Text(action.label)
                         }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
