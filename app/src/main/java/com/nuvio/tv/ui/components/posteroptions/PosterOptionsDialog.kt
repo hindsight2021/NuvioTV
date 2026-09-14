@@ -4,8 +4,11 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Divider
@@ -55,6 +58,7 @@ fun PosterOptionsDialog(
     onStartChannelOrder: (() -> Unit)? = null
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         primaryFocusRequester.requestFocus()
@@ -65,6 +69,12 @@ fun PosterOptionsDialog(
         title = title,
         subtitle = stringResource(R.string.home_poster_dialog_subtitle)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         Button(
             onClick = onDetails,
             modifier = Modifier
@@ -157,6 +167,7 @@ fun PosterOptionsDialog(
                     Text("🎬 Play Show Channel (In Order)")
                 }
             }
+        }
         }
     }
 }

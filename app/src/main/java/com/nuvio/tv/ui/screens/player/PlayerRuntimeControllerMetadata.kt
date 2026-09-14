@@ -256,7 +256,20 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         return
     }
 
-    val resolvedNext = PlayerNextEpisodeRules.resolveNextEpisode(
+    val playlistNextVideo = if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+        val q = com.nuvio.tv.core.playlist.PlaylistManager.queue.value
+        val matchIdx = q.indexOfFirst {
+            (it.videoId != null && it.videoId == currentVideoId) ||
+            (it.season == season && it.episode == episode)
+        }
+        if (matchIdx >= 0 && matchIdx + 1 < q.size) {
+            val nextItem = q[matchIdx + 1]
+            metaVideos.firstOrNull { it.id == nextItem.videoId }
+                ?: metaVideos.firstOrNull { it.season == nextItem.season && it.episode == nextItem.episode }
+        } else null
+    } else null
+
+    val resolvedNext = playlistNextVideo ?: PlayerNextEpisodeRules.resolveNextEpisode(
         videos = metaVideos,
         currentSeason = season,
         currentEpisode = episode

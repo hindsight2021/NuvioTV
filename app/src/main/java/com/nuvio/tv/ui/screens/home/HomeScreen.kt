@@ -59,6 +59,7 @@ import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.LocalStartupLoadingState
 import com.nuvio.tv.ui.components.LocalStartupSplashEnabled
 import com.nuvio.tv.ui.components.shouldShowHomeStartupLoader
+import com.nuvio.tv.ui.components.HomeClockWithDate
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
@@ -514,6 +515,14 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+
+        if (showHomeContentWithAnimation) {
+            HomeClockWithDate(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 28.dp, end = 48.dp)
+            )
         }
 
         if (showHomeLoader) {

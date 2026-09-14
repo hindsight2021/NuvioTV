@@ -266,6 +266,7 @@ fun SeasonTabs(
 @Composable
 fun EpisodesRow(
     episodes: List<Video>,
+    allEpisodes: List<Video> = episodes,
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
     episodeRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
@@ -519,32 +520,38 @@ fun EpisodesRow(
                 optionsEpisode = null
             },
             onPlayRandomEpisode = {
-                val playable = dedupedEpisodes.filter { canPlayEpisode(it) }
+                val pool = if (allEpisodes.isNotEmpty()) allEpisodes else dedupedEpisodes
+                val playable = pool.filter { canPlayEpisode(it) && it.season != null && it.episode != null && it.season!! > 0 }
                 val randomEp = playable.randomOrNull() ?: selectedEpisode
                 onEpisodeClick(randomEp)
                 optionsEpisode = null
             },
             onStartChannelShuffle = {
+                val pool = if (allEpisodes.isNotEmpty()) allEpisodes else dedupedEpisodes
+                val validEpisodes = pool.filter { it.season != null && it.episode != null && it.season!! > 0 }
+                val randomStart = validEpisodes.randomOrNull() ?: selectedEpisode
                 val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
                     contentId = contentId,
                     seriesTitle = seriesTitle,
-                    episodes = dedupedEpisodes,
-                    startEpisode = selectedEpisode,
+                    episodes = validEpisodes,
+                    startEpisode = randomStart,
                     shuffle = true
                 )
-                val targetEp = dedupedEpisodes.firstOrNull { it.id == first?.videoId } ?: selectedEpisode
+                val targetEp = validEpisodes.firstOrNull { it.id == first?.videoId } ?: randomStart
                 onEpisodeClick(targetEp)
                 optionsEpisode = null
             },
             onStartChannelOrder = {
+                val pool = if (allEpisodes.isNotEmpty()) allEpisodes else dedupedEpisodes
+                val validEpisodes = pool.filter { it.season != null && it.episode != null && it.season!! > 0 }
                 val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
                     contentId = contentId,
                     seriesTitle = seriesTitle,
-                    episodes = dedupedEpisodes,
+                    episodes = validEpisodes,
                     startEpisode = selectedEpisode,
                     shuffle = false
                 )
-                val targetEp = dedupedEpisodes.firstOrNull { it.id == first?.videoId } ?: selectedEpisode
+                val targetEp = validEpisodes.firstOrNull { it.id == first?.videoId } ?: selectedEpisode
                 onEpisodeClick(targetEp)
                 optionsEpisode = null
             },

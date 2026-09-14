@@ -618,12 +618,25 @@ fun MetaDetailsScreen(
                 val isSeries = remember(meta.type, meta.videos) {
                     meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
                 }
-                val playOnLoadVideo = remember(meta, uiState.nextToWatch, uiState.episodesForSeason) {
-                    resolveHeroPlaybackVideo(
-                        meta = meta,
-                        nextToWatch = uiState.nextToWatch,
-                        episodesForSeason = uiState.episodesForSeason
-                    )
+                val hasSpecificTargetEpisode = returnFocusSeason != null && returnFocusEpisode != null
+                val playOnLoadVideo = remember(
+                    meta,
+                    uiState.nextToWatch,
+                    uiState.episodesForSeason,
+                    returnFocusSeason,
+                    returnFocusEpisode
+                ) {
+                    if (hasSpecificTargetEpisode) {
+                        meta.videos.firstOrNull { it.season == returnFocusSeason && it.episode == returnFocusEpisode }
+                            ?: uiState.episodesForSeason.firstOrNull { it.season == returnFocusSeason && it.episode == returnFocusEpisode }
+                            ?: resolveHeroPlaybackVideo(meta, uiState.nextToWatch, uiState.episodesForSeason)
+                    } else {
+                        resolveHeroPlaybackVideo(
+                            meta = meta,
+                            nextToWatch = uiState.nextToWatch,
+                            episodesForSeason = uiState.episodesForSeason
+                        )
+                    }
                 }
 
                 LaunchedEffect(
@@ -633,10 +646,22 @@ fun MetaDetailsScreen(
                     isSeries,
                     uiState.nextToWatch,
                     playOnLoadVideo?.id,
-                    playbackAvailability
+                    playbackAvailability,
+                    hasSpecificTargetEpisode,
+                    returnFocusSeason,
+                    returnFocusEpisode
                 ) {
-                    if (!playOnLoad || playOnLoadConsumed.value || (isSeries && uiState.nextToWatch == null)) {
+                    if (!playOnLoad || playOnLoadConsumed.value) {
                         return@LaunchedEffect
+                    }
+                    if (isSeries && !hasSpecificTargetEpisode && uiState.nextToWatch == null) {
+                        return@LaunchedEffect
+                    }
+                    if (isSeries && hasSpecificTargetEpisode) {
+                        val matchesTarget = playOnLoadVideo?.season == returnFocusSeason && playOnLoadVideo?.episode == returnFocusEpisode
+                        if (!matchesTarget && meta.videos.isEmpty()) {
+                            return@LaunchedEffect
+                        }
                     }
                     if (!playbackAvailability.isLoaded) return@LaunchedEffect
                     playOnLoadConsumed.value = true
@@ -1893,6 +1918,7 @@ private fun MetaDetailsContent(
                     Box(modifier = Modifier.bringIntoViewResponder(detailRowBringIntoViewResponder)) {
                         EpisodesRow(
                             episodes = episodesForSeason,
+                            allEpisodes = meta.videos.ifEmpty { episodesForSeason },
                             episodeProgressMap = episodeProgressMap,
                             episodeRatings = visibleEpisodeImdbRatings,
                             watchedEpisodes = watchedEpisodes,
