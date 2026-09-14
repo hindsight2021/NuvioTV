@@ -1652,12 +1652,14 @@ private fun MetaDetailsContent(
                 if (movieTrivia.isEmpty()) {
                     isMovieTriviaLoading = true
                     coroutineScope.launch {
-                        val res = moviePreShowService.generateTrivia(localCtx, meta.name, meta.year, meta.genres)
-                        isMovieTriviaLoading = false
-                        res.fold(
-                            onSuccess = { movieTrivia = it },
-                            onFailure = { /* fallback to direct play */ }
-                        )
+                        try {
+                            val pkg = moviePreShowService.loadPreShow(localCtx, meta.name, meta.releaseInfo, meta.genres)
+                            movieTrivia = pkg.trivia
+                        } catch (e: Exception) {
+                            // fallback
+                        } finally {
+                            isMovieTriviaLoading = false
+                        }
                     }
                 }
             } else {
@@ -1942,7 +1944,7 @@ private fun MetaDetailsContent(
                             clearPendingRestore()
                         },
                         onShowFullDescription = { showSynopsisOverlay = true },
-                        onChicReviewClick = { openChicReview(meta.name, meta.description, meta.genres, meta.year, false, null, null, null) }
+                        onChicReviewClick = { openChicReview(meta.name, meta.description, meta.genres, meta.releaseInfo, false, null, null, null) }
                     )
                 }
             }
@@ -1988,7 +1990,7 @@ private fun MetaDetailsContent(
                                     meta.name,
                                     ep.overview,
                                     meta.genres,
-                                    meta.year,
+                                    meta.releaseInfo,
                                     true,
                                     ep.title,
                                     ep.season,

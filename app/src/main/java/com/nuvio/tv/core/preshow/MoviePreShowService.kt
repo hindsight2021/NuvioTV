@@ -1,4 +1,4 @@
-﻿package com.nuvio.tv.core.preshow
+package com.nuvio.tv.core.preshow
 
 import android.content.Context
 import com.nuvio.tv.core.ai.AiManager
@@ -30,7 +30,7 @@ data class PreShowPackage(
 @Singleton
 class MoviePreShowService @Inject constructor(
     private val aiManager: AiManager,
-    private val trailerService: TrailerService
+    private val trailerService: TrailerService? = null
 ) {
     suspend fun loadPreShow(
         context: Context,

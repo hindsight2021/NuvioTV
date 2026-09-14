@@ -8,8 +8,6 @@ import androidx.compose.animation.EnterTransition
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
-import com.nuvio.tv.core.playlist.PlaylistItem
-import com.nuvio.tv.core.playlist.PlaylistManager
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -69,7 +67,8 @@ import com.nuvio.tv.core.tracking.LOCAL_LIBRARY_LIST_KEY
 import com.nuvio.tv.core.tracking.supportsMembershipFor
 import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.ui.components.posteroptions.TrackingRemovalConfirmationDialog
-import androidx.compose.ui.platform.LocalContext
+import com.nuvio.tv.ui.components.ThematicChannelDialog
+import com.nuvio.tv.ui.components.ChicReviewDialog
 import okhttp3.OkHttpClient
 import com.nuvio.tv.core.ai.AiManager
 import com.nuvio.tv.core.ai.AiTtsPlayer
@@ -756,7 +755,7 @@ fun HomeScreen(
         )
     }
 
-    com.nuvio.tv.ui.components.ChicReviewDialog(
+    ChicReviewDialog(
         visible = showChicReviewDialog,
         title = chicReviewTargetTitle,
         review = chicReview,
