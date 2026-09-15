@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.home
 import androidx.compose.runtime.Immutable
 import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
 import com.nuvio.tv.data.local.StartupAuthNotice
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.Collection
@@ -34,6 +35,7 @@ data class HomeUiState(
     val selectedHomeTab: HomeTab = HomeTab.TV_SHOWS,
     val modernLandscapePostersEnabled: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean = false,
+    val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),

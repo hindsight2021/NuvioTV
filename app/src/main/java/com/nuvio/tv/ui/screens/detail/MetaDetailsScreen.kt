@@ -100,6 +100,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
 import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
@@ -108,6 +109,7 @@ import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.localizedTitle
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.ui.components.cinematicBackdrop
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.MetaTrailer
@@ -305,6 +307,7 @@ fun MetaDetailsScreen(
     val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsStateWithLifecycle(
         initialValue = false
     )
+    val animatedBackgroundMode by viewModel.animatedBackgroundMode.collectAsStateWithLifecycle()
     val selectedComment = uiState.selectedComment
     var commentOverlayDirection by remember { mutableIntStateOf(0) }
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
@@ -1887,6 +1890,7 @@ private fun MetaDetailsContent(
             isScrolledPastHero = isScrolledPastHero,
             leftGradient = leftGradientBitmap,
             bottomGradient = bottomGradientBitmap,
+            animatedBackgroundMode = animatedBackgroundMode,
         )
 
         // Single scrollable column with hero + content
@@ -2492,6 +2496,7 @@ private fun BackdropLayer(
     isScrolledPastHero: Boolean,
     leftGradient: ImageBitmap,
     bottomGradient: ImageBitmap,
+    animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
 ) {
     var showHeroBackdropUnderlay by remember(heroBackdropRequest, backdropRequest) {
         mutableStateOf(heroBackdropRequest != null)
@@ -2513,7 +2518,9 @@ private fun BackdropLayer(
             AsyncImage(
                 model = heroBackdropRequest,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .cinematicBackdrop(mode = animatedBackgroundMode, key = heroBackdropRequest.data),
                 alpha = backdropAlphaState.value,
                 contentScale = ContentScale.Crop,
                 alignment = Alignment.TopEnd
@@ -2522,7 +2529,9 @@ private fun BackdropLayer(
         AsyncImage(
             model = backdropRequest,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .cinematicBackdrop(mode = animatedBackgroundMode, key = backdropRequest.data),
             alpha = backdropAlphaState.value,
             onSuccess = { showHeroBackdropUnderlay = false },
             contentScale = ContentScale.Crop,

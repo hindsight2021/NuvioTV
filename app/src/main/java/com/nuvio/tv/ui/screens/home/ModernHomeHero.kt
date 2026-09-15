@@ -60,8 +60,10 @@ import com.nuvio.tv.ui.util.recompositionHighlighter
 import coil3.request.transitionFactory
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.components.TrailerPlayer
+import com.nuvio.tv.ui.components.cinematicBackdrop
 import androidx.compose.ui.res.stringResource
 
 private data class ModernHeroSecondaryMeta(
@@ -91,6 +93,7 @@ internal fun ModernHeroScene(
         heroTrailerAudioUrl = { state().trailerAudioUrl },
         heroTrailerPlaybackKey = { state().trailerPlaybackKey },
         muted = { state().trailerMuted },
+        animatedBackgroundMode = { state().animatedBackgroundMode },
         onTrailerEnded = onTrailerEnded,
         onFirstFrameRendered = onFirstFrameRendered,
         modifier = modifier,
@@ -119,6 +122,7 @@ internal fun ModernHeroMediaLayer(
     heroTrailerAudioUrl: () -> String?,
     heroTrailerPlaybackKey: () -> String?,
     muted: () -> Boolean,
+    animatedBackgroundMode: () -> AnimatedBackdropMode = { AnimatedBackdropMode.KEN_BURNS },
     onTrailerEnded: () -> Unit,
     onFirstFrameRendered: () -> Unit,
     modifier: Modifier,
@@ -171,6 +175,10 @@ internal fun ModernHeroMediaLayer(
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
+                    .cinematicBackdrop(
+                        mode = animatedBackgroundMode(),
+                        key = displayedBackdrop
+                    )
                     .graphicsLayer {
                         compositingStrategy = CompositingStrategy.Offscreen
                         alpha = 1f - transitionProgressState.value

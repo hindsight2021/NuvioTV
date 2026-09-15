@@ -21,6 +21,7 @@ import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.TraktCommentsService
 import com.nuvio.tv.data.repository.TraktRelatedService
 import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -110,6 +111,9 @@ class MetaDetailsViewModel @Inject constructor(
     private val _posterCardCornerRadiusDp = MutableStateFlow(12)
     val posterCardCornerRadiusDp: StateFlow<Int> = _posterCardCornerRadiusDp.asStateFlow()
 
+    private val _animatedBackgroundMode = MutableStateFlow(AnimatedBackdropMode.KEN_BURNS)
+    val animatedBackgroundMode: StateFlow<AnimatedBackdropMode> = _animatedBackgroundMode.asStateFlow()
+
     private val localizedContext: Context
         get() = context.withAppLocale()
     val effectiveAutoplayEnabled = playerSettingsDataStore.playerSettings
@@ -164,6 +168,10 @@ class MetaDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.posterCardCornerRadiusDp
                 .collect { _posterCardCornerRadiusDp.value = it }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.animatedBackgroundMode
+                .collect { _animatedBackgroundMode.value = it }
         }
         observeShowFullReleaseDate()
         observeHideUnreleasedContent()

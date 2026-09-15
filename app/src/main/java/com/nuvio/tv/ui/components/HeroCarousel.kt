@@ -65,6 +65,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.colorSpace
 import coil3.request.crossfade
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.util.formatHeroRuntime
 import com.nuvio.tv.ui.util.LocalRecompositionHighlighterEnabled
@@ -87,6 +88,7 @@ fun HeroCarousel(
     showBackdrop: Boolean = true,
     fullWidth: Dp = Dp.Unspecified,
     initialActiveIndex: Int = 0,
+    animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     modifier: Modifier = Modifier
 ) {
     if (items.isEmpty()) return
@@ -274,6 +276,7 @@ private fun HeroCarouselSlide(
             HeroCarouselBackdrop(
                 item = item,
                 fullPage = false,
+                animatedBackgroundMode = animatedBackgroundMode,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -394,7 +397,8 @@ private fun HeroCarouselMetaDivider() {
 internal fun HeroCarouselBackdrop(
     item: MetaPreview,
     fullPage: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -488,7 +492,9 @@ internal fun HeroCarouselBackdrop(
         AsyncImage(
             model = backgroundModel,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .cinematicBackdrop(mode = animatedBackgroundMode, key = backdropUrl),
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopCenter
         )

@@ -16,6 +16,7 @@ import com.nuvio.tv.core.sync.buildHomeCatalogSyncPayload
 import com.nuvio.tv.core.sync.homeCatalogKey
 import com.nuvio.tv.core.sync.homeCollectionKey
 import com.nuvio.tv.domain.model.Addon
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.Collection
@@ -126,6 +127,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val separateMoviesTvEnabledKey = booleanPreferencesKey("separate_movies_tv_enabled")
     private val selectedHomeTabKey = stringPreferencesKey("selected_home_tab")
     private val trackChannelShuffleInCwKey = booleanPreferencesKey("track_channel_shuffle_in_cw")
+    private val animatedBackgroundModeKey = stringPreferencesKey("animated_background_mode")
 
     private fun <T> profileFlow(extract: (prefs: androidx.datastore.preferences.core.Preferences) -> T): Flow<T> =
         profileManager.activeProfileId.flatMapLatest { pid ->
@@ -251,6 +253,11 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val trackChannelShuffleInCw: Flow<Boolean> = profileFlow { prefs ->
         prefs[trackChannelShuffleInCwKey] ?: false
+    }
+
+    val animatedBackgroundMode: Flow<AnimatedBackdropMode> = profileFlow { prefs ->
+        val name = prefs[animatedBackgroundModeKey] ?: AnimatedBackdropMode.KEN_BURNS.name
+        AnimatedBackdropMode.fromName(name)
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -560,6 +567,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setTrackChannelShuffleInCw(enabled: Boolean) {
         store().edit { prefs ->
             prefs[trackChannelShuffleInCwKey] = enabled
+        }
+    }
+
+    suspend fun setAnimatedBackgroundMode(mode: AnimatedBackdropMode) {
+        store().edit { prefs ->
+            prefs[animatedBackgroundModeKey] = mode.name
         }
     }
 

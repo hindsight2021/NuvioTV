@@ -42,8 +42,11 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import com.nuvio.tv.core.ai.AiPreferences
 import com.nuvio.tv.core.ai.AiProvider
+import com.nuvio.tv.core.ai.AiTtsPlayer
+import com.nuvio.tv.core.ai.AiVoicePersona
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -58,17 +61,20 @@ fun AiSettingsContent(
     var currentKey by remember { mutableStateOf(prefs.getApiKey(activeProvider)) }
     var currentModel by remember { mutableStateOf(prefs.getModel(activeProvider)) }
     var isTtsEnabled by remember { mutableStateOf(prefs.isTtsEnabled) }
+    var currentVoicePersona by remember { mutableStateOf(prefs.ttsVoicePersona) }
     var customPersona by remember { mutableStateOf(prefs.customPersona) }
 
     var showProviderDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
+    var showVoicePersonaDialog by remember { mutableStateOf(false) }
 
     val refreshState = {
         activeProvider = prefs.activeProvider
         currentKey = prefs.getApiKey(activeProvider)
         currentModel = prefs.getModel(activeProvider)
         isTtsEnabled = prefs.isTtsEnabled
+        currentVoicePersona = prefs.ttsVoicePersona
         customPersona = prefs.customPersona
     }
 
@@ -146,6 +152,15 @@ fun AiSettingsContent(
                             }
                         )
                     }
+
+                    item(key = "ai_tts_voice_persona") {
+                        SettingsActionRow(
+                            title = "Critic & Voice Persona",
+                            subtitle = currentVoicePersona.description,
+                            value = currentVoicePersona.displayName,
+                            onClick = { showVoicePersonaDialog = true }
+                        )
+                    }
                 }
                 SettingsVerticalScrollIndicators(state = listState)
             }
@@ -188,6 +203,18 @@ fun AiSettingsContent(
                 refreshState()
             },
             onDismiss = { showModelDialog = false }
+        )
+    }
+
+    if (showVoicePersonaDialog) {
+        AiVoicePersonaSelectionDialog(
+            selected = currentVoicePersona,
+            onSelect = { persona ->
+                prefs.ttsVoicePersona = persona
+                showVoicePersonaDialog = false
+                refreshState()
+            },
+            onDismiss = { showVoicePersonaDialog = false }
         )
     }
 }
@@ -450,3 +477,56 @@ private fun AiModelDialog(
         }
     }
 }
+
+@Composable
+private fun AiVoicePersonaSelectionDialog(
+    selected: AiVoicePersona,
+    onSelect: (AiVoicePersona) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val ttsPlayer = remember { AiTtsPlayer(context) }
+    val initialFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { initialFocus.requestFocus() }
+    DisposableEffect(Unit) {
+        onDispose { ttsPlayer.shutdown() }
+    }
+
+    NuvioDialog(
+        title = "Critic & Voice Persona",
+        subtitle = "Select voice inflection and tone for Chic Reviews and conversational audio readback.",
+        onDismiss = onDismiss
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiVoicePersona.entries.forEachIndexed { index, persona ->
+                val isSelected = persona == selected
+                Button(
+                    onClick = {
+                        ttsPlayer.previewPersona(persona)
+                        onSelect(persona)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier),
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (isSelected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            text = if (isSelected) "✓  ${persona.displayName}" else persona.displayName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = persona.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.colors.TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

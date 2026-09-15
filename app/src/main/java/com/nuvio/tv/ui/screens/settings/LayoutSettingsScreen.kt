@@ -70,6 +70,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.streams.STREAM_BADGE_IMPORT_LIMIT
 import com.nuvio.tv.core.streams.StreamBadgePlacement
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
 import com.nuvio.tv.domain.model.CardDepthStyle
@@ -140,6 +141,7 @@ fun LayoutSettingsContent(
     var showStreamBadgePositionDialog by rememberSaveable { mutableStateOf(false) }
     var showEpisodeRatingsDialog by rememberSaveable { mutableStateOf(false) }
     var showEpisodeOptionsOverlayStyleDialog by rememberSaveable { mutableStateOf(false) }
+    var showAnimatedBackdropModeDialog by rememberSaveable { mutableStateOf(false) }
 
     val defaultHomeLayoutHeaderFocus = remember { FocusRequester() }
     val homeContentHeaderFocus = remember { FocusRequester() }
@@ -290,6 +292,14 @@ fun LayoutSettingsContent(
                                 LayoutSettingsEvent.SetTrackChannelShuffleInCw(!uiState.trackChannelShuffleInCw)
                             )
                         },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
+                    SettingsActionRow(
+                        title = "Animated Backdrops",
+                        subtitle = "Cinematic Ken Burns pan & zoom drift across high-res artwork.",
+                        value = uiState.animatedBackgroundMode.displayName,
+                        onClick = { showAnimatedBackdropModeDialog = true },
                         onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                     )
 
@@ -1044,6 +1054,17 @@ fun LayoutSettingsContent(
                     showEpisodeOptionsOverlayStyleDialog = false
                 },
                 onDismiss = { showEpisodeOptionsOverlayStyleDialog = false }
+            )
+        }
+
+        if (showAnimatedBackdropModeDialog) {
+            AnimatedBackdropModeDialog(
+                currentMode = uiState.animatedBackgroundMode,
+                onModeSelected = { mode ->
+                    viewModel.onEvent(LayoutSettingsEvent.SetAnimatedBackgroundMode(mode))
+                    showAnimatedBackdropModeDialog = false
+                },
+                onDismiss = { showAnimatedBackdropModeDialog = false }
             )
         }
 
@@ -2027,3 +2048,48 @@ private data class PresetOption(
     val label: String,
     val value: Int
 )
+
+@Composable
+private fun AnimatedBackdropModeDialog(
+    currentMode: AnimatedBackdropMode,
+    onModeSelected: (AnimatedBackdropMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val initialFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { initialFocus.requestFocus() }
+
+    NuvioDialog(
+        title = "Animated Backdrops",
+        subtitle = "Choose motion behavior for high-resolution backdrops on Home and Details screens.",
+        onDismiss = onDismiss
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AnimatedBackdropMode.entries.forEachIndexed { index, mode ->
+                val isSelected = mode == currentMode
+                Button(
+                    onClick = { onModeSelected(mode) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier),
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (isSelected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            text = if (isSelected) "✓  ${mode.displayName}" else mode.displayName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = mode.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.colors.TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

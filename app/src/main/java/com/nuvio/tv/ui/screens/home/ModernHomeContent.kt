@@ -873,7 +873,8 @@ fun ModernHomeContent(
                         trailerAudioUrl = heroMediaAudioUrl,
                         trailerPlaybackKey = heroMediaPlaybackKey,
                         trailerMuted = heroMediaMutedState.value,
-                        fullScreenBackdrop = fullScreenBackdrop
+                        fullScreenBackdrop = fullScreenBackdrop,
+                        animatedBackgroundMode = uiState.animatedBackgroundMode
                     )
                 }
             }

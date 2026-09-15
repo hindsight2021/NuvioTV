@@ -506,6 +506,7 @@ fun ClassicHomeContent(
                 HeroCarouselBackdrop(
                     item = item,
                     fullPage = true,
+                    animatedBackgroundMode = uiState.animatedBackgroundMode,
                     modifier = Modifier.fillMaxSize()
                 )
             }

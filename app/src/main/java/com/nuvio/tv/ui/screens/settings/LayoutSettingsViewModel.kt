@@ -15,6 +15,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
@@ -84,6 +85,7 @@ data class LayoutSettingsUiState(
     val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
     val separateMoviesTvEnabled: Boolean = false,
     val trackChannelShuffleInCw: Boolean = false,
+    val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
 )
 
 data class CatalogInfo(
@@ -96,6 +98,7 @@ sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SetSeparateMoviesTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetTrackChannelShuffleInCw(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetAnimatedBackgroundMode(val mode: AnimatedBackdropMode) : LayoutSettingsEvent()
     data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -229,6 +232,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.trackChannelShuffleInCw.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(trackChannelShuffleInCw = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.animatedBackgroundMode.distinctUntilChanged().collectLatest { mode ->
+                updateUiStateIfChanged { it.copy(animatedBackgroundMode = mode) }
             }
         }
         viewModelScope.launch {
@@ -410,6 +418,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SetSeparateMoviesTvEnabled -> setSeparateMoviesTvEnabled(event.enabled)
             is LayoutSettingsEvent.SetTrackChannelShuffleInCw -> setTrackChannelShuffleInCw(event.enabled)
+            is LayoutSettingsEvent.SetAnimatedBackgroundMode -> setAnimatedBackgroundMode(event.mode)
             is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
             is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
@@ -535,6 +544,13 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setTrackChannelShuffleInCw(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setTrackChannelShuffleInCw(enabled)
+        }
+    }
+
+    private fun setAnimatedBackgroundMode(mode: AnimatedBackdropMode) {
+        if (_uiState.value.animatedBackgroundMode == mode) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setAnimatedBackgroundMode(mode)
         }
     }
 

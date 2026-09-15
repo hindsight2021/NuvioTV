@@ -7,6 +7,7 @@ import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbEnrichment
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
 import com.nuvio.tv.domain.model.HomeLayout
@@ -65,6 +66,7 @@ private data class LayoutUiPrefs(
     val showFullReleaseDate: Boolean,
     val modernLandscapePostersEnabled: Boolean,
     val modernHeroFullScreenBackdropEnabled: Boolean,
+    val animatedBackgroundMode: AnimatedBackdropMode,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility,
     val focusedBackdropExpandEnabled: Boolean,
     val focusedBackdropExpandDelaySeconds: Int,
@@ -79,6 +81,7 @@ private data class LayoutUiPrefs(
 private data class ModernLayoutPrefs(
     val landscapePosters: Boolean,
     val fullScreenBackdrop: Boolean,
+    val animatedBackgroundMode: AnimatedBackdropMode,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility
 )
 
@@ -136,11 +139,13 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
     val modernLayoutPrefsFlow = combine(
         layoutPreferenceDataStore.modernLandscapePostersEnabled,
         layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled,
+        layoutPreferenceDataStore.animatedBackgroundMode,
         layoutPreferenceDataStore.homeImdbRatingsVisibility
-    ) { landscapePosters, fullScreenBackdrop, homeImdbRatingsVisibility ->
+    ) { landscapePosters, fullScreenBackdrop, animatedBackgroundMode, homeImdbRatingsVisibility ->
         ModernLayoutPrefs(
             landscapePosters = landscapePosters,
             fullScreenBackdrop = fullScreenBackdrop,
+            animatedBackgroundMode = animatedBackgroundMode,
             homeImdbRatingsVisibility = homeImdbRatingsVisibility
         )
     }
@@ -164,6 +169,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             showFullReleaseDate = corePrefs.showFullReleaseDate,
             modernLandscapePostersEnabled = false,
             modernHeroFullScreenBackdropEnabled = false,
+            animatedBackgroundMode = AnimatedBackdropMode.KEN_BURNS,
             homeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
             focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
             focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
@@ -185,6 +191,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             basePrefs.copy(
                 modernLandscapePostersEnabled = modernPrefs.landscapePosters,
                 modernHeroFullScreenBackdropEnabled = modernPrefs.fullScreenBackdrop,
+                animatedBackgroundMode = modernPrefs.animatedBackgroundMode,
                 homeImdbRatingsVisibility = modernPrefs.homeImdbRatingsVisibility
             )
         }
@@ -230,6 +237,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         showFullReleaseDate = prefs.showFullReleaseDate,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
                         modernHeroFullScreenBackdropEnabled = prefs.modernHeroFullScreenBackdropEnabled,
+                        animatedBackgroundMode = prefs.animatedBackgroundMode,
                         homeImdbRatingsVisibility = prefs.homeImdbRatingsVisibility,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,

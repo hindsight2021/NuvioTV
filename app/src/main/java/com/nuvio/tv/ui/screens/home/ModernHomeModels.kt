@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.CollectionFolder
@@ -165,7 +166,8 @@ internal data class ModernHeroSceneState(
     val trailerAudioUrl: String?,
     val trailerPlaybackKey: String?,
     val trailerMuted: Boolean,
-    val fullScreenBackdrop: Boolean
+    val fullScreenBackdrop: Boolean,
+    val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS
 )
 
 internal data class ModernCatalogRowBuildCacheEntry(
