@@ -82,6 +82,7 @@ data class LayoutSettingsUiState(
     val continueWatchingEnabled: Boolean = true,
     val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
     val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
+    val separateMoviesTvEnabled: Boolean = false,
 )
 
 data class CatalogInfo(
@@ -92,6 +93,7 @@ data class CatalogInfo(
 
 sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
+    data class SetSeparateMoviesTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -215,6 +217,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(modernHeroFullScreenBackdropEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.separateMoviesTvEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(separateMoviesTvEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -394,6 +401,7 @@ class LayoutSettingsViewModel @Inject constructor(
     fun onEvent(event: LayoutSettingsEvent) {
         when (event) {
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
+            is LayoutSettingsEvent.SetSeparateMoviesTvEnabled -> setSeparateMoviesTvEnabled(event.enabled)
             is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
             is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
@@ -508,6 +516,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun stopStreamBadgeServer() {
         streamBadgeServer?.stop()
         streamBadgeServer = null
+    }
+
+    private fun setSeparateMoviesTvEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setSeparateMoviesTvEnabled(enabled)
+        }
     }
 
     private fun selectLayout(layout: HomeLayout) {

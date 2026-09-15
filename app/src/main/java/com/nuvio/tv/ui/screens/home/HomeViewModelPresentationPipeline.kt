@@ -267,8 +267,8 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                 ModernHomePresentationInput(
                     homeRows = state.homeRows,
                     catalogRows = state.catalogRows,
-                    continueWatchingItems = if (state.continueWatchingEnabled) state.continueWatchingItems else emptyList(),
-                    upcomingItems = if (state.continueWatchingEnabled) state.upcomingItems else emptyList(),
+                    continueWatchingItems = if (state.continueWatchingEnabled) state.displayedContinueWatchingItems else emptyList(),
+                    upcomingItems = if (state.continueWatchingEnabled) state.displayedUpcomingItems else emptyList(),
                     useLandscapePosters = state.modernLandscapePostersEnabled,
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                     showFullReleaseDate = state.showFullReleaseDate,

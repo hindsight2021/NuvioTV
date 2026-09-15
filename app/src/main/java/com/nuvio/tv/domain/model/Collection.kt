@@ -155,3 +155,37 @@ data class Collection(
     val showAllTab: Boolean = true,
     val folders: List<CollectionFolder> = emptyList()
 )
+
+fun Collection.isTvCollection(): Boolean {
+    val hasTvSource = folders.any { folder ->
+        folder.sources.any { source ->
+            when (source) {
+                is AddonCatalogCollectionSource -> source.type.equals("series", ignoreCase = true) ||
+                    source.type.equals("tv", ignoreCase = true) ||
+                    source.type.equals("anime", ignoreCase = true)
+                is TmdbCollectionSource -> source.mediaType == TmdbCollectionMediaType.TV
+                is TraktCollectionSource -> source.mediaType == TmdbCollectionMediaType.TV
+            }
+        }
+    }
+    val titleLower = title.lowercase()
+    val hasTvKeyword = titleLower.contains("tv") || titleLower.contains("series") ||
+        titleLower.contains("shows") || titleLower.contains("anime")
+    return hasTvSource || hasTvKeyword
+}
+
+fun Collection.isMovieCollection(): Boolean {
+    val hasMovieSource = folders.any { folder ->
+        folder.sources.any { source ->
+            when (source) {
+                is AddonCatalogCollectionSource -> source.type.equals("movie", ignoreCase = true)
+                is TmdbCollectionSource -> source.mediaType == TmdbCollectionMediaType.MOVIE
+                is TraktCollectionSource -> source.mediaType == TmdbCollectionMediaType.MOVIE
+            }
+        }
+    }
+    val titleLower = title.lowercase()
+    val hasMovieKeyword = titleLower.contains("movie") || titleLower.contains("film") ||
+        titleLower.contains("cinema")
+    return hasMovieSource || hasMovieKeyword
+}

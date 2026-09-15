@@ -262,14 +262,9 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
                 catalogOrder.clear()
                 catalogOrder.addAll(normalized)
             }
-        } else {
-            // No saved order - manifest order + collections at end
-            synchronized(catalogStateLock) {
-                catalogOrder.clear()
-                catalogOrder.addAll(defaultOrder + collectionKeys)
-            }
         }
     } else {
+        val addonKeyToOwner = buildAddonKeyOwnerMap(addons)
         val savedValid = homeCatalogOrderKeys
             .asSequence()
             .filter { it in allAvailable }
@@ -279,13 +274,63 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
         val savedSet = savedValid.toSet()
         val unsavedCatalogs = defaultOrder.filterNot { it in savedSet }
         val unsavedCollections = collectionKeys.filterNot { it in savedSet }
-        val mergedOrder = savedValid + unsavedCatalogs + unsavedCollections
+        val unsavedItems = (unsavedCatalogs + unsavedCollections).sortedWith(
+            compareBy<String> { catalogTier(it, addonKeyToOwner) }
+                .thenBy { it }
+        )
+
+        val mergedOrder = if (savedValid.isNotEmpty()) {
+            savedValid + unsavedItems
+        } else {
+            val daySeed = java.time.LocalDate.now().dayOfYear
+            (defaultOrder + collectionKeys).sortedWith(
+                compareBy<String> { catalogTier(it, addonKeyToOwner) }
+                    .thenBy { key ->
+                        val tier = catalogTier(key, addonKeyToOwner)
+                        if (tier == 400) {
+                            (key.hashCode() + daySeed) and 0x7FFFFFFF
+                        } else 0
+                    }
+                    .thenBy { it }
+            )
+        }
 
         synchronized(catalogStateLock) {
             catalogOrder.clear()
             catalogOrder.addAll(mergedOrder)
         }
     }
+}
+
+private val STREAMING_KEYWORDS = listOf(
+    "netflix", "apple", "disney", "max", "hbo", "prime", "amazon", "paramount", "hulu", "peacock", "crunchyroll", "starz"
+)
+
+private val TRAKT_SIMKL_KEYWORDS = listOf(
+    "trakt", "simkl", "up next", "upnext", "watchlist", "watch list"
+)
+
+internal fun catalogTier(key: String, addonKeyToOwner: Map<String, String>): Int {
+    val lowerKey = key.lowercase()
+    val owner = (addonKeyToOwner[key] ?: "").lowercase()
+    val combined = "$lowerKey $owner"
+
+    return when {
+        TRAKT_SIMKL_KEYWORDS.any { combined.contains(it) } -> 100
+        key.startsWith("collection_") -> 200
+        STREAMING_KEYWORDS.any { combined.contains(it) } -> 300
+        else -> 400
+    }
+}
+
+internal fun isTvCatalogType(type: String?): Boolean {
+    val t = type?.trim()?.lowercase() ?: return false
+    return t == "series" || t == "tv" || t == "anime" || t == "show"
+}
+
+internal fun isMovieCatalogType(type: String?): Boolean {
+    val t = type?.trim()?.lowercase() ?: return false
+    return t == "movie" || t == "film"
 }
 
 private fun HomeViewModel.buildDefaultCatalogOrder(addons: List<Addon>): List<String> {

@@ -8,6 +8,8 @@ import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
+import com.nuvio.tv.domain.model.isTvCollection
+import com.nuvio.tv.domain.model.isMovieCollection
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.catalogRowStableKey
 import com.nuvio.tv.domain.model.enabledAddons
@@ -575,6 +577,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val heroSectionEnabled = _uiState.value.heroSectionEnabled
     val hideUnreleased = _uiState.value.hideUnreleasedContent
     val titlesSnapshot = customCatalogTitles
+    val separateMoviesTvEnabled = _uiState.value.separateMoviesTvEnabled
+    val selectedHomeTab = _uiState.value.selectedHomeTab
 
     val (displayRows, baseHeroItems, baseGridItems, fullRowsFiltered) = withContext(Dispatchers.Default) {
         val rawRows = orderedKeys.mapNotNull { key ->
@@ -588,11 +592,19 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         } else {
             rawRows
         }
+        val tabFilteredOrderedRows = if (separateMoviesTvEnabled) {
+            when (selectedHomeTab) {
+                HomeTab.TV_SHOWS -> orderedRows.filter { isTvCatalogType(it.apiType) }
+                HomeTab.MOVIES -> orderedRows.filter { isMovieCatalogType(it.apiType) }
+            }
+        } else {
+            orderedRows
+        }
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val orderedKeySet = orderedKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
             // Include hero catalogs from ordered rows
-            val fromOrdered = orderedRows.filter { row ->
+            val fromOrdered = tabFilteredOrderedRows.filter { row ->
                 val key = row.legacyKey()
                 key in selectedHeroCatalogSet
             }
@@ -607,7 +619,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             } else {
                 heroOnlyRows
             }
-            fromOrdered + heroOnlyFiltered
+            val tabFilteredHeroOnly = if (separateMoviesTvEnabled) {
+                when (selectedHomeTab) {
+                    HomeTab.TV_SHOWS -> heroOnlyFiltered.filter { isTvCatalogType(it.apiType) }
+                    HomeTab.MOVIES -> heroOnlyFiltered.filter { isMovieCatalogType(it.apiType) }
+                }
+            } else {
+                heroOnlyFiltered
+            }
+            fromOrdered + tabFilteredHeroOnly
         } else {
             emptyList()
         }
@@ -649,17 +669,25 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         )
         // When orderedRows is empty (all catalogs disabled), include any
         // hero-only loaded catalogs as fallback hero sources.
-        val allHeroFallbackRows = if (orderedRows.isNotEmpty()) {
-            orderedRows
+        val allHeroFallbackRows = if (tabFilteredOrderedRows.isNotEmpty()) {
+            tabFilteredOrderedRows
         } else {
             val nonOrderedRows = catalogSnapshot.keys
                 .filter { it !in orderedKeySet }
                 .mapNotNull { catalogSnapshot[it] }
-            if (hideUnreleased) {
+            val filtered = if (hideUnreleased) {
                 val today = LocalDate.now()
                 nonOrderedRows.map { it.filterReleasedItems(today) }
             } else {
                 nonOrderedRows
+            }
+            if (separateMoviesTvEnabled) {
+                when (selectedHomeTab) {
+                    HomeTab.TV_SHOWS -> filtered.filter { isTvCatalogType(it.apiType) }
+                    HomeTab.MOVIES -> filtered.filter { isMovieCatalogType(it.apiType) }
+                }
+            } else {
+                filtered
             }
         }
         val fallbackHeroItemsWithArtwork = slotShuffled(
@@ -674,7 +702,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             else -> emptyList()
         }
 
-        val computedDisplayRows = orderedRows.map { row ->
+        val computedDisplayRows = tabFilteredOrderedRows.map { row ->
             val shouldKeepFullRowInModern = currentLayout == HomeLayout.MODERN
             val gridTruncateLimit = 24
             if (row.items.size > gridTruncateLimit && !shouldKeepFullRowInModern) {
@@ -703,7 +731,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
         }
 
-        CatalogUpdateResult(computedDisplayRows, computedHeroItems, emptyList(), orderedRows)
+        CatalogUpdateResult(computedDisplayRows, computedHeroItems, emptyList(), tabFilteredOrderedRows)
     }
 
     _fullCatalogRows.update { rows ->
@@ -722,76 +750,96 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             val addedCollectionIds = mutableSetOf<String>()
             collectionsCache.forEach { collection ->
                 val key = "collection_${collection.id}"
-            if (collection.pinToTop && key !in disabledHomeCatalogKeys && addedCollectionIds.add(collection.id)) {
-                add(HomeRow.CollectionRow(collection))
-            }
-        }
-        for (key in orderedKeys) {
-            if (key in disabledHomeCatalogKeys) continue
-            val collectionEntry = collectionsSnapshot[key]
-            if (collectionEntry != null) {
-                if (!collectionEntry.pinToTop && addedCollectionIds.add(collectionEntry.id)) {
-                    add(HomeRow.CollectionRow(collectionEntry))
+                val matchesTab = !separateMoviesTvEnabled || when (selectedHomeTab) {
+                    HomeTab.TV_SHOWS -> collection.isTvCollection() || !collection.isMovieCollection()
+                    HomeTab.MOVIES -> collection.isMovieCollection() || !collection.isTvCollection()
                 }
-            } else {
+                if (matchesTab && collection.pinToTop && key !in disabledHomeCatalogKeys && addedCollectionIds.add(collection.id)) {
+                    add(HomeRow.CollectionRow(collection))
+                }
+            }
+            for (key in orderedKeys) {
+                if (key in disabledHomeCatalogKeys) continue
+                val collectionEntry = collectionsSnapshot[key]
+                if (collectionEntry != null) {
+                    val matchesTab = !separateMoviesTvEnabled || when (selectedHomeTab) {
+                        HomeTab.TV_SHOWS -> collectionEntry.isTvCollection() || !collectionEntry.isMovieCollection()
+                        HomeTab.MOVIES -> collectionEntry.isMovieCollection() || !collectionEntry.isTvCollection()
+                    }
+                    if (matchesTab && !collectionEntry.pinToTop && addedCollectionIds.add(collectionEntry.id)) {
+                        add(HomeRow.CollectionRow(collectionEntry))
+                    }
+                } else {
                     val catalogRow = displayRowsByKey[key]
                     if (catalogRow != null && catalogRow.items.isNotEmpty()) {
-                        add(HomeRow.Catalog(catalogRow))
+                        val rowMatchesTab = !separateMoviesTvEnabled || when (selectedHomeTab) {
+                            HomeTab.TV_SHOWS -> isTvCatalogType(catalogRow.apiType)
+                            HomeTab.MOVIES -> isMovieCatalogType(catalogRow.apiType)
+                        }
+                        if (rowMatchesTab) {
+                            add(HomeRow.Catalog(catalogRow))
+                        }
                     } else {
                         val placeholder = placeholdersByKey[key]
                         if (placeholder != null) {
-                        if (currentLayout == HomeLayout.MODERN) {
-                            add(HomeRow.PlaceholderCatalog(
-                                catalogKey = placeholder.catalogKey,
-                                stableCatalogKey = catalogRowStableKey(
-                                    placeholder.addonId,
-                                    placeholder.addonBaseUrl,
-                                    placeholder.apiType,
-                                    placeholder.catalogId
-                                ),
-                                addonId = placeholder.addonId,
-                                addonName = placeholder.addonName,
-                                addonBaseUrl = placeholder.addonBaseUrl,
-                                catalogId = placeholder.catalogId,
-                                catalogName = placeholder.catalogName,
-                                apiType = placeholder.apiType,
-                                displayTitle = placeholder.displayTitle
-                            ))
-                        } else {
-                            val fakeItems = (0 until 8).map { i ->
-                                MetaPreview(
-                                    id = "__placeholder_${placeholder.catalogKey}_$i",
-                                    type = com.nuvio.tv.domain.model.ContentType.fromString(placeholder.apiType),
-                                    rawType = placeholder.apiType,
-                                    name = " ",
-                                    poster = PLACEHOLDER_IMAGE_URL,
-                                    posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
-                                    background = null,
-                                    logo = null,
-                                    description = null,
-                                    releaseInfo = " ",
-                                    imdbRating = null,
-                                    genres = emptyList()
-                                )
+                            val placeholderMatchesTab = !separateMoviesTvEnabled || when (selectedHomeTab) {
+                                HomeTab.TV_SHOWS -> isTvCatalogType(placeholder.apiType)
+                                HomeTab.MOVIES -> isMovieCatalogType(placeholder.apiType)
                             }
-                            add(HomeRow.Catalog(CatalogRow(
-                                addonId = placeholder.addonId,
-                                addonName = placeholder.addonName,
-                                addonBaseUrl = placeholder.addonBaseUrl,
-                                catalogId = placeholder.catalogId,
-                                catalogName = placeholder.catalogName,
-                                type = com.nuvio.tv.domain.model.ContentType.fromString(placeholder.apiType),
-                                rawType = placeholder.apiType,
-                                items = fakeItems,
-                                isLoading = true,
-                                hasMore = false
-                            )))
+                            if (placeholderMatchesTab) {
+                                if (currentLayout == HomeLayout.MODERN) {
+                                    add(HomeRow.PlaceholderCatalog(
+                                        catalogKey = placeholder.catalogKey,
+                                        stableCatalogKey = catalogRowStableKey(
+                                            placeholder.addonId,
+                                            placeholder.addonBaseUrl,
+                                            placeholder.apiType,
+                                            placeholder.catalogId
+                                        ),
+                                        addonId = placeholder.addonId,
+                                        addonName = placeholder.addonName,
+                                        addonBaseUrl = placeholder.addonBaseUrl,
+                                        catalogId = placeholder.catalogId,
+                                        catalogName = placeholder.catalogName,
+                                        apiType = placeholder.apiType,
+                                        displayTitle = placeholder.displayTitle
+                                    ))
+                                } else {
+                                    val fakeItems = (0 until 8).map { i ->
+                                        MetaPreview(
+                                            id = "__placeholder_${placeholder.catalogKey}_$i",
+                                            type = com.nuvio.tv.domain.model.ContentType.fromString(placeholder.apiType),
+                                            rawType = placeholder.apiType,
+                                            name = " ",
+                                            poster = PLACEHOLDER_IMAGE_URL,
+                                            posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                                            background = null,
+                                            logo = null,
+                                            description = null,
+                                            releaseInfo = " ",
+                                            imdbRating = null,
+                                            genres = emptyList()
+                                        )
+                                    }
+                                    add(HomeRow.Catalog(CatalogRow(
+                                        addonId = placeholder.addonId,
+                                        addonName = placeholder.addonName,
+                                        addonBaseUrl = placeholder.addonBaseUrl,
+                                        catalogId = placeholder.catalogId,
+                                        catalogName = placeholder.catalogName,
+                                        type = com.nuvio.tv.domain.model.ContentType.fromString(placeholder.apiType),
+                                        rawType = placeholder.apiType,
+                                        items = fakeItems,
+                                        isLoading = true,
+                                        hasMore = false
+                                    )))
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
     val nextGridItems = if (currentLayout == HomeLayout.GRID) {
         val posterCardWidthDp = _uiState.value.posterCardWidthDp

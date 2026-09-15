@@ -123,6 +123,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val fastHorizontalNavigationEnabledKey = booleanPreferencesKey("fast_horizontal_navigation_enabled")
     private val followAddonsOrderKey = booleanPreferencesKey("follow_addons_order")
     private val composeHighlighterEnabledKey = booleanPreferencesKey("compose_highlighter_enabled")
+    private val separateMoviesTvEnabledKey = booleanPreferencesKey("separate_movies_tv_enabled")
 
     private fun <T> profileFlow(extract: (prefs: androidx.datastore.preferences.core.Preferences) -> T): Flow<T> =
         profileManager.activeProfileId.flatMapLatest { pid ->
@@ -236,6 +237,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val modernHeroFullScreenBackdropEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[modernHeroFullScreenBackdropKey] ?: false
+    }
+
+    val separateMoviesTvEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[separateMoviesTvEnabledKey] ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -527,6 +532,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setModernHeroFullScreenBackdropEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[modernHeroFullScreenBackdropKey] = enabled
+        }
+    }
+
+    suspend fun setSeparateMoviesTvEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[separateMoviesTvEnabledKey] = enabled
         }
     }
 

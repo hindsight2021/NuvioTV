@@ -81,7 +81,8 @@ class HomeViewModel @Inject constructor(
     internal val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
-    internal val tvRecommendationManager: TvRecommendationManager
+    internal val tvRecommendationManager: TvRecommendationManager,
+    internal val aiManager: com.nuvio.tv.core.ai.AiManager? = null
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -508,6 +509,15 @@ class HomeViewModel @Inject constructor(
                     _uiState.update { it.copy(continueWatchingCardStyle = style) }
                 }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.separateMoviesTvEnabled
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    _uiState.update { it.copy(separateMoviesTvEnabled = enabled) }
+                    scheduleUpdateCatalogRows()
+                    cwPipelineRefreshTrigger.value++
+                }
+        }
         // When "next up from furthest episode" changes, clear CW caches and retrigger pipeline
         viewModelScope.launch {
             var initial = true
@@ -637,6 +647,7 @@ class HomeViewModel @Inject constructor(
     fun onEvent(event: HomeEvent) {
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
+            is HomeEvent.SelectHomeTab -> selectHomeTab(event.tab)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
             is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(
                 contentId = event.contentId,
@@ -645,6 +656,73 @@ class HomeViewModel @Inject constructor(
                 isNextUp = event.isNextUp
             )
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache, forceReload = true) }
+        }
+    }
+
+    fun selectHomeTab(tab: HomeTab) {
+        if (_uiState.value.selectedHomeTab == tab) return
+        _uiState.update { it.copy(selectedHomeTab = tab) }
+        scheduleUpdateCatalogRows()
+        cwPipelineRefreshTrigger.value++
+    }
+
+    fun curateDynamicCatalogsWithAi(
+        userPrompt: String = "Curate and reorder catalogs for an engaging, cohesive viewing experience",
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        val manager = aiManager ?: run {
+            onComplete?.invoke(false)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val availableCatalogs = synchronized(catalogStateLock) { catalogOrder.toList() }
+                if (availableCatalogs.isEmpty()) {
+                    onComplete?.invoke(false)
+                    return@launch
+                }
+                val systemPrompt = """
+                    You are Nuvio's AI TV Home Curation Assistant.
+                    You are given a list of catalog keys representing content rows on the Android TV home screen.
+                    Your task is to reorder the given catalog keys to provide a high quality, coherent and engaging viewing experience according to the user's prompt.
+                    Rules:
+                    1. Only return keys that are present in the provided catalog keys list.
+                    2. Return a JSON array of strings containing the ordered catalog keys. Example: ["key1", "key2", "key3"]
+                    3. Do not include markdown code block syntax if possible, just valid JSON array.
+                """.trimIndent()
+
+                val prompt = "Available catalog keys: ${availableCatalogs.joinToString(", ")}\nUser request: $userPrompt"
+                val result = manager.queryRaw(appContext, systemPrompt, prompt, expectJson = true)
+                result.onSuccess { rawResponse ->
+                    val jsonStr = rawResponse.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                    val jsonArray = org.json.JSONArray(jsonStr)
+                    val newOrder = mutableListOf<String>()
+                    for (i in 0 until jsonArray.length()) {
+                        val key = jsonArray.optString(i)
+                        if (key in availableCatalogs && key !in newOrder) {
+                            newOrder.add(key)
+                        }
+                    }
+                    // Append any missing catalogs to preserve full library access
+                    availableCatalogs.forEach { if (it !in newOrder) newOrder.add(it) }
+                    if (newOrder.isNotEmpty()) {
+                        synchronized(catalogStateLock) {
+                            catalogOrder.clear()
+                            catalogOrder.addAll(newOrder)
+                        }
+                        scheduleUpdateCatalogRows()
+                        onComplete?.invoke(true)
+                    } else {
+                        onComplete?.invoke(false)
+                    }
+                }.onFailure {
+                    Log.w(TAG, "AI curation query failed: ${it.message}")
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "AI curation error: ${e.message}")
+                onComplete?.invoke(false)
+            }
         }
     }
 

@@ -269,6 +269,18 @@ fun LayoutSettingsContent(
                         )
                     }
 
+                    CompactToggleRow(
+                        title = stringResource(R.string.layout_separate_movies_tv),
+                        subtitle = stringResource(R.string.layout_separate_movies_tv_sub),
+                        checked = uiState.separateMoviesTvEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetSeparateMoviesTvEnabled(!uiState.separateMoviesTvEnabled)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
                     if (uiState.selectedLayout == HomeLayout.MODERN) {
                         CompactToggleRow(
                             title = stringResource(R.string.layout_landscape_posters),

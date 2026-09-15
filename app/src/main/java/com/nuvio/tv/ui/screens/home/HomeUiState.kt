@@ -14,6 +14,11 @@ import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.WatchProgress
 
+enum class HomeTab {
+    TV_SHOWS,
+    MOVIES
+}
+
 @Immutable
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
@@ -25,6 +30,8 @@ data class HomeUiState(
     val selectedItemId: String? = null,
     val installedAddonsCount: Int = 0,
     val homeLayout: HomeLayout = HomeLayout.MODERN,
+    val separateMoviesTvEnabled: Boolean = false,
+    val selectedHomeTab: HomeTab = HomeTab.TV_SHOWS,
     val modernLandscapePostersEnabled: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean = false,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
@@ -139,6 +146,24 @@ fun ContinueWatchingItem.isSeries(): Boolean {
         type.equals("anime", ignoreCase = true)
 }
 
+val HomeUiState.displayedContinueWatchingItems: List<ContinueWatchingItem>
+    get() {
+        if (!separateMoviesTvEnabled) return continueWatchingItems
+        return when (selectedHomeTab) {
+            HomeTab.TV_SHOWS -> continueWatchingItems.filter { it.isSeries() }
+            HomeTab.MOVIES -> continueWatchingItems.filter { !it.isSeries() }
+        }
+    }
+
+val HomeUiState.displayedUpcomingItems: List<ContinueWatchingItem>
+    get() {
+        if (!separateMoviesTvEnabled) return upcomingItems
+        return when (selectedHomeTab) {
+            HomeTab.TV_SHOWS -> upcomingItems.filter { it.isSeries() }
+            HomeTab.MOVIES -> emptyList()
+        }
+    }
+
 @Immutable
 data class NextUpInfo(
     val contentId: String,
@@ -240,6 +265,7 @@ sealed class GridItem {
 
 sealed class HomeEvent {
     data class OnItemClick(val itemId: String, val itemType: String) : HomeEvent()
+    data class SelectHomeTab(val tab: HomeTab) : HomeEvent()
     data class OnLoadMoreCatalog(val catalogId: String, val addonId: String, val type: String) : HomeEvent()
     data class OnRemoveContinueWatching(
         val contentId: String,

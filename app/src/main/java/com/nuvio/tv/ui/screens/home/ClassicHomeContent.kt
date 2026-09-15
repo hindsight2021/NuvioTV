@@ -444,7 +444,7 @@ fun ClassicHomeContent(
             val rows = latestVisibleHomeRows.value
             // Offset for hero + CW sections that precede homeRows in LazyColumn
             val heroOffset = if (uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()) 1 else 0
-            val cwOffset = if (uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()) 1 else 0
+            val cwOffset = if (uiState.continueWatchingEnabled && uiState.displayedContinueWatchingItems.isNotEmpty()) 1 else 0
             val rowsOffset = heroOffset + cwOffset
             for (idx in firstVisible.coerceAtLeast(0)..(lastVisible + prefetchAhead)) {
                 val rowIdx = idx - rowsOffset
@@ -621,7 +621,8 @@ fun ClassicHomeContent(
             }
         }
 
-        if (uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()) {
+        val displayedCwItems = uiState.displayedContinueWatchingItems
+        if (uiState.continueWatchingEnabled && displayedCwItems.isNotEmpty()) {
             item(key = "continue_watching", contentType = "continue_watching") {
                 LaunchedEffect(cwPendingScrollToStart.intValue) {
                     if (cwPendingScrollToStart.intValue > 0) {
@@ -631,7 +632,7 @@ fun ClassicHomeContent(
                     }
                 }
                 ContinueWatchingSection(
-                    items = uiState.continueWatchingItems,
+                    items = displayedCwItems,
                     onItemClick = { item ->
                         onContinueWatchingClick(item)
                     },
@@ -687,7 +688,7 @@ fun ClassicHomeContent(
                         cwFocusedIndex.intValue = itemIndex
                         onFocusedRowKeyChanged(null)
                         if (uiState.classicFocusGradientEnabled) {
-                            focusedArtwork = uiState.continueWatchingItems.getOrNull(itemIndex)
+                            focusedArtwork = displayedCwItems.getOrNull(itemIndex)
                                 ?.toClassicFocusArtwork(uiState.focusedPosterBackdropExpandEnabled)
                         }
                     },
@@ -706,7 +707,7 @@ fun ClassicHomeContent(
             }
         }
 
-        if (uiState.continueWatchingEnabled && uiState.upcomingItems.isNotEmpty()) {
+        if (uiState.continueWatchingEnabled && uiState.displayedUpcomingItems.isNotEmpty()) {
             item(key = "upcoming_section", contentType = "upcoming_section") {
                 LaunchedEffect(upcomingPendingScrollToStart.intValue) {
                     if (upcomingPendingScrollToStart.intValue > 0) {
@@ -716,7 +717,7 @@ fun ClassicHomeContent(
                     }
                 }
                 ContinueWatchingSection(
-                    items = uiState.upcomingItems,
+                    items = uiState.displayedUpcomingItems,
                     title = stringResource(R.string.upcoming_section_title),
                     onItemClick = { item ->
                         onContinueWatchingClick(item)
@@ -773,7 +774,7 @@ fun ClassicHomeContent(
                         cwFocusedIndex.intValue = itemIndex
                         onFocusedRowKeyChanged(null)
                         if (uiState.classicFocusGradientEnabled) {
-                            focusedArtwork = uiState.upcomingItems.getOrNull(itemIndex)
+                            focusedArtwork = uiState.displayedUpcomingItems.getOrNull(itemIndex)
                                 ?.toClassicFocusArtwork(uiState.focusedPosterBackdropExpandEnabled)
                         }
                     },
@@ -826,7 +827,7 @@ fun ClassicHomeContent(
                     val shouldInitialFocusFirstCatalogRow =
                         shouldRequestInitialFocus &&
                             !heroVisible &&
-                            (!uiState.continueWatchingEnabled || uiState.continueWatchingItems.isEmpty()) &&
+                            (!uiState.continueWatchingEnabled || uiState.displayedContinueWatchingItems.isEmpty()) &&
                             index == 0
                     val focusedItemIndex = when {
                         shouldRestoreFocus -> focusState.focusedItemIndex
