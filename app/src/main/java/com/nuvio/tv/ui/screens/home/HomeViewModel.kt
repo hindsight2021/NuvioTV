@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.home
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
