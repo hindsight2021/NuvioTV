@@ -83,6 +83,7 @@ data class LayoutSettingsUiState(
     val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
     val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
     val separateMoviesTvEnabled: Boolean = false,
+    val trackChannelShuffleInCw: Boolean = false,
 )
 
 data class CatalogInfo(
@@ -94,6 +95,7 @@ data class CatalogInfo(
 sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SetSeparateMoviesTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetTrackChannelShuffleInCw(val enabled: Boolean) : LayoutSettingsEvent()
     data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -222,6 +224,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.separateMoviesTvEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(separateMoviesTvEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.trackChannelShuffleInCw.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(trackChannelShuffleInCw = enabled) }
             }
         }
         viewModelScope.launch {
@@ -402,6 +409,7 @@ class LayoutSettingsViewModel @Inject constructor(
         when (event) {
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SetSeparateMoviesTvEnabled -> setSeparateMoviesTvEnabled(event.enabled)
+            is LayoutSettingsEvent.SetTrackChannelShuffleInCw -> setTrackChannelShuffleInCw(event.enabled)
             is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
             is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
@@ -521,6 +529,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setSeparateMoviesTvEnabled(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setSeparateMoviesTvEnabled(enabled)
+        }
+    }
+
+    private fun setTrackChannelShuffleInCw(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setTrackChannelShuffleInCw(enabled)
         }
     }
 

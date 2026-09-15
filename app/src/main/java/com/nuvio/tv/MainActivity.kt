@@ -50,7 +50,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -245,7 +247,9 @@ private data class MainUiPrefs(
     val fastHorizontalNavigationEnabled: Boolean = false,
     val composeHighlighterEnabled: Boolean = false,
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
-    val cardDepthStyle: CardDepthStyle = CardDepthStyle()
+    val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
+    val separateMoviesTvEnabled: Boolean = false,
+    val selectedHomeTab: String = "tv"
 )
 
 @AndroidEntryPoint
@@ -521,13 +525,17 @@ open class MainActivity : ComponentActivity() {
                     layoutPreferenceDataStore.modernSidebarEnabled,
                     layoutPreferenceDataStore.modernSidebarBlurEnabled,
                     layoutPreferenceDataStore.discoverLocation,
-                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation ->
+                    layoutPreferenceDataStore.separateMoviesTvEnabled,
+                    layoutPreferenceDataStore.selectedHomeTab,
+                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation, separateMoviesTvEnabled, selectedHomeTab ->
                     MainUiPrefs(
                         hasChosenLayout = hasChosenLayout,
                         sidebarCollapsed = sidebarCollapsed,
                         modernSidebarEnabled = modernSidebarEnabled,
                         modernSidebarBlurPref = modernSidebarBlurPref,
                         discoverLocation = discoverLocation,
+                        separateMoviesTvEnabled = separateMoviesTvEnabled,
+                        selectedHomeTab = selectedHomeTab,
                     )
                 }
                 val extraFeaturesFlow = combine(
@@ -557,6 +565,8 @@ open class MainActivity : ComponentActivity() {
                         modernSidebarEnabled = layoutPrefs.modernSidebarEnabled,
                         modernSidebarBlurPref = layoutPrefs.modernSidebarBlurPref,
                         discoverLocation = layoutPrefs.discoverLocation,
+                        separateMoviesTvEnabled = layoutPrefs.separateMoviesTvEnabled,
+                        selectedHomeTab = layoutPrefs.selectedHomeTab,
                         addonSetupSkipped = extraPrefs.addonSetupSkipped,
                         smoothBringIntoViewEnabled = extraPrefs.smoothBringIntoViewEnabled,
                         fastHorizontalNavigationEnabled = extraPrefs.fastHorizontalNavigationEnabled,
@@ -1000,9 +1010,16 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val rootRoutes = remember(discoverLocation) {
+                    val separateMoviesTvEnabled = mainUiPrefs.separateMoviesTvEnabled
+                    val selectedHomeTab = mainUiPrefs.selectedHomeTab
+
+                    val rootRoutes = remember(discoverLocation, separateMoviesTvEnabled) {
                         buildSet {
                             add(Screen.Home.route)
+                            if (separateMoviesTvEnabled) {
+                                add("home_tv")
+                                add("home_movies")
+                            }
                             add(Screen.Search.route)
                             add(Screen.Library.route)
                             add(Screen.Settings.route)
@@ -1013,26 +1030,48 @@ open class MainActivity : ComponentActivity() {
                     }
 
                     val strNavHome = stringResource(R.string.nav_home)
+                    val strNavTvShows = stringResource(R.string.home_tab_tv_shows)
+                    val strNavMovies = stringResource(R.string.home_tab_movies)
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
+                        strNavTvShows,
+                        strNavMovies,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
                         strNavSettings,
-                        discoverLocation
+                        discoverLocation,
+                        separateMoviesTvEnabled
                     ) {
                         buildList {
-                            add(
-                                DrawerItem(
-                                    route = Screen.Home.route,
-                                    label = strNavHome,
-                                    icon = Icons.Default.Home
+                            if (separateMoviesTvEnabled) {
+                                add(
+                                    DrawerItem(
+                                        route = "home_tv",
+                                        label = strNavTvShows,
+                                        icon = Icons.Default.Tv
+                                    )
                                 )
-                            )
+                                add(
+                                    DrawerItem(
+                                        route = "home_movies",
+                                        label = strNavMovies,
+                                        icon = Icons.Default.Movie
+                                    )
+                                )
+                            } else {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.Home.route,
+                                        label = strNavHome,
+                                        icon = Icons.Default.Home
+                                    )
+                                )
+                            }
                             if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
                                 add(
                                     DrawerItem(
@@ -1065,9 +1104,13 @@ open class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                    val selectedDrawerRoute = drawerItems.firstOrNull { item ->
-                        currentRoute == item.route || currentRoute?.startsWith("${item.route}/") == true
-                    }?.route
+                    val selectedDrawerRoute = if (currentRoute == Screen.Home.route && separateMoviesTvEnabled) {
+                        if (selectedHomeTab == "movies") "home_movies" else "home_tv"
+                    } else {
+                        drawerItems.firstOrNull { item ->
+                            currentRoute == item.route || currentRoute?.startsWith("${item.route}/") == true
+                        }?.route
+                    }
                     val selectedDrawerItem = drawerItems.firstOrNull { it.route == selectedDrawerRoute } ?: drawerItems.first()
 
                     val confirmExitEnabled by profileManager.confirmExitEnabled.collectAsState()
@@ -1117,6 +1160,11 @@ open class MainActivity : ComponentActivity() {
                             focusedSplashTheme = null
                             hasSelectedProfileThisSession = false
                         }
+                        val handleSelectHomeTab: (String) -> Unit = { tab ->
+                            lifecycleScope.launch {
+                                layoutPreferenceDataStore.setSelectedHomeTab(tab)
+                            }
+                        }
                         Box(modifier = Modifier.fillMaxSize()) {
                             if (modernSidebarEnabled) {
                                 ModernSidebarScaffold(
@@ -1137,6 +1185,7 @@ open class MainActivity : ComponentActivity() {
                                     showProfileSelector = profiles.size > 1,
                                     onSwitchProfile = handleSwitchProfile,
                                     onNavigate = { optimisticRoute = it },
+                                    onSelectHomeTab = handleSelectHomeTab,
                                     onExitApp = handleExitApp
                                 )
                             } else {
@@ -1156,6 +1205,7 @@ open class MainActivity : ComponentActivity() {
                                     showProfileSelector = profiles.size > 1,
                                     onSwitchProfile = handleSwitchProfile,
                                     onNavigate = { optimisticRoute = it },
+                                    onSelectHomeTab = handleSelectHomeTab,
                                     onExitApp = handleExitApp
                                 )
                             }
@@ -1365,6 +1415,7 @@ private fun LegacySidebarScaffold(
     showProfileSelector: Boolean,
     onSwitchProfile: () -> Unit,
     onNavigate: (String) -> Unit,
+    onSelectHomeTab: (String) -> Unit,
     onExitApp: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -1552,7 +1603,8 @@ private fun LegacySidebarScaffold(
                                         navigateToDrawerRoute(
                                             navController = navController,
                                             currentRoute = currentRoute,
-                                            targetRoute = item.route
+                                            targetRoute = item.route,
+                                            onSelectHomeTab = onSelectHomeTab
                                         )
                                         drawerState.setValue(DrawerValue.Closed)
                                         pendingContentFocusTransfer = currentRoute == item.route
@@ -1760,6 +1812,7 @@ private fun ModernSidebarScaffold(
     showProfileSelector: Boolean,
     onSwitchProfile: () -> Unit,
     onNavigate: (String) -> Unit,
+    onSelectHomeTab: (String) -> Unit,
     onExitApp: () -> Unit
 ) {
     val showSidebar = currentRoute in rootRoutes
@@ -2122,7 +2175,8 @@ private fun ModernSidebarScaffold(
                             navigateToDrawerRoute(
                                 navController = navController,
                                 currentRoute = currentRoute,
-                                targetRoute = targetRoute
+                                targetRoute = targetRoute,
+                                onSelectHomeTab = onSelectHomeTab
                             )
                             pendingSidebarFocusRequest = false
                             isSidebarExpanded = false
@@ -2280,8 +2334,49 @@ private fun CollapsedSidebarPill(
 private fun navigateToDrawerRoute(
     navController: NavHostController,
     currentRoute: String?,
-    targetRoute: String
+    targetRoute: String,
+    onSelectHomeTab: ((String) -> Unit)? = null
 ) {
+    if (targetRoute == "home_tv" || targetRoute == "home_movies") {
+        val desiredTab = if (targetRoute == "home_movies") "movies" else "tv"
+        onSelectHomeTab?.invoke(desiredTab)
+        if (currentRoute == Screen.Home.route) {
+            val homeEntry = try {
+                navController.getBackStackEntry(Screen.Home.route)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+            homeEntry?.let {
+                val homeViewModel = androidx.lifecycle.ViewModelProvider(it)[com.nuvio.tv.ui.screens.home.HomeViewModel::class.java]
+                homeViewModel.selectHomeTab(desiredTab)
+                homeViewModel.requestScrollToTop()
+            }
+            return
+        }
+        try {
+            navController.navigate(Screen.Home.route) {
+                popUpTo(navController.graph.startDestinationId) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+            val homeEntry = try {
+                navController.getBackStackEntry(Screen.Home.route)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+            homeEntry?.let {
+                val homeViewModel = androidx.lifecycle.ViewModelProvider(it)[com.nuvio.tv.ui.screens.home.HomeViewModel::class.java]
+                homeViewModel.selectHomeTab(desiredTab)
+                homeViewModel.requestScrollToTop()
+            }
+        } catch (e: IllegalArgumentException) {
+            Log.w("NuvioNavigation", "Route not found in nav graph: ${Screen.Home.route}", e)
+        }
+        return
+    }
+
     if (currentRoute == targetRoute) {
         if (targetRoute == Screen.Home.route) {
             // Scroll Home to top by clearing saved focus/scroll state on the ViewModel.

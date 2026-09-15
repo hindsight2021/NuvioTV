@@ -970,6 +970,8 @@
     <string name="layout_separate_movies_tv_sub">Separate home into TV Shows and Movies tabs with dedicated continue watching and collections.</string>
     <string name="home_tab_tv_shows">TV Shows</string>
     <string name="home_tab_movies">Movies</string>
+    <string name="layout_track_channel_shuffle_in_cw">Track random/shuffle in Continue Watching</string>
+    <string name="layout_track_channel_shuffle_in_cw_sub">When disabled, shows or episodes launched via random episode or shuffle channel will not be added to Continue Watching.</string>
     <string name="layout_landscape_posters">Landscape Posters</string>
     <string name="layout_landscape_posters_sub">Switch between portrait and landscape cards for Modern view.</string>
     <string name="layout_preview_row">Show Preview Row</string>

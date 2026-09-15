@@ -128,6 +128,28 @@ internal fun resolveExternalNextEpisodeSnapshot(
     currentSeason: Int?,
     currentEpisode: Int?
 ): ExternalNextEpisodeSnapshot {
+    if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+        val q = com.nuvio.tv.core.playlist.PlaylistManager.queue.value
+        val matchIdx = q.indexOfFirst {
+            it.season == currentSeason && it.episode == currentEpisode
+        }
+        val nextItem = if (matchIdx >= 0 && matchIdx + 1 < q.size) {
+            q[matchIdx + 1]
+        } else if (matchIdx >= 0 && com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE && q.isNotEmpty()) {
+            q.first()
+        } else null
+
+        if (nextItem != null && nextItem.episode != null) {
+            return ExternalNextEpisodeSnapshot(
+                metadataResolved = true,
+                nextVideoId = nextItem.videoId ?: "${nextItem.contentId}:${nextItem.season}:${nextItem.episode}",
+                nextSeason = nextItem.season,
+                nextEpisode = nextItem.episode
+            )
+        }
+        return ExternalNextEpisodeSnapshot.NoPlayableNextEpisode
+    }
+
     if (currentEpisode == null) return ExternalNextEpisodeSnapshot.Unknown
     val currentExists = videos.any { video ->
         video.episode == currentEpisode && (currentSeason == null || video.season == currentSeason)
@@ -179,7 +201,8 @@ class ExternalPlaybackTracker @Inject constructor(
     private val cloudLibraryRepository: CloudLibraryRepository,
     private val cloudPlaybackProgressStore: CloudLibraryPlaybackProgressStore,
     private val cloudPlaybackSessionStore: CloudLibraryPlaybackSessionStore,
-    private val profileManager: com.nuvio.tv.core.profile.ProfileManager
+    private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
+    private val layoutPreferenceDataStore: com.nuvio.tv.data.local.LayoutPreferenceDataStore
 ) {
     companion object {
         private const val TAG = "ExtPlaybackTracker"
@@ -1399,6 +1422,15 @@ class ExternalPlaybackTracker @Inject constructor(
                 progressPercent = explicitPercent,
                 lastWatched = System.currentTimeMillis()
             )
+            val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+            if (isChannel) {
+                val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
+                if (!trackInCw) {
+                    Log.d(TAG, "Skipping external player progress save for channel/shuffle mode")
+                    return@launch
+                }
+            }
+
             Log.d(TAG, "Saving progress: pos=${positionMs}ms, dur=${effectiveDuration}ms, " +
                 "content=${metadata.contentId}, video=${metadata.videoId}, " +
                 "progressPct=${progress.progressPercentage}, isInProgress=${progress.isInProgress()}")

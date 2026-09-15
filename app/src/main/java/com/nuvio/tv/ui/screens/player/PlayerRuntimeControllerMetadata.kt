@@ -256,24 +256,41 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         return
     }
 
-    val playlistNextVideo = if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+    val isChannelActive = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+    val playlistNextVideo = if (isChannelActive) {
         val q = com.nuvio.tv.core.playlist.PlaylistManager.queue.value
         val matchIdx = q.indexOfFirst {
             (it.videoId != null && it.videoId == currentVideoId) ||
             (it.season == season && it.episode == episode)
         }
-        if (matchIdx >= 0 && matchIdx + 1 < q.size) {
-            val nextItem = q[matchIdx + 1]
+        val nextItem = if (matchIdx >= 0 && matchIdx + 1 < q.size) {
+            q[matchIdx + 1]
+        } else if (matchIdx >= 0 && com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE && q.isNotEmpty()) {
+            q.first()
+        } else null
+
+        if (nextItem != null) {
             metaVideos.firstOrNull { it.id == nextItem.videoId }
                 ?: metaVideos.firstOrNull { it.season == nextItem.season && it.episode == nextItem.episode }
+                ?: com.nuvio.tv.domain.model.Video(
+                    id = nextItem.videoId ?: "${nextItem.contentId}:${nextItem.season}:${nextItem.episode}",
+                    title = nextItem.title,
+                    season = nextItem.season,
+                    episode = nextItem.episode,
+                    thumbnail = nextItem.thumbnail
+                )
         } else null
     } else null
 
-    val resolvedNext = playlistNextVideo ?: PlayerNextEpisodeRules.resolveNextEpisode(
-        videos = metaVideos,
-        currentSeason = season,
-        currentEpisode = episode
-    )
+    val resolvedNext = if (isChannelActive) {
+        playlistNextVideo
+    } else {
+        playlistNextVideo ?: PlayerNextEpisodeRules.resolveNextEpisode(
+            videos = metaVideos,
+            currentSeason = season,
+            currentEpisode = episode
+        )
+    }
 
     nextEpisodeVideo = resolvedNext
     if (resolvedNext == null) {

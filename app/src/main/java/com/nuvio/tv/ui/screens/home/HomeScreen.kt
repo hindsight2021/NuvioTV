@@ -609,8 +609,8 @@ fun HomeScreen(
                         viewModel.onEvent(HomeEvent.SelectHomeTab(tab))
                     },
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = 28.dp, start = 84.dp)
+                        .align(Alignment.TopCenter)
+                        .padding(top = 28.dp)
                 )
             }
         }

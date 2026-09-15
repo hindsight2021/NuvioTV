@@ -21,6 +21,7 @@ import com.nuvio.tv.data.repository.PlaybackIssueReportInput
 import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -723,6 +724,13 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
     )
 
     scope.launch(kotlinx.coroutines.NonCancellable) {
+        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+        if (isChannel) {
+            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
+            if (!trackInCw) {
+                return@launch
+            }
+        }
         val effectiveContentId = watchProgressRepository.normalizeParentContentId(
             parentContentId = progress.contentId,
             videoId = progress.videoId,
@@ -829,6 +837,11 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     val requestGeneration = ++scrobbleStartRequestGeneration
     logScrobbleDiagnostic("start_queued", "requestGeneration=$requestGeneration")
     scope.launch {
+        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+        if (isChannel) {
+            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
+            if (!trackInCw) return@launch
+        }
         // Wait for the episode mapping to finish (with its own timeout) so that
         // the scrobble start is sent with the correct season/episode number.
         traktMappingJob?.join()
@@ -882,6 +895,11 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
     val percent = provided ?: currentPlaybackProgressPercent()
     logScrobbleDiagnostic("stop_queued", "progress=$percent")
     scope.launch(kotlinx.coroutines.NonCancellable) {
+        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+        if (isChannel) {
+            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
+            if (!trackInCw) return@launch
+        }
         logScrobbleDiagnostic("stop_dispatching", "progress=$percent")
         val failures = trackingScrobbleCoordinator.scrobble(
             action = TrackingScrobbleAction.STOP,
@@ -917,6 +935,11 @@ internal fun PlayerRuntimeController.emitScrobblePause(progressPercent: Float? =
     }
     logScrobbleDiagnostic("pause_queued", "progress=$percent")
     scope.launch(kotlinx.coroutines.NonCancellable) {
+        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+        if (isChannel) {
+            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
+            if (!trackInCw) return@launch
+        }
         logScrobbleDiagnostic("pause_dispatching", "progress=$percent")
         val failures = trackingScrobbleCoordinator.scrobble(
             action = TrackingScrobbleAction.PAUSE,

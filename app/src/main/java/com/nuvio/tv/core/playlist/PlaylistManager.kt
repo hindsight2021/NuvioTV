@@ -90,7 +90,10 @@ object PlaylistManager {
             val shuffled = items.shuffled().toMutableList()
             if (startEpisode != null) {
                 // Ensure starting episode is first
-                val startItem = items.firstOrNull { it.videoId == startEpisode.id }
+                val startItem = items.firstOrNull {
+                    (it.videoId != null && it.videoId == startEpisode.id) ||
+                    (it.season == startEpisode.season && it.episode == startEpisode.episode)
+                }
                 if (startItem != null) {
                     shuffled.remove(startItem)
                     shuffled.add(0, startItem)
@@ -100,7 +103,10 @@ object PlaylistManager {
         } else {
             val sorted = items.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
             if (startEpisode != null) {
-                val startIndex = sorted.indexOfFirst { it.videoId == startEpisode.id }
+                val startIndex = sorted.indexOfFirst {
+                    (it.videoId != null && it.videoId == startEpisode.id) ||
+                    (it.season == startEpisode.season && it.episode == startEpisode.episode)
+                }
                 if (startIndex > 0) {
                     sorted.drop(startIndex)
                 } else {
@@ -128,16 +134,26 @@ object PlaylistManager {
     }
 
     fun next(): PlaylistItem? {
-        val nextIdx = _currentIndex.value + 1
         val items = _queue.value
+        if (items.isEmpty()) return null
+        val nextIdx = _currentIndex.value + 1
         if (nextIdx in items.indices) {
             _currentIndex.value = nextIdx
             return items[nextIdx]
+        }
+        if (_channelMode.value == ChannelMode.RANDOM_SHUFFLE && items.isNotEmpty()) {
+            val reshuffled = items.shuffled()
+            _queue.value = reshuffled
+            _currentIndex.value = 0
+            return reshuffled.firstOrNull()
         }
         return null
     }
 
     fun hasNext(): Boolean {
+        if (_channelMode.value == ChannelMode.RANDOM_SHUFFLE && _queue.value.isNotEmpty()) {
+            return true
+        }
         return (_currentIndex.value + 1) in _queue.value.indices
     }
 

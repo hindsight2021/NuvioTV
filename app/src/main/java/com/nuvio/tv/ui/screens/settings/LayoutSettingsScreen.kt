@@ -281,6 +281,18 @@ fun LayoutSettingsContent(
                         onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                     )
 
+                    CompactToggleRow(
+                        title = stringResource(R.string.layout_track_channel_shuffle_in_cw),
+                        subtitle = stringResource(R.string.layout_track_channel_shuffle_in_cw_sub),
+                        checked = uiState.trackChannelShuffleInCw,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetTrackChannelShuffleInCw(!uiState.trackChannelShuffleInCw)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
                     if (uiState.selectedLayout == HomeLayout.MODERN) {
                         CompactToggleRow(
                             title = stringResource(R.string.layout_landscape_posters),

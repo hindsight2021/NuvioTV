@@ -519,6 +519,18 @@ class HomeViewModel @Inject constructor(
                     cwPipelineRefreshTrigger.value++
                 }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.selectedHomeTab
+                .distinctUntilChanged()
+                .collect { tabStr ->
+                    val tab = if (tabStr.equals("movies", ignoreCase = true)) HomeTab.MOVIES else HomeTab.TV_SHOWS
+                    if (_uiState.value.selectedHomeTab != tab) {
+                        _uiState.update { it.copy(selectedHomeTab = tab) }
+                        scheduleUpdateCatalogRows()
+                        cwPipelineRefreshTrigger.value++
+                    }
+                }
+        }
         // When "next up from furthest episode" changes, clear CW caches and retrigger pipeline
         viewModelScope.launch {
             var initial = true
@@ -665,6 +677,9 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(selectedHomeTab = tab) }
         scheduleUpdateCatalogRows()
         cwPipelineRefreshTrigger.value++
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setSelectedHomeTab(if (tab == HomeTab.MOVIES) "movies" else "tv")
+        }
     }
 
     fun curateDynamicCatalogsWithAi(

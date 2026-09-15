@@ -524,7 +524,18 @@ fun EpisodesRow(
                 val pool = if (allEpisodes.isNotEmpty()) allEpisodes else dedupedEpisodes
                 val playable = pool.filter { canPlayEpisode(it) && it.season != null && it.episode != null && it.season!! > 0 }
                 val randomEp = playable.randomOrNull() ?: selectedEpisode
-                onEpisodeClick(randomEp)
+                val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                    contentId = contentId,
+                    seriesTitle = seriesTitle,
+                    episodes = playable.ifEmpty { pool },
+                    startEpisode = randomEp,
+                    shuffle = true
+                )
+                val targetEp = playable.firstOrNull {
+                    (first?.videoId != null && it.id == first.videoId) ||
+                    (it.season == first?.season && it.episode == first?.episode)
+                } ?: randomEp
+                onEpisodeClick(targetEp)
                 optionsEpisode = null
             },
             onStartChannelShuffle = {

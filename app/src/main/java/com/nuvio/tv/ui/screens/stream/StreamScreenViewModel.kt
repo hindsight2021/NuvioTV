@@ -25,6 +25,7 @@ import com.nuvio.tv.core.tracking.TrackingScrobbleEvent
 import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.util.parseRuntimeMinutes
 import com.nuvio.tv.core.streams.StreamBadgePresentation
+import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
@@ -32,6 +33,7 @@ import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.BingeGroupCacheDataStore
+import kotlinx.coroutines.flow.first
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
@@ -91,6 +93,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -1813,6 +1816,15 @@ class StreamScreenViewModel @Inject constructor(
                 duration = effectiveDuration,
                 lastWatched = System.currentTimeMillis()
             )
+            val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+            if (isChannel) {
+                val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
+                if (!trackInCw) {
+                    Log.d(TAG, "Skipping external player progress save for channel/shuffle mode")
+                    return@launch
+                }
+            }
+
             Log.d(TAG, "Saving external player progress: pos=${positionMs}ms, dur=${effectiveDuration}ms, " +
                 "content=$contentId, video=$videoId")
             watchProgressRepository.saveProgress(progress, playbackInfo.profileId)
