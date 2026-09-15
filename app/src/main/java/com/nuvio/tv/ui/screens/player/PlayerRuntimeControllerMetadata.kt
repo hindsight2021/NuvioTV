@@ -275,9 +275,11 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
                 ?: com.nuvio.tv.domain.model.Video(
                     id = nextItem.videoId ?: "${nextItem.contentId}:${nextItem.season}:${nextItem.episode}",
                     title = nextItem.title,
+                    released = null,
+                    thumbnail = nextItem.thumbnail,
                     season = nextItem.season,
                     episode = nextItem.episode,
-                    thumbnail = nextItem.thumbnail
+                    overview = null
                 )
         } else null
     } else null

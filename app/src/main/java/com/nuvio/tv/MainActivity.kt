@@ -525,19 +525,19 @@ open class MainActivity : ComponentActivity() {
                     layoutPreferenceDataStore.modernSidebarEnabled,
                     layoutPreferenceDataStore.modernSidebarBlurEnabled,
                     layoutPreferenceDataStore.discoverLocation,
-                    layoutPreferenceDataStore.separateMoviesTvEnabled,
-                    layoutPreferenceDataStore.selectedHomeTab,
-                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation, separateMoviesTvEnabled, selectedHomeTab ->
+                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation ->
                     MainUiPrefs(
                         hasChosenLayout = hasChosenLayout,
                         sidebarCollapsed = sidebarCollapsed,
                         modernSidebarEnabled = modernSidebarEnabled,
                         modernSidebarBlurPref = modernSidebarBlurPref,
                         discoverLocation = discoverLocation,
-                        separateMoviesTvEnabled = separateMoviesTvEnabled,
-                        selectedHomeTab = selectedHomeTab,
                     )
                 }
+                val movieTvTabsFlow = combine(
+                    layoutPreferenceDataStore.separateMoviesTvEnabled,
+                    layoutPreferenceDataStore.selectedHomeTab
+                ) { separate, tab -> separate to tab }
                 val extraFeaturesFlow = combine(
                     experienceModeDataStore.addonSetupSkipped,
                     layoutPreferenceDataStore.smoothBringIntoViewEnabled,
@@ -557,16 +557,17 @@ open class MainActivity : ComponentActivity() {
                     themeAndExperienceFlow,
                     layoutAndFeaturesFlow,
                     extraFeaturesFlow,
+                    movieTvTabsFlow,
                     layoutPreferenceDataStore.cardDepthStyle
-                ) { themePrefs, layoutPrefs, extraPrefs, cardDepthStyle ->
+                ) { themePrefs, layoutPrefs, extraPrefs, movieTvTabs, cardDepthStyle ->
                     themePrefs.copy(
                         hasChosenLayout = layoutPrefs.hasChosenLayout,
                         sidebarCollapsed = layoutPrefs.sidebarCollapsed,
                         modernSidebarEnabled = layoutPrefs.modernSidebarEnabled,
                         modernSidebarBlurPref = layoutPrefs.modernSidebarBlurPref,
                         discoverLocation = layoutPrefs.discoverLocation,
-                        separateMoviesTvEnabled = layoutPrefs.separateMoviesTvEnabled,
-                        selectedHomeTab = layoutPrefs.selectedHomeTab,
+                        separateMoviesTvEnabled = movieTvTabs.first,
+                        selectedHomeTab = movieTvTabs.second,
                         addonSetupSkipped = extraPrefs.addonSetupSkipped,
                         smoothBringIntoViewEnabled = extraPrefs.smoothBringIntoViewEnabled,
                         fastHorizontalNavigationEnabled = extraPrefs.fastHorizontalNavigationEnabled,
@@ -2339,6 +2340,7 @@ private fun navigateToDrawerRoute(
 ) {
     if (targetRoute == "home_tv" || targetRoute == "home_movies") {
         val desiredTab = if (targetRoute == "home_movies") "movies" else "tv"
+        val homeTab = if (targetRoute == "home_movies") com.nuvio.tv.ui.screens.home.HomeTab.MOVIES else com.nuvio.tv.ui.screens.home.HomeTab.TV_SHOWS
         onSelectHomeTab?.invoke(desiredTab)
         if (currentRoute == Screen.Home.route) {
             val homeEntry = try {
@@ -2348,7 +2350,7 @@ private fun navigateToDrawerRoute(
             }
             homeEntry?.let {
                 val homeViewModel = androidx.lifecycle.ViewModelProvider(it)[com.nuvio.tv.ui.screens.home.HomeViewModel::class.java]
-                homeViewModel.selectHomeTab(desiredTab)
+                homeViewModel.selectHomeTab(homeTab)
                 homeViewModel.requestScrollToTop()
             }
             return
@@ -2368,7 +2370,7 @@ private fun navigateToDrawerRoute(
             }
             homeEntry?.let {
                 val homeViewModel = androidx.lifecycle.ViewModelProvider(it)[com.nuvio.tv.ui.screens.home.HomeViewModel::class.java]
-                homeViewModel.selectHomeTab(desiredTab)
+                homeViewModel.selectHomeTab(homeTab)
                 homeViewModel.requestScrollToTop()
             }
         } catch (e: IllegalArgumentException) {
