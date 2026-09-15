@@ -174,7 +174,8 @@ fun HeroCarousel(
             HeroCarouselSlide(
                 item = item,
                 showImdbRatings = showImdbRatings,
-                showBackdrop = showBackdrop
+                showBackdrop = showBackdrop,
+                animatedBackgroundMode = animatedBackgroundMode
             )
         }
 
@@ -220,7 +221,8 @@ fun HeroCarousel(
 private fun HeroCarouselSlide(
     item: MetaPreview,
     showImdbRatings: Boolean,
-    showBackdrop: Boolean
+    showBackdrop: Boolean,
+    animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS
 ) {
     val highlighterEnabled = LocalRecompositionHighlighterEnabled.current
     val context = LocalContext.current
