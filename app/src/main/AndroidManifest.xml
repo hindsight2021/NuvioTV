@@ -8,6 +8,15 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <package android:name="com.quickplay.android.bellmediaplayer" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="fonsetv" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />

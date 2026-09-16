@@ -384,36 +384,75 @@ object LiveTvManager {
     fun tuneToChannel(context: Context, channel: LiveTvChannel) {
         Log.i(TAG, "Tuning to Bell Fibe channel: ${channel.number} (${channel.name})")
 
-        // 1. Attempt official Bell Fibe deep-link scheme discovered via ADB
         val deepLinkUri = Uri.parse("fonsetv://channel/${channel.number}")
-        val intent = Intent(Intent.ACTION_VIEW, deepLinkUri).apply {
-            setPackage(BELL_PACKAGE)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        val baseFlags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+
+        // 1. Try leanback launch intent for Bell Fibe TV app
+        val pm = context.packageManager
+        val leanbackIntent = pm.getLeanbackLaunchIntentForPackage(BELL_PACKAGE)
+        if (leanbackIntent != null) {
+            leanbackIntent.addFlags(baseFlags)
+            leanbackIntent.putExtra("channel_id", channel.id)
+            leanbackIntent.putExtra("channel_number", channel.number)
+            leanbackIntent.putExtra("channel", channel.number)
+            leanbackIntent.putExtra("tune_channel", channel.number)
+            leanbackIntent.data = deepLinkUri
+            try {
+                context.startActivity(leanbackIntent)
+                Toast.makeText(context, "Tuning Bell Fibe: ${channel.name} (${channel.number})", Toast.LENGTH_SHORT).show()
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Leanback launch intent failed: ${e.message}")
+            }
         }
 
+        // 2. Try explicit Leanback MainTvActivity component
         try {
-            context.startActivity(intent)
+            val mainTvIntent = Intent(Intent.ACTION_MAIN).apply {
+                component = android.content.ComponentName(BELL_PACKAGE, "ca.bell.fiberemote.tv.MainTvActivity")
+                addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                addFlags(baseFlags)
+                putExtra("channel_id", channel.id)
+                putExtra("channel_number", channel.number)
+                putExtra("channel", channel.number)
+                putExtra("tune_channel", channel.number)
+                data = deepLinkUri
+            }
+            context.startActivity(mainTvIntent)
+            Toast.makeText(context, "Opening Bell Fibe: ${channel.name} (${channel.number})", Toast.LENGTH_SHORT).show()
+            return
+        } catch (e: Exception) {
+            Log.w(TAG, "Explicit MainTvActivity launch failed: ${e.message}")
+        }
+
+        // 3. Try explicit TvDeepLinkActivity component with VIEW action
+        try {
+            val deepLinkIntent = Intent(Intent.ACTION_VIEW, deepLinkUri).apply {
+                component = android.content.ComponentName(BELL_PACKAGE, "ca.bell.fiberemote.TvDeepLinkActivity")
+                addFlags(baseFlags)
+            }
+            context.startActivity(deepLinkIntent)
             Toast.makeText(context, "Tuning Bell Fibe: ${channel.name} (${channel.number})", Toast.LENGTH_SHORT).show()
             return
         } catch (e: Exception) {
-            Log.w(TAG, "Direct deep-link failed, falling back to launch intent: ${e.message}")
+            Log.w(TAG, "Explicit TvDeepLinkActivity failed: ${e.message}")
         }
 
-        // 2. Fallback: Launch Bell Fibe main leanback launcher with channel extras
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(BELL_PACKAGE)
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-            launchIntent.putExtra("channel_id", channel.id)
-            launchIntent.putExtra("channel_number", channel.number)
+        // 4. Fallback to standard launch intent
+        val standardIntent = pm.getLaunchIntentForPackage(BELL_PACKAGE)
+        if (standardIntent != null) {
+            standardIntent.addFlags(baseFlags)
+            standardIntent.putExtra("channel_id", channel.id)
+            standardIntent.putExtra("channel_number", channel.number)
             try {
-                context.startActivity(launchIntent)
+                context.startActivity(standardIntent)
                 Toast.makeText(context, "Opening Bell Fibe TV: Channel ${channel.number}", Toast.LENGTH_SHORT).show()
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to launch Bell Fibe app: ${e2.message}")
-                Toast.makeText(context, "Could not open Bell Fibe TV app", Toast.LENGTH_SHORT).show()
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "Standard launch failed: ${e.message}")
             }
-        } else {
-            Toast.makeText(context, "Bell Fibe TV app is not installed on this device", Toast.LENGTH_LONG).show()
         }
+
+        Toast.makeText(context, "Could not open Bell Fibe TV app", Toast.LENGTH_LONG).show()
     }
 }

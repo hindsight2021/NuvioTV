@@ -51,10 +51,13 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import coil3.imageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
+import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.isPlaceholder
+import com.nuvio.tv.ui.components.HeroCarousel
+import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.StableList
 import com.nuvio.tv.ui.util.StableMap
 import com.nuvio.tv.ui.util.StableRef
@@ -144,6 +147,13 @@ internal fun ModernHomeRowsList(
     onFocusedHeroMediaNonceChange: (Int) -> Unit,
     onExpansionInteractionNonceChange: (Int) -> Unit,
     blockLeftOnFirstExpandedItem: Boolean = false,
+    heroInLandscapeEnabled: Boolean = false,
+    heroItems: StableList<MetaPreview> = StableList(),
+    heroFocusRequester: FocusRequester? = null,
+    onActiveHeroItemChange: ((MetaPreview) -> Unit)? = null,
+    onHeroItemClick: ((MetaPreview) -> Unit)? = null,
+    showImdbRatings: Boolean = true,
+    animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     modifier: Modifier = Modifier
 ) {
     // Unwrap StableRef wrappers for internal use (not passed to child composables)
@@ -343,7 +353,13 @@ internal fun ModernHomeRowsList(
                                     ?: visibleItems.firstOrNull()?.index
                                     ?: verticalRowListState.firstVisibleItemIndex
                         }
-                        val targetRow = carouselRows.list.getOrNull(targetRowIndex)
+                        if (heroInLandscapeEnabled && heroItems.list.isNotEmpty() && targetRowIndex == 0) {
+                            return@dpadVerticalFastScroll "hero_carousel"
+                        }
+                        val adjustedRowIndex = if (heroInLandscapeEnabled && heroItems.list.isNotEmpty()) {
+                            (targetRowIndex - 1).coerceAtLeast(0)
+                        } else targetRowIndex
+                        val targetRow = carouselRows.list.getOrNull(adjustedRowIndex)
                         if (targetRow == null) null
                         else {
                             val savedIdx = (focusedItemByRowMap[targetRow.key] ?: 0)
@@ -357,9 +373,34 @@ internal fun ModernHomeRowsList(
                         }
                     },
                 ),
-            contentPadding = PaddingValues(bottom = rowsViewportHeight),
+            contentPadding = PaddingValues(
+                top = if (heroInLandscapeEnabled && heroItems.list.isNotEmpty()) NuvioTheme.spacing.xl else NuvioTheme.spacing.none,
+                bottom = rowsViewportHeight
+            ),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl)
         ) {
+            if (heroInLandscapeEnabled && heroItems.list.isNotEmpty()) {
+                item(key = "hero_carousel", contentType = "hero") {
+                    HeroCarousel(
+                        items = heroItems,
+                        focusRequester = heroFocusRequester,
+                        showImdbRatings = showImdbRatings,
+                        showBackdrop = false,
+                        animatedBackgroundMode = animatedBackgroundMode,
+                        onActiveItemChanged = { item ->
+                            onActiveHeroItemChange?.invoke(item)
+                        },
+                        onItemClick = { item ->
+                            onHeroItemClick?.invoke(item)
+                        },
+                        onItemFocus = { item ->
+                            onItemFocus(item)
+                        },
+                        modifier = Modifier.padding(bottom = NuvioTheme.spacing.md)
+                    )
+                }
+            }
+
             itemsIndexed(
                 items = carouselRows.list,
                 key = { index, row -> "${row.key}_$index" },

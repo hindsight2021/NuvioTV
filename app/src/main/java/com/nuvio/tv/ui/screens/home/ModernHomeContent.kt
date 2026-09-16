@@ -664,6 +664,11 @@ fun ModernHomeContent(
             val posterCardCornerRadius = remember(uiState.posterCardCornerRadiusDp) { uiState.posterCardCornerRadiusDp.dp }
             val rowHorizontalPadding = 52.dp
 
+            val effectiveHeroList = uiState.prioritizedHeroItems
+            var activeHeroBannerItem by remember(effectiveHeroList.firstOrNull()?.id) {
+                mutableStateOf(effectiveHeroList.firstOrNull())
+            }
+
             val activeCarouselItemState = remember(carouselRows, rowByKey) {
                 derivedStateOf {
                     val activeKey = activeRowKey.value
@@ -1062,16 +1067,6 @@ fun ModernHomeContent(
             }
             val onFirstFrameRenderedLambda = remember { { heroTrailerFirstFrameRendered = true } }
 
-            ModernHeroSection(
-                heroSceneState = heroSceneStateLambda,
-                isFullScreen = isFullScreenLambda,
-                heroMediaWidthPx = heroMediaWidthPx,
-                heroMediaHeightPx = heroMediaHeightPx,
-                modifier = heroMediaModifier,
-                onTrailerEnded = onTrailerEndedLambda,
-                onFirstFrameRendered = onFirstFrameRenderedLambda
-            )
-
             // Fade content rows when ANY hero media (catalog trailer or collection
             // hero video) is playing in fullscreen — not just catalog trailers.
             val trailerContentAlphaState = animateFloatAsState(
@@ -1090,27 +1085,51 @@ fun ModernHomeContent(
                     .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
             }
 
-            HeroTitleBlock(
-                previewProvider = {
-                    val state = heroSceneStateLambda()
-                    if (isRapidHorizontalNav.value || state.enrichmentActive) null
-                    else state.preview
-                },
-                enrichmentActive = {
-                    if (isRapidHorizontalNav.value) false
-                    else heroSceneStateLambda().enrichmentActive
-                },
-                portraitMode = !useLandscapePosters,
-                showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
-                trailerPlaying = {
-                    if (isRapidHorizontalNav.value) false
-                    else {
-                        val state = heroSceneStateLambda()
-                        state.fullScreenBackdrop && shouldPlayTrailerLambda() && heroTrailerRenderedLambda()
+            if (uiState.heroInLandscapeEnabled && effectiveHeroList.isNotEmpty()) {
+                val activeHero = activeHeroBannerItem ?: effectiveHeroList.firstOrNull()
+                if (activeHero != null) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        com.nuvio.tv.ui.components.HeroCarouselBackdrop(
+                            item = activeHero,
+                            fullPage = true,
+                            animatedBackgroundMode = uiState.animatedBackgroundMode,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                },
-                modifier = heroMetadataModifier
-            )
+                }
+            } else {
+                ModernHeroSection(
+                    heroSceneState = heroSceneStateLambda,
+                    isFullScreen = isFullScreenLambda,
+                    heroMediaWidthPx = heroMediaWidthPx,
+                    heroMediaHeightPx = heroMediaHeightPx,
+                    modifier = heroMediaModifier,
+                    onTrailerEnded = onTrailerEndedLambda,
+                    onFirstFrameRendered = onFirstFrameRenderedLambda
+                )
+
+                HeroTitleBlock(
+                    previewProvider = {
+                        val state = heroSceneStateLambda()
+                        if (isRapidHorizontalNav.value || state.enrichmentActive) null
+                        else state.preview
+                    },
+                    enrichmentActive = {
+                        if (isRapidHorizontalNav.value) false
+                        else heroSceneStateLambda().enrichmentActive
+                    },
+                    portraitMode = !useLandscapePosters,
+                    showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
+                    trailerPlaying = {
+                        if (isRapidHorizontalNav.value) false
+                        else {
+                            val state = heroSceneStateLambda()
+                            state.fullScreenBackdrop && shouldPlayTrailerLambda() && heroTrailerRenderedLambda()
+                        }
+                    },
+                    modifier = heroMetadataModifier
+                )
+            }
 
             val latestOnFocusedRowKeyChanged by rememberUpdatedState(onFocusedRowKeyChanged)
             val onActiveRowKeyChangeLambda = remember {
@@ -1228,9 +1247,21 @@ fun ModernHomeContent(
                 onExpansionInteractionNonceChange = onExpansionInteractionNonceChangeLambda,
                 blockLeftOnFirstExpandedItem = blockLeftOnFirstExpandedItem,
                 isVerticalRowsScrollingState = isVerticalRowsScrollingState,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .onFocusChanged { contentHasFocus.value = it.hasFocus }
+                heroInLandscapeEnabled = uiState.heroInLandscapeEnabled,
+                heroItems = effectiveHeroList.asStable(),
+                onActiveHeroItemChange = { activeHeroBannerItem = it },
+                onHeroItemClick = { item -> onNavigateToDetail(item.id, item.apiType, "") },
+                showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
+                animatedBackgroundMode = uiState.animatedBackgroundMode,
+                modifier = if (uiState.heroInLandscapeEnabled && effectiveHeroList.isNotEmpty()) {
+                    Modifier
+                        .fillMaxSize()
+                        .onFocusChanged { contentHasFocus.value = it.hasFocus }
+                } else {
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .onFocusChanged { contentHasFocus.value = it.hasFocus }
+                }
             )
     }
 
