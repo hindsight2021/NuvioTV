@@ -869,7 +869,7 @@ fun ContinueWatchingCard(
                                     .fillMaxWidth(progressFraction)
                                     .clip(RoundedCornerShape(1.5.dp))
                                     .height(3.dp)
-                                    .background(NuvioTheme.colors.Primary)
+                                    .background(NuvioTheme.colors.Secondary)
                             )
                         }
                     }
@@ -1064,7 +1064,7 @@ private fun WideCardContent(
                             .fillMaxWidth(progressFraction)
                             .clip(RoundedCornerShape(1.5.dp))
                             .height(3.dp)
-                            .background(NuvioTheme.colors.Primary)
+                            .background(NuvioTheme.colors.Secondary)
                     )
                 }
                 Text(
