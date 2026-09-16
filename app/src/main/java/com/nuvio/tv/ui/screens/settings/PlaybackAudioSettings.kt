@@ -60,6 +60,9 @@ import com.nuvio.tv.data.local.MpvHardwareDecodeMode
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.displayName
 import com.nuvio.tv.ui.components.NuvioDialog
+import androidx.compose.ui.platform.LocalContext
+import com.nuvio.tv.core.sound.AudioFeedbackManager
+import com.nuvio.tv.core.sound.ClickSoundProfile
 
 internal fun LazyListScope.trailerAndAudioSettingsItems(
     playerSettings: PlayerSettings,
@@ -167,6 +170,95 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             subtitle = stringResource(R.string.audio_remember_delay_per_device_sub),
             isChecked = playerSettings.rememberAudioDelayPerDevice,
             onCheckedChange = onSetRememberAudioDelayPerDevice,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    // ── Remote & Navigation Feedback Sounds ──
+    item(key = "audio_feedback_header") {
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+        Text(
+            text = "Remote & Feedback Sounds",
+            style = MaterialTheme.typography.titleMedium,
+            color = NuvioTheme.colors.TextSecondary,
+            modifier = Modifier.padding(vertical = NuvioTheme.spacing.sm)
+        )
+    }
+
+    item(key = "audio_remote_click_sounds") {
+        val context = LocalContext.current
+        var isEnabled by remember { mutableStateOf(AudioFeedbackManager.isRemoteClickEnabled(context)) }
+        ToggleSettingsItem(
+            icon = Icons.Default.VolumeUp,
+            title = stringResource(R.string.audio_remote_click_title),
+            subtitle = stringResource(R.string.audio_remote_click_sub),
+            isChecked = isEnabled,
+            onCheckedChange = { checked ->
+                isEnabled = checked
+                AudioFeedbackManager.setRemoteClickEnabled(context, checked)
+            },
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_remote_click_profile") {
+        val context = LocalContext.current
+        var currentProfile by remember { mutableStateOf(AudioFeedbackManager.getClickSoundProfile(context)) }
+        var showProfileDialog by remember { mutableStateOf(false) }
+
+        NavigationSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_remote_click_profile_title),
+            subtitle = currentProfile.displayName,
+            onClick = { showProfileDialog = true },
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+
+        if (showProfileDialog) {
+            ClickSoundProfileDialog(
+                selectedProfile = currentProfile,
+                onProfileSelected = { profile ->
+                    currentProfile = profile
+                    AudioFeedbackManager.setClickSoundProfile(context, profile)
+                    showProfileDialog = false
+                },
+                onDismiss = { showProfileDialog = false }
+            )
+        }
+    }
+
+    item(key = "audio_nav_directional_clicks") {
+        val context = LocalContext.current
+        var isEnabled by remember { mutableStateOf(AudioFeedbackManager.isNavigationClickEnabled(context)) }
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_nav_click_title),
+            subtitle = stringResource(R.string.audio_nav_click_sub),
+            isChecked = isEnabled,
+            onCheckedChange = { checked ->
+                isEnabled = checked
+                AudioFeedbackManager.setNavigationClickEnabled(context, checked)
+            },
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_playback_action_sounds") {
+        val context = LocalContext.current
+        var isEnabled by remember { mutableStateOf(AudioFeedbackManager.isPlaybackSoundsEnabled(context)) }
+        ToggleSettingsItem(
+            icon = Icons.Default.VolumeUp,
+            title = stringResource(R.string.audio_playback_sounds_title),
+            subtitle = stringResource(R.string.audio_playback_sounds_sub),
+            isChecked = isEnabled,
+            onCheckedChange = { checked ->
+                isEnabled = checked
+                AudioFeedbackManager.setPlaybackSoundsEnabled(context, checked)
+            },
             onFocused = onItemFocused,
             enabled = enabled
         )
@@ -775,3 +867,28 @@ internal fun DecoderPriorityDialog(
         maxHeight = 320.dp
     )
 }
+
+@Composable
+internal fun ClickSoundProfileDialog(
+    selectedProfile: ClickSoundProfile,
+    onProfileSelected: (ClickSoundProfile) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(
+        SettingsPickerOption(ClickSoundProfile.APPLE_TV, ClickSoundProfile.APPLE_TV.displayName, "Deep tactile woody click inspired by Apple TV"),
+        SettingsPickerOption(ClickSoundProfile.MODERN_DIGITAL, ClickSoundProfile.MODERN_DIGITAL.displayName, "Crisp modern electronic pop"),
+        SettingsPickerOption(ClickSoundProfile.STUDIO_SUBTLE, ClickSoundProfile.STUDIO_SUBTLE.displayName, "Gentle, non-intrusive studio transient")
+    )
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.audio_remote_click_profile_title),
+        subtitle = "Select audio character for remote click feedback",
+        options = options,
+        selectedValue = selectedProfile,
+        onOptionSelected = onProfileSelected,
+        onDismiss = onDismiss,
+        width = 440.dp,
+        maxHeight = 360.dp
+    )
+}
+

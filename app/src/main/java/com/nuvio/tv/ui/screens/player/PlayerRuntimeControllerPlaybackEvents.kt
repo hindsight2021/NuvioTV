@@ -1186,6 +1186,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     stopWatchProgressSaving()
                     emitPauseScrobbleForCurrentProgress()
                     schedulePauseOverlay()
+                    com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(com.nuvio.tv.NuvioApplication.instance, com.nuvio.tv.core.sound.PlaybackSoundAction.PAUSE)
                 } else {
                     userPausedManually = false
                     cancelPauseOverlay()
@@ -1194,6 +1195,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     startWatchProgressSaving()
                     scheduleHideControls()
                     emitScrobbleStart()
+                    com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(com.nuvio.tv.NuvioApplication.instance, com.nuvio.tv.core.sound.PlaybackSoundAction.PLAY)
                 }
             } else {
                 _exoPlayer?.let { player ->
@@ -1201,10 +1203,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                         userPausedManually = true
                         player.pause()
                         schedulePauseOverlay()
+                        com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(com.nuvio.tv.NuvioApplication.instance, com.nuvio.tv.core.sound.PlaybackSoundAction.PAUSE)
                     } else {
                         userPausedManually = false
                         cancelPauseOverlay()
                         player.play()
+                        com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(com.nuvio.tv.NuvioApplication.instance, com.nuvio.tv.core.sound.PlaybackSoundAction.PLAY)
                     }
                 }
             }

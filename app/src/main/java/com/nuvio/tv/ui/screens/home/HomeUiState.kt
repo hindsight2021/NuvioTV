@@ -10,9 +10,11 @@ import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
 import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.model.WatchProgress
 
 enum class HomeTab {
@@ -35,6 +37,8 @@ data class HomeUiState(
     val selectedHomeTab: HomeTab = HomeTab.TV_SHOWS,
     val modernLandscapePostersEnabled: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean = false,
+    val heroInLandscapeEnabled: Boolean = false,
+    val heroPrioritizeNewEpisodes: Boolean = true,
     val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
     val heroItems: List<MetaPreview> = emptyList(),
@@ -164,6 +168,48 @@ val HomeUiState.displayedUpcomingItems: List<ContinueWatchingItem>
             HomeTab.TV_SHOWS -> upcomingItems.filter { it.isSeries() }
             HomeTab.MOVIES -> emptyList()
         }
+    }
+
+val HomeUiState.prioritizedHeroItems: List<MetaPreview>
+    get() {
+        if (!heroPrioritizeNewEpisodes) return heroItems
+
+        val newEpisodeItems = displayedContinueWatchingItems.mapNotNull { cwItem ->
+            when (cwItem) {
+                is ContinueWatchingItem.NextUp -> {
+                    val badge = when {
+                        cwItem.info.isNewSeasonRelease || (cwItem.info.seedSeason != null && cwItem.info.season > 1 && cwItem.info.episode == 1) -> "SEASON PREMIERE"
+                        cwItem.info.episodeTitle?.contains("finale", ignoreCase = true) == true ||
+                            cwItem.info.episodeDescription?.contains("finale", ignoreCase = true) == true -> "SEASON FINALE"
+                        cwItem.info.isReleaseAlert || cwItem.info.hasAired -> "NEW EPISODE"
+                        else -> null
+                    }
+                    if (badge != null) {
+                        MetaPreview(
+                            id = cwItem.info.contentId,
+                            type = if (cwItem.isSeries()) ContentType.SERIES else ContentType.MOVIE,
+                            name = cwItem.info.name,
+                            poster = cwItem.info.poster,
+                            posterShape = PosterShape.POSTER,
+                            background = cwItem.info.backdrop,
+                            logo = cwItem.info.logo,
+                            description = cwItem.info.episodeDescription ?: cwItem.info.episodeTitle,
+                            releaseInfo = cwItem.info.releaseInfo,
+                            imdbRating = cwItem.info.imdbRating,
+                            genres = cwItem.info.genres,
+                            badgeText = badge
+                        )
+                    } else null
+                }
+                else -> null
+            }
+        }
+
+        if (newEpisodeItems.isEmpty()) return heroItems
+
+        val newEpisodeIds = newEpisodeItems.map { it.id }.toSet()
+        val remainingHero = heroItems.filterNot { it.id in newEpisodeIds }
+        return newEpisodeItems + remainingHero
     }
 
 @Immutable

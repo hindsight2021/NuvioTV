@@ -71,12 +71,15 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                         hostCookies.add(newCookie)
                     }
                 }
-            }
+        lateinit var instance: NuvioApplication
+            private set
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
+        com.nuvio.tv.core.sound.AudioFeedbackManager.init(this)
         SentryInitializer.start(this, sentrySettingsDataStore)
         PluginRuntimeHooks.onApplicationCreate(this)
         androidTvChannelSyncService.start()

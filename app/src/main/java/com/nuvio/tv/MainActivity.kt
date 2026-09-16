@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
@@ -249,7 +250,8 @@ private data class MainUiPrefs(
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
     val separateMoviesTvEnabled: Boolean = false,
-    val selectedHomeTab: String = "tv"
+    val selectedHomeTab: String = "tv",
+    val liveTvEnabled: Boolean = true
 )
 
 @AndroidEntryPoint
@@ -346,11 +348,36 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                android.view.KeyEvent.KEYCODE_DPAD_UP,
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    com.nuvio.tv.core.sound.AudioFeedbackManager.playNavigation(this)
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                android.view.KeyEvent.KEYCODE_ENTER,
+                android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    com.nuvio.tv.core.sound.AudioFeedbackManager.playClick(this)
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        com.nuvio.tv.core.sound.AudioFeedbackManager.release()
+    }
+
     @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         isFirstResumeAfterCreate = true
+        com.nuvio.tv.core.sound.AudioFeedbackManager.init(this)
         if (savedInstanceState == null) {
             com.nuvio.tv.core.sound.StartupSoundPlayer.play(this)
         }
@@ -525,13 +552,15 @@ open class MainActivity : ComponentActivity() {
                     layoutPreferenceDataStore.modernSidebarEnabled,
                     layoutPreferenceDataStore.modernSidebarBlurEnabled,
                     layoutPreferenceDataStore.discoverLocation,
-                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation ->
+                    layoutPreferenceDataStore.liveTvEnabled,
+                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation, liveTvEnabled ->
                     MainUiPrefs(
                         hasChosenLayout = hasChosenLayout,
                         sidebarCollapsed = sidebarCollapsed,
                         modernSidebarEnabled = modernSidebarEnabled,
                         modernSidebarBlurPref = modernSidebarBlurPref,
                         discoverLocation = discoverLocation,
+                        liveTvEnabled = liveTvEnabled
                     )
                 }
                 val movieTvTabsFlow = combine(
@@ -566,6 +595,7 @@ open class MainActivity : ComponentActivity() {
                         modernSidebarEnabled = layoutPrefs.modernSidebarEnabled,
                         modernSidebarBlurPref = layoutPrefs.modernSidebarBlurPref,
                         discoverLocation = layoutPrefs.discoverLocation,
+                        liveTvEnabled = layoutPrefs.liveTvEnabled,
                         separateMoviesTvEnabled = movieTvTabs.first,
                         selectedHomeTab = movieTvTabs.second,
                         addonSetupSkipped = extraPrefs.addonSetupSkipped,
@@ -1013,13 +1043,17 @@ open class MainActivity : ComponentActivity() {
 
                     val separateMoviesTvEnabled = mainUiPrefs.separateMoviesTvEnabled
                     val selectedHomeTab = mainUiPrefs.selectedHomeTab
+                    val liveTvEnabled = mainUiPrefs.liveTvEnabled
 
-                    val rootRoutes = remember(discoverLocation, separateMoviesTvEnabled) {
+                    val rootRoutes = remember(discoverLocation, separateMoviesTvEnabled, liveTvEnabled) {
                         buildSet {
                             add(Screen.Home.route)
                             if (separateMoviesTvEnabled) {
                                 add("home_tv")
                                 add("home_movies")
+                            }
+                            if (liveTvEnabled) {
+                                add(Screen.LiveTv.route)
                             }
                             add(Screen.Search.route)
                             add(Screen.Library.route)
@@ -1033,6 +1067,7 @@ open class MainActivity : ComponentActivity() {
                     val strNavHome = stringResource(R.string.nav_home)
                     val strNavTvShows = stringResource(R.string.home_tab_tv_shows)
                     val strNavMovies = stringResource(R.string.home_tab_movies)
+                    val strNavLiveTv = stringResource(R.string.nav_live_tv)
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
@@ -1041,12 +1076,14 @@ open class MainActivity : ComponentActivity() {
                         strNavHome,
                         strNavTvShows,
                         strNavMovies,
+                        strNavLiveTv,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
                         strNavSettings,
                         discoverLocation,
-                        separateMoviesTvEnabled
+                        separateMoviesTvEnabled,
+                        liveTvEnabled
                     ) {
                         buildList {
                             if (separateMoviesTvEnabled) {
@@ -1070,6 +1107,15 @@ open class MainActivity : ComponentActivity() {
                                         route = Screen.Home.route,
                                         label = strNavHome,
                                         icon = Icons.Default.Home
+                                    )
+                                )
+                            }
+                            if (liveTvEnabled) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTv.route,
+                                        label = strNavLiveTv,
+                                        icon = Icons.Default.LiveTv
                                     )
                                 )
                             }

@@ -66,6 +66,8 @@ private data class LayoutUiPrefs(
     val showFullReleaseDate: Boolean,
     val modernLandscapePostersEnabled: Boolean,
     val modernHeroFullScreenBackdropEnabled: Boolean,
+    val heroInLandscapeEnabled: Boolean,
+    val heroPrioritizeNewEpisodes: Boolean,
     val animatedBackgroundMode: AnimatedBackdropMode,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility,
     val focusedBackdropExpandEnabled: Boolean,
@@ -81,6 +83,8 @@ private data class LayoutUiPrefs(
 private data class ModernLayoutPrefs(
     val landscapePosters: Boolean,
     val fullScreenBackdrop: Boolean,
+    val heroInLandscapeEnabled: Boolean,
+    val heroPrioritizeNewEpisodes: Boolean,
     val animatedBackgroundMode: AnimatedBackdropMode,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility
 )
@@ -139,12 +143,16 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
     val modernLayoutPrefsFlow = combine(
         layoutPreferenceDataStore.modernLandscapePostersEnabled,
         layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled,
+        layoutPreferenceDataStore.heroInLandscapeEnabled,
+        layoutPreferenceDataStore.heroPrioritizeNewEpisodes,
         layoutPreferenceDataStore.animatedBackgroundMode,
         layoutPreferenceDataStore.homeImdbRatingsVisibility
-    ) { landscapePosters, fullScreenBackdrop, animatedBackgroundMode, homeImdbRatingsVisibility ->
+    ) { landscapePosters, fullScreenBackdrop, heroInLandscapeEnabled, heroPrioritizeNewEpisodes, animatedBackgroundMode, homeImdbRatingsVisibility ->
         ModernLayoutPrefs(
             landscapePosters = landscapePosters,
             fullScreenBackdrop = fullScreenBackdrop,
+            heroInLandscapeEnabled = heroInLandscapeEnabled,
+            heroPrioritizeNewEpisodes = heroPrioritizeNewEpisodes,
             animatedBackgroundMode = animatedBackgroundMode,
             homeImdbRatingsVisibility = homeImdbRatingsVisibility
         )
@@ -169,6 +177,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             showFullReleaseDate = corePrefs.showFullReleaseDate,
             modernLandscapePostersEnabled = false,
             modernHeroFullScreenBackdropEnabled = false,
+            heroInLandscapeEnabled = false,
+            heroPrioritizeNewEpisodes = true,
             animatedBackgroundMode = AnimatedBackdropMode.KEN_BURNS,
             homeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
             focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
@@ -191,6 +201,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             basePrefs.copy(
                 modernLandscapePostersEnabled = modernPrefs.landscapePosters,
                 modernHeroFullScreenBackdropEnabled = modernPrefs.fullScreenBackdrop,
+                heroInLandscapeEnabled = modernPrefs.heroInLandscapeEnabled,
+                heroPrioritizeNewEpisodes = modernPrefs.heroPrioritizeNewEpisodes,
                 animatedBackgroundMode = modernPrefs.animatedBackgroundMode,
                 homeImdbRatingsVisibility = modernPrefs.homeImdbRatingsVisibility
             )
@@ -237,6 +249,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         showFullReleaseDate = prefs.showFullReleaseDate,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
                         modernHeroFullScreenBackdropEnabled = prefs.modernHeroFullScreenBackdropEnabled,
+                        heroInLandscapeEnabled = prefs.heroInLandscapeEnabled,
+                        heroPrioritizeNewEpisodes = prefs.heroPrioritizeNewEpisodes,
                         animatedBackgroundMode = prefs.animatedBackgroundMode,
                         homeImdbRatingsVisibility = prefs.homeImdbRatingsVisibility,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,

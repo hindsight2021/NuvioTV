@@ -309,7 +309,8 @@ fun ClassicHomeContent(
         }
     }
 
-    val heroVisible = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
+    val effectiveHeroList = uiState.prioritizedHeroItems
+    val heroVisible = uiState.heroSectionEnabled && effectiveHeroList.isNotEmpty()
 
     val heroExpected = uiState.heroSectionEnabled
     val heroResolved = !heroExpected || heroVisible
@@ -600,12 +601,12 @@ fun ClassicHomeContent(
         if (heroVisible) {
             item(key = "hero_carousel", contentType = "hero") {
                 HeroCarousel(
-                    items = uiState.heroItems.asStable(),
+                    items = effectiveHeroList.asStable(),
                     focusRequester = if (shouldRequestInitialFocus || shouldRestoreHeroFocus) heroFocusRequester else null,
                     showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
                     onActiveItemChanged = { item ->
                         activeHeroItem = item
-                        val idx = uiState.heroItems.indexOfFirst { it.id == item.id }
+                        val idx = effectiveHeroList.indexOfFirst { it.id == item.id }
                         if (idx >= 0) savedHeroIndex.intValue = idx
                     },
                     showBackdrop = false,

@@ -284,6 +284,18 @@ fun LayoutSettingsContent(
                     )
 
                     CompactToggleRow(
+                        title = stringResource(R.string.layout_live_tv),
+                        subtitle = stringResource(R.string.layout_live_tv_sub),
+                        checked = uiState.liveTvEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetLiveTvEnabled(!uiState.liveTvEnabled)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
+                    CompactToggleRow(
                         title = stringResource(R.string.layout_track_channel_shuffle_in_cw),
                         subtitle = stringResource(R.string.layout_track_channel_shuffle_in_cw_sub),
                         checked = uiState.trackChannelShuffleInCw,
@@ -313,6 +325,32 @@ fun LayoutSettingsContent(
                                     LayoutSettingsEvent.SetModernLandscapePostersEnabled(
                                         !uiState.modernLandscapePostersEnabled
                                     )
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                        )
+
+                        if (uiState.modernLandscapePostersEnabled) {
+                            CompactToggleRow(
+                                title = stringResource(R.string.layout_hero_landscape),
+                                subtitle = stringResource(R.string.layout_hero_landscape_sub),
+                                checked = uiState.heroInLandscapeEnabled,
+                                onToggle = {
+                                    viewModel.onEvent(
+                                        LayoutSettingsEvent.SetHeroInLandscapeEnabled(!uiState.heroInLandscapeEnabled)
+                                    )
+                                },
+                                onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                            )
+                        }
+
+                        CompactToggleRow(
+                            title = stringResource(R.string.layout_hero_prioritize_new_episodes),
+                            subtitle = stringResource(R.string.layout_hero_prioritize_new_episodes_sub),
+                            checked = uiState.heroPrioritizeNewEpisodes,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetHeroPrioritizeNewEpisodes(!uiState.heroPrioritizeNewEpisodes)
                                 )
                             },
                             onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }

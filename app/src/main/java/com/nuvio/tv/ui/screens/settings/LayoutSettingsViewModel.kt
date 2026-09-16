@@ -86,6 +86,9 @@ data class LayoutSettingsUiState(
     val separateMoviesTvEnabled: Boolean = false,
     val trackChannelShuffleInCw: Boolean = false,
     val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
+    val liveTvEnabled: Boolean = true,
+    val heroInLandscapeEnabled: Boolean = false,
+    val heroPrioritizeNewEpisodes: Boolean = true,
 )
 
 data class CatalogInfo(
@@ -97,6 +100,9 @@ data class CatalogInfo(
 sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SetSeparateMoviesTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetLiveTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetHeroInLandscapeEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetHeroPrioritizeNewEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetTrackChannelShuffleInCw(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetAnimatedBackgroundMode(val mode: AnimatedBackdropMode) : LayoutSettingsEvent()
     data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
@@ -237,6 +243,21 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.animatedBackgroundMode.distinctUntilChanged().collectLatest { mode ->
                 updateUiStateIfChanged { it.copy(animatedBackgroundMode = mode) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.liveTvEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(liveTvEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.heroInLandscapeEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(heroInLandscapeEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.heroPrioritizeNewEpisodes.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(heroPrioritizeNewEpisodes = enabled) }
             }
         }
         viewModelScope.launch {
@@ -417,6 +438,9 @@ class LayoutSettingsViewModel @Inject constructor(
         when (event) {
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SetSeparateMoviesTvEnabled -> setSeparateMoviesTvEnabled(event.enabled)
+            is LayoutSettingsEvent.SetLiveTvEnabled -> setLiveTvEnabled(event.enabled)
+            is LayoutSettingsEvent.SetHeroInLandscapeEnabled -> setHeroInLandscapeEnabled(event.enabled)
+            is LayoutSettingsEvent.SetHeroPrioritizeNewEpisodes -> setHeroPrioritizeNewEpisodes(event.enabled)
             is LayoutSettingsEvent.SetTrackChannelShuffleInCw -> setTrackChannelShuffleInCw(event.enabled)
             is LayoutSettingsEvent.SetAnimatedBackgroundMode -> setAnimatedBackgroundMode(event.mode)
             is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
@@ -605,6 +629,27 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.modernHeroFullScreenBackdropEnabled == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setModernHeroFullScreenBackdropEnabled(enabled)
+        }
+    }
+
+    private fun setLiveTvEnabled(enabled: Boolean) {
+        if (_uiState.value.liveTvEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setLiveTvEnabled(enabled)
+        }
+    }
+
+    private fun setHeroInLandscapeEnabled(enabled: Boolean) {
+        if (_uiState.value.heroInLandscapeEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setHeroInLandscapeEnabled(enabled)
+        }
+    }
+
+    private fun setHeroPrioritizeNewEpisodes(enabled: Boolean) {
+        if (_uiState.value.heroPrioritizeNewEpisodes == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setHeroPrioritizeNewEpisodes(enabled)
         }
     }
 

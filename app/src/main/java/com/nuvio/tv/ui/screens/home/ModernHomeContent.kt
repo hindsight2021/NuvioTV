@@ -187,10 +187,11 @@ fun ModernHomeContent(
     }
 
     if (carouselRows.list.isEmpty()) {
-        if (uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()) {
+        val effectiveHero = uiState.prioritizedHeroItems
+        if (uiState.heroSectionEnabled && effectiveHero.isNotEmpty()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 com.nuvio.tv.ui.components.HeroCarousel(
-                    items = uiState.heroItems.asStable(),
+                    items = effectiveHero.asStable(),
                     showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
                     onItemClick = { item ->
                         onNavigateToDetail(item.id, item.apiType, "")
@@ -710,8 +711,34 @@ fun ModernHomeContent(
                         )
                     } else null
 
+                    val fallbackLandscapeHero = if (uiState.heroInLandscapeEnabled) {
+                        uiState.prioritizedHeroItems.firstOrNull()?.let { prioritizedItem ->
+                            HeroPreview(
+                                title = prioritizedItem.name,
+                                logo = prioritizedItem.logo,
+                                description = prioritizedItem.description,
+                                contentTypeText = prioritizedItem.type?.name?.replaceFirstChar { it.uppercase() },
+                                isSeries = isSeriesType(prioritizedItem.apiType),
+                                yearText = extractYearText(prioritizedItem.type?.name, prioritizedItem.releaseInfo, prioritizedItem.released),
+                                runtimeText = formatHeroRuntime(prioritizedItem.runtime),
+                                imdbText = prioritizedItem.imdbRating?.let { String.format(java.util.Locale.US, "%.1f", it) },
+                                ageRatingText = prioritizedItem.ageRating,
+                                statusText = prioritizedItem.status,
+                                countryText = prioritizedItem.country,
+                                languageText = prioritizedItem.language?.uppercase(),
+                                genres = prioritizedItem.genres.take(3).asStable(),
+                                poster = prioritizedItem.poster,
+                                backdrop = prioritizedItem.backdropUrl,
+                                imageUrl = prioritizedItem.backdropUrl ?: prioritizedItem.poster,
+                                frozenBackdropUrl = null,
+                                frozenLogoUrl = null,
+                                badgeText = prioritizedItem.badgeText
+                            )
+                        }
+                    } else null
+
                     val resolvedHero = when {
-                        activeCarouselItem == null -> null
+                        activeCarouselItem == null -> fallbackLandscapeHero
                         enrichmentActive -> activeCarouselItem.heroPreview
                         enrichedHero != null -> enrichedHero
                         else -> activeCarouselItem.heroPreview
@@ -724,7 +751,7 @@ fun ModernHomeContent(
                     // Also treat as pending when activeCarouselItem is null (row not yet resolved).
                     val heroEnrichmentEnabled = uiState.heroEnrichmentEnabled
                     val enrichmentFailed = activeItemId != null && activeItemId in failedEnrichmentIds
-                    val effectiveEnrichmentActive = activeCarouselItem == null || enrichmentActive ||
+                    val effectiveEnrichmentActive = (activeCarouselItem == null && fallbackLandscapeHero == null) || enrichmentActive ||
                         (enrichedHero == null && activeItemId != null && heroEnrichmentEnabled && !enrichmentFailed)
                     
                     val activeRowKeyVal = activeRowKey.value
@@ -737,7 +764,8 @@ fun ModernHomeContent(
                         resolvedHero?.backdrop,
                         resolvedHero?.imageUrl,
                         resolvedHero?.poster,
-                        activeRowFallbackBackdrop
+                        activeRowFallbackBackdrop,
+                        if (uiState.heroInLandscapeEnabled) uiState.prioritizedHeroItems.firstOrNull()?.backdropUrl else null
                     )
                     
                     Triple(heroBackdrop, resolvedHero, effectiveEnrichmentActive)

@@ -398,6 +398,20 @@ private fun HeroTitleContent(
         modifier = if (highlighterEnabled) Modifier.recompositionHighlighter() else Modifier,
         verticalArrangement = Arrangement.spacedBy(titleSpacing)
     ) {
+        if (!preview.badgeText.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0xFFE50914))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = preview.badgeText,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
+        }
         var logoLoadFailed by remember(preview.logo) { mutableStateOf(false) }
         val showLogo = !preview.logo.isNullOrBlank() && !logoLoadFailed
         if (showLogo) {

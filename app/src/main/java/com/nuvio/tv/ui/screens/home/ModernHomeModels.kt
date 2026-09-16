@@ -64,7 +64,8 @@ data class HeroPreview(
      *  even after navigation away and back. */
     val frozenBackdropUrl: String? = null,
     /** Same idea for the logo URL. */
-    val frozenLogoUrl: String? = null
+    val frozenLogoUrl: String? = null,
+    val badgeText: String? = null
 )
 
 @Immutable
@@ -363,6 +364,13 @@ internal fun buildContinueWatchingItem(
             )
             val episodeTitle = item.info.episodeTitle?.takeIf { it.isNotBlank() }?.localizeEpisodeTitle(context)
             val episodeLabel = if (episodeTitle != null) "$episodeCode · $episodeTitle" else episodeCode
+            val nextUpBadge = when {
+                item.info.isNewSeasonRelease || (item.info.seedSeason != null && item.info.season > 1 && item.info.episode == 1) -> "SEASON PREMIERE"
+                item.info.episodeTitle?.contains("finale", ignoreCase = true) == true ||
+                    item.info.episodeDescription?.contains("finale", ignoreCase = true) == true -> "SEASON FINALE"
+                item.info.isReleaseAlert || item.info.hasAired -> "NEW EPISODE"
+                else -> null
+            }
             HeroPreview(
                 title = item.info.name,
                 logo = item.info.logo,
@@ -382,7 +390,8 @@ internal fun buildContinueWatchingItem(
                     firstNonBlank(item.info.backdrop, item.info.poster, item.info.thumbnail)
                 } else {
                     firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
-                }
+                },
+                badgeText = nextUpBadge
             )
         }
     }

@@ -290,6 +290,20 @@ private fun HeroCarouselSlide(
                 .fillMaxWidth(0.42f),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
         ) {
+            if (!item.badgeText.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFE50914))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = item.badgeText,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+            }
             if (showLogo) {
                 AsyncImage(
                     model = logoModel,
