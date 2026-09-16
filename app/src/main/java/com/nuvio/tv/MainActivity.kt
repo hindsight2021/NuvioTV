@@ -254,6 +254,13 @@ private data class MainUiPrefs(
     val liveTvEnabled: Boolean = true
 )
 
+private data class SidebarPrefs(
+    val hasChosenLayout: Boolean?,
+    val sidebarCollapsed: Boolean,
+    val modernSidebarEnabled: Boolean,
+    val modernSidebarBlurPref: Boolean
+)
+
 @AndroidEntryPoint
 open class MainActivity : ComponentActivity() {
 
@@ -346,30 +353,6 @@ open class MainActivity : ComponentActivity() {
             // is usually created, but if not, we just use system locale until next launch
             super.attachBaseContext(newBase)
         }
-    }
-
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-            when (event.keyCode) {
-                android.view.KeyEvent.KEYCODE_DPAD_UP,
-                android.view.KeyEvent.KEYCODE_DPAD_DOWN,
-                android.view.KeyEvent.KEYCODE_DPAD_LEFT,
-                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    com.nuvio.tv.core.sound.AudioFeedbackManager.playNavigation(this)
-                }
-                android.view.KeyEvent.KEYCODE_DPAD_CENTER,
-                android.view.KeyEvent.KEYCODE_ENTER,
-                android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                    com.nuvio.tv.core.sound.AudioFeedbackManager.playClick(this)
-                }
-            }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        com.nuvio.tv.core.sound.AudioFeedbackManager.release()
     }
 
     @OptIn(ExperimentalFoundationApi::class)
@@ -546,19 +529,24 @@ open class MainActivity : ComponentActivity() {
                         experienceModeLoaded = true,
                     )
                 }
-                val layoutAndFeaturesFlow = combine(
+                val sidebarPrefsFlow = combine(
                     layoutPreferenceDataStore.hasChosenLayout,
                     layoutPreferenceDataStore.sidebarCollapsedByDefault,
                     layoutPreferenceDataStore.modernSidebarEnabled,
-                    layoutPreferenceDataStore.modernSidebarBlurEnabled,
+                    layoutPreferenceDataStore.modernSidebarBlurEnabled
+                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref ->
+                    SidebarPrefs(hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref)
+                }
+                val layoutAndFeaturesFlow = combine(
+                    sidebarPrefsFlow,
                     layoutPreferenceDataStore.discoverLocation,
-                    layoutPreferenceDataStore.liveTvEnabled,
-                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation, liveTvEnabled ->
+                    layoutPreferenceDataStore.liveTvEnabled
+                ) { sidebarPrefs, discoverLocation, liveTvEnabled ->
                     MainUiPrefs(
-                        hasChosenLayout = hasChosenLayout,
-                        sidebarCollapsed = sidebarCollapsed,
-                        modernSidebarEnabled = modernSidebarEnabled,
-                        modernSidebarBlurPref = modernSidebarBlurPref,
+                        hasChosenLayout = sidebarPrefs.hasChosenLayout,
+                        sidebarCollapsed = sidebarPrefs.sidebarCollapsed,
+                        modernSidebarEnabled = sidebarPrefs.modernSidebarEnabled,
+                        modernSidebarBlurPref = sidebarPrefs.modernSidebarBlurPref,
                         discoverLocation = discoverLocation,
                         liveTvEnabled = liveTvEnabled
                     )
@@ -1379,6 +1367,21 @@ open class MainActivity : ComponentActivity() {
     val longPressBackHeld = mutableStateOf(false)
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    com.nuvio.tv.core.sound.AudioFeedbackManager.playNavigation(this)
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    com.nuvio.tv.core.sound.AudioFeedbackManager.playClick(this)
+                }
+            }
+        }
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             if (longPressBackHeld.value) {
                 if (event.action == KeyEvent.ACTION_UP) longPressBackHeld.value = false
@@ -1419,6 +1422,7 @@ open class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.nuvio.tv.core.sound.AudioFeedbackManager.release()
         PluginRuntimeHooks.onActivityDestroy()
     }
 }

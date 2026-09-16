@@ -71,9 +71,11 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                         hostCookies.add(newCookie)
                     }
                 }
+            }
+        }
+
         lateinit var instance: NuvioApplication
             private set
-        }
     }
 
     override fun onCreate() {

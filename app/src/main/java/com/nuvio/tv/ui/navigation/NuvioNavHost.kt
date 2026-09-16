@@ -1215,6 +1215,8 @@ private fun PlaybackNavHost(
                     )
                 }
             )
+        }
+
         composable(Screen.LiveTv.route) {
             com.nuvio.tv.ui.screens.livetv.LiveTvScreen(
                 onNavigateBack = { navController.popBackStack() }
