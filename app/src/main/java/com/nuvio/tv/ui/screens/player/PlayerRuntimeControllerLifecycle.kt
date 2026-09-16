@@ -13,7 +13,7 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     isReleasingPlayer = true
     com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value = false
     cinemaLightingController.onPlaybackStopped()
-    com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(com.nuvio.tv.NuvioApplication.instance, com.nuvio.tv.core.sound.PlaybackSoundAction.STOP)
+    com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(context, com.nuvio.tv.core.sound.PlaybackSoundAction.STOP)
     if (flushPlaybackState) {
         stopTorrentStream()
         flushPlaybackSnapshotForSwitchOrExit()

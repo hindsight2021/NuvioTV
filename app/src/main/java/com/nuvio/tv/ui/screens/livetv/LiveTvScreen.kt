@@ -225,7 +225,7 @@ fun LiveTvScreen(
                             },
                             colors = CardDefaults.colors(
                                 containerColor = if (isCurrentFocused) NuvioTheme.colors.Surface.copy(alpha = 0.9f) else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.45f),
-                                focusedContainerColor = NuvioTheme.colors.SurfaceElevated
+                                focusedContainerColor = NuvioTheme.colors.FocusBackground
                             ),
                             border = CardDefaults.border(
                                 focusedBorder = Border(

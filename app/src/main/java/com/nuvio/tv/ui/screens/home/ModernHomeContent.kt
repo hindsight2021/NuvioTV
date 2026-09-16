@@ -719,7 +719,7 @@ fun ModernHomeContent(
                                 description = prioritizedItem.description,
                                 contentTypeText = prioritizedItem.type?.name?.replaceFirstChar { it.uppercase() },
                                 isSeries = isSeriesType(prioritizedItem.apiType),
-                                yearText = extractYearText(prioritizedItem.type?.name, prioritizedItem.releaseInfo, prioritizedItem.released),
+                                yearText = extractYearText(prioritizedItem.type ?: com.nuvio.tv.domain.model.ContentType.SERIES, prioritizedItem.releaseInfo, prioritizedItem.released),
                                 runtimeText = formatHeroRuntime(prioritizedItem.runtime),
                                 imdbText = prioritizedItem.imdbRating?.let { String.format(java.util.Locale.US, "%.1f", it) },
                                 ageRatingText = prioritizedItem.ageRating,

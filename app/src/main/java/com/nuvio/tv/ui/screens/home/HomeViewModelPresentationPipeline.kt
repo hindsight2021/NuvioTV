@@ -80,6 +80,13 @@ private data class LayoutUiPrefs(
     val posterCardCornerRadiusDp: Int
 )
 
+private data class ModernHeroSettings(
+    val landscapePosters: Boolean,
+    val fullScreenBackdrop: Boolean,
+    val heroInLandscapeEnabled: Boolean,
+    val heroPrioritizeNewEpisodes: Boolean
+)
+
 private data class ModernLayoutPrefs(
     val landscapePosters: Boolean,
     val fullScreenBackdrop: Boolean,
@@ -140,23 +147,35 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
         )
     }
 
-    val modernLayoutPrefsFlow = combine(
+    val modernHeroSettingsFlow = combine(
         layoutPreferenceDataStore.modernLandscapePostersEnabled,
         layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled,
         layoutPreferenceDataStore.heroInLandscapeEnabled,
-        layoutPreferenceDataStore.heroPrioritizeNewEpisodes,
-        layoutPreferenceDataStore.animatedBackgroundMode,
-        layoutPreferenceDataStore.homeImdbRatingsVisibility
-    ) { landscapePosters, fullScreenBackdrop, heroInLandscapeEnabled, heroPrioritizeNewEpisodes, animatedBackgroundMode, homeImdbRatingsVisibility ->
-        ModernLayoutPrefs(
+        layoutPreferenceDataStore.heroPrioritizeNewEpisodes
+    ) { landscapePosters, fullScreenBackdrop, heroInLandscapeEnabled, heroPrioritizeNewEpisodes ->
+        ModernHeroSettings(
             landscapePosters = landscapePosters,
             fullScreenBackdrop = fullScreenBackdrop,
             heroInLandscapeEnabled = heroInLandscapeEnabled,
-            heroPrioritizeNewEpisodes = heroPrioritizeNewEpisodes,
+            heroPrioritizeNewEpisodes = heroPrioritizeNewEpisodes
+        )
+    }
+
+    val modernLayoutPrefsFlow = combine(
+        modernHeroSettingsFlow,
+        layoutPreferenceDataStore.animatedBackgroundMode,
+        layoutPreferenceDataStore.homeImdbRatingsVisibility
+    ) { heroSettings, animatedBackgroundMode, homeImdbRatingsVisibility ->
+        ModernLayoutPrefs(
+            landscapePosters = heroSettings.landscapePosters,
+            fullScreenBackdrop = heroSettings.fullScreenBackdrop,
+            heroInLandscapeEnabled = heroSettings.heroInLandscapeEnabled,
+            heroPrioritizeNewEpisodes = heroSettings.heroPrioritizeNewEpisodes,
             animatedBackgroundMode = animatedBackgroundMode,
             homeImdbRatingsVisibility = homeImdbRatingsVisibility
         )
     }
+
 
     val baseLayoutUiPrefsFlow = combine(
         coreLayoutPrefsFlow,
