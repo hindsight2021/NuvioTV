@@ -56,6 +56,7 @@ class SkipIntroRepository @Inject constructor(
     private val aniSkipApi: AniSkipApi,
     private val animeSkipApi: AnimeSkipApi,
     private val simklResolver: SimklIdResolver,
+    private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val tmdbService: TmdbService,
     private val enhancedIntroDetector: com.nuvio.tv.core.player.EnhancedIntroDetector = com.nuvio.tv.core.player.EnhancedIntroDetector()
 ) {
