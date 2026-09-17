@@ -429,7 +429,6 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
 
     if (state.postPlayMode != null || state.postPlayDismissedForCurrentEpisode) return
 
-    val effectiveDuration = effectiveDurationEarly
     val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
         positionMs = positionMs,
         durationMs = effectiveDuration,

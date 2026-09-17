@@ -1924,7 +1924,7 @@ internal fun PlayerRuntimeController.preResolveNextEpisodeStreamIfNeeded(nextVid
     }
 
     preResolveNextEpisodeJob?.cancel()
-    preResolveNextVideoId = nextVideoId
+    preResolvedNextVideoId = nextVideoId
     preResolvedNextStream = null
 
     preResolveNextEpisodeJob = scope.launch(Dispatchers.IO) {
@@ -2143,7 +2143,6 @@ internal fun PlayerRuntimeController.switchToLiveTvChannel(channel: com.nuvio.tv
             title = channel.name,
             contentName = channel.currentProgram.title,
             contentType = "live",
-            poster = channel.currentProgram.posterUrl,
             backdrop = channel.currentProgram.backdropUrl,
             currentStreamName = channel.name,
             currentStreamUrl = url,
