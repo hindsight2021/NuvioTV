@@ -87,6 +87,7 @@ data class LayoutSettingsUiState(
     val trackChannelShuffleInCw: Boolean = false,
     val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     val liveTvEnabled: Boolean = true,
+    val calendarEnabled: Boolean = true,
     val heroInLandscapeEnabled: Boolean = false,
     val heroPrioritizeNewEpisodes: Boolean = true,
 )
@@ -101,6 +102,7 @@ sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SetSeparateMoviesTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetLiveTvEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetCalendarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroInLandscapeEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroPrioritizeNewEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetTrackChannelShuffleInCw(val enabled: Boolean) : LayoutSettingsEvent()
@@ -248,6 +250,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.liveTvEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(liveTvEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.calendarEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(calendarEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -439,6 +446,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SetSeparateMoviesTvEnabled -> setSeparateMoviesTvEnabled(event.enabled)
             is LayoutSettingsEvent.SetLiveTvEnabled -> setLiveTvEnabled(event.enabled)
+            is LayoutSettingsEvent.SetCalendarEnabled -> setCalendarEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroInLandscapeEnabled -> setHeroInLandscapeEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroPrioritizeNewEpisodes -> setHeroPrioritizeNewEpisodes(event.enabled)
             is LayoutSettingsEvent.SetTrackChannelShuffleInCw -> setTrackChannelShuffleInCw(event.enabled)
@@ -636,6 +644,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.liveTvEnabled == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setLiveTvEnabled(enabled)
+        }
+    }
+
+    private fun setCalendarEnabled(enabled: Boolean) {
+        if (_uiState.value.calendarEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCalendarEnabled(enabled)
         }
     }
 

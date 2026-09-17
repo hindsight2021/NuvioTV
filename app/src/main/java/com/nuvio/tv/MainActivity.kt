@@ -48,6 +48,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
@@ -251,7 +252,8 @@ private data class MainUiPrefs(
     val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
     val separateMoviesTvEnabled: Boolean = false,
     val selectedHomeTab: String = "tv",
-    val liveTvEnabled: Boolean = true
+    val liveTvEnabled: Boolean = true,
+    val calendarEnabled: Boolean = true
 )
 
 private data class SidebarPrefs(
@@ -540,15 +542,17 @@ open class MainActivity : ComponentActivity() {
                 val layoutAndFeaturesFlow = combine(
                     sidebarPrefsFlow,
                     layoutPreferenceDataStore.discoverLocation,
-                    layoutPreferenceDataStore.liveTvEnabled
-                ) { sidebarPrefs, discoverLocation, liveTvEnabled ->
+                    layoutPreferenceDataStore.liveTvEnabled,
+                    layoutPreferenceDataStore.calendarEnabled
+                ) { sidebarPrefs, discoverLocation, liveTvEnabled, calendarEnabled ->
                     MainUiPrefs(
                         hasChosenLayout = sidebarPrefs.hasChosenLayout,
                         sidebarCollapsed = sidebarPrefs.sidebarCollapsed,
                         modernSidebarEnabled = sidebarPrefs.modernSidebarEnabled,
                         modernSidebarBlurPref = sidebarPrefs.modernSidebarBlurPref,
                         discoverLocation = discoverLocation,
-                        liveTvEnabled = liveTvEnabled
+                        liveTvEnabled = liveTvEnabled,
+                        calendarEnabled = calendarEnabled
                     )
                 }
                 val movieTvTabsFlow = combine(
@@ -584,6 +588,7 @@ open class MainActivity : ComponentActivity() {
                         modernSidebarBlurPref = layoutPrefs.modernSidebarBlurPref,
                         discoverLocation = layoutPrefs.discoverLocation,
                         liveTvEnabled = layoutPrefs.liveTvEnabled,
+                        calendarEnabled = layoutPrefs.calendarEnabled,
                         separateMoviesTvEnabled = movieTvTabs.first,
                         selectedHomeTab = movieTvTabs.second,
                         addonSetupSkipped = extraPrefs.addonSetupSkipped,
@@ -1032,8 +1037,9 @@ open class MainActivity : ComponentActivity() {
                     val separateMoviesTvEnabled = mainUiPrefs.separateMoviesTvEnabled
                     val selectedHomeTab = mainUiPrefs.selectedHomeTab
                     val liveTvEnabled = mainUiPrefs.liveTvEnabled
+                    val calendarEnabled = mainUiPrefs.calendarEnabled
 
-                    val rootRoutes = remember(discoverLocation, separateMoviesTvEnabled, liveTvEnabled) {
+                    val rootRoutes = remember(discoverLocation, separateMoviesTvEnabled, liveTvEnabled, calendarEnabled) {
                         buildSet {
                             add(Screen.Home.route)
                             if (separateMoviesTvEnabled) {
@@ -1042,6 +1048,9 @@ open class MainActivity : ComponentActivity() {
                             }
                             if (liveTvEnabled) {
                                 add(Screen.LiveTv.route)
+                            }
+                            if (calendarEnabled) {
+                                add(Screen.Calendar.route)
                             }
                             add(Screen.Search.route)
                             add(Screen.Library.route)
@@ -1056,6 +1065,7 @@ open class MainActivity : ComponentActivity() {
                     val strNavTvShows = stringResource(R.string.home_tab_tv_shows)
                     val strNavMovies = stringResource(R.string.home_tab_movies)
                     val strNavLiveTv = stringResource(R.string.nav_live_tv)
+                    val strNavCalendar = stringResource(R.string.nav_calendar)
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
@@ -1065,13 +1075,15 @@ open class MainActivity : ComponentActivity() {
                         strNavTvShows,
                         strNavMovies,
                         strNavLiveTv,
+                        strNavCalendar,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
                         strNavSettings,
                         discoverLocation,
                         separateMoviesTvEnabled,
-                        liveTvEnabled
+                        liveTvEnabled,
+                        calendarEnabled
                     ) {
                         buildList {
                             if (separateMoviesTvEnabled) {
@@ -1104,6 +1116,15 @@ open class MainActivity : ComponentActivity() {
                                         route = Screen.LiveTv.route,
                                         label = strNavLiveTv,
                                         icon = Icons.Default.LiveTv
+                                    )
+                                )
+                            }
+                            if (calendarEnabled) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.Calendar.route,
+                                        label = strNavCalendar,
+                                        icon = Icons.Default.CalendarToday
                                     )
                                 )
                             }

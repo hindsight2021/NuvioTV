@@ -1243,6 +1243,32 @@ private fun PlaybackNavHost(
             )
         }
 
+        composable(Screen.Calendar.route) {
+            com.nuvio.tv.ui.screens.calendar.CalendarScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onItemClick = { item ->
+                    val itemId = item.imdbId ?: item.tmdbId?.let { "tmdb:$it" } ?: item.id
+                    if (item.type == com.nuvio.tv.data.simkl.calendar.CalendarItemType.TV_EPISODE) {
+                        navController.navigate(
+                            Screen.Detail.createRoute(
+                                itemId = itemId,
+                                itemType = "series",
+                                returnFocusSeason = item.season,
+                                returnFocusEpisode = item.episode
+                            )
+                        )
+                    } else {
+                        navController.navigate(
+                            Screen.Detail.createRoute(
+                                itemId = itemId,
+                                itemType = "movie"
+                            )
+                        )
+                    }
+                }
+            )
+        }
+
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,

@@ -2295,8 +2295,11 @@
     <string name="nav_series">Series</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_live_tv">Live TV</string>
+    <string name="nav_calendar">Calendar</string>
     <string name="layout_live_tv">Live TV Guide</string>
     <string name="layout_live_tv_sub">Show Canadian Bell Fibe TV channel lineup with live EPG and instant tuning in sidebar</string>
+    <string name="layout_calendar">Upcoming Calendar</string>
+    <string name="layout_calendar_sub">Show upcoming TV &amp; movie releases with digital streaming dates powered by Simkl</string>
     <string name="layout_hero_landscape">Hero in Landscape Layout</string>
     <string name="layout_hero_landscape_sub">Show rotating spotlight hero above continue watching in landscape poster layout</string>
     <string name="layout_hero_prioritize_new_episodes">Highlight New Episodes in Hero</string>

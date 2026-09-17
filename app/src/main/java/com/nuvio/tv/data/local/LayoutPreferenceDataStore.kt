@@ -81,6 +81,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val liveTvEnabledKey = booleanPreferencesKey("live_tv_enabled")
+    private val calendarEnabledKey = booleanPreferencesKey("calendar_enabled")
     private val heroInLandscapeEnabledKey = booleanPreferencesKey("hero_in_landscape_enabled")
     private val heroPrioritizeNewEpisodesKey = booleanPreferencesKey("hero_prioritize_new_episodes")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
@@ -269,6 +270,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val liveTvEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[liveTvEnabledKey] ?: true
+    }
+
+    val calendarEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[calendarEnabledKey] ?: true
     }
 
     val heroInLandscapeEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -600,6 +605,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setLiveTvEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[liveTvEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setCalendarEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[calendarEnabledKey] = enabled
         }
     }
 

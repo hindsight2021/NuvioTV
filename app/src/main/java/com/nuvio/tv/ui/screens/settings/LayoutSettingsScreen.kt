@@ -296,6 +296,18 @@ fun LayoutSettingsContent(
                     )
 
                     CompactToggleRow(
+                        title = stringResource(R.string.layout_calendar),
+                        subtitle = stringResource(R.string.layout_calendar_sub),
+                        checked = uiState.calendarEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetCalendarEnabled(!uiState.calendarEnabled)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
+                    CompactToggleRow(
                         title = stringResource(R.string.layout_track_channel_shuffle_in_cw),
                         subtitle = stringResource(R.string.layout_track_channel_shuffle_in_cw_sub),
                         checked = uiState.trackChannelShuffleInCw,
