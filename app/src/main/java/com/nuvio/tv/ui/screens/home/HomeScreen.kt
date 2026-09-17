@@ -416,6 +416,9 @@ fun HomeScreen(
         }
     }
 
+    val topTabRowFocusRequester = remember { FocusRequester() }
+    val heroFocusRequester = remember { FocusRequester() }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -573,6 +576,8 @@ fun HomeScreen(
                             HomeLayout.MODERN -> ModernHomeRoute(
                                 viewModel = viewModel,
                                 uiState = uiState,
+                                topTabRowFocusRequester = topTabRowFocusRequester,
+                                heroFocusRequester = heroFocusRequester,
                                 onNavigateToDetail = onNavigateToDetailStable,
                                 onContinueWatchingClick = onContinueWatchingClickStable,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
@@ -608,6 +613,8 @@ fun HomeScreen(
                     onTabSelected = { tab ->
                         viewModel.onEvent(HomeEvent.SelectHomeTab(tab))
                     },
+                    focusRequester = topTabRowFocusRequester,
+                    downFocusRequester = heroFocusRequester,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 28.dp)
@@ -943,6 +950,8 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    topTabRowFocusRequester: FocusRequester? = null,
+    heroFocusRequester: FocusRequester? = null,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
@@ -998,6 +1007,8 @@ private fun ModernHomeRoute(
         modernPresentation = modernPresentation,
         focusState = focusState,
         scrollToTopTrigger = scrollToTopTrigger,
+        topTabRowFocusRequester = topTabRowFocusRequester,
+        heroFocusRequester = heroFocusRequester,
         enrichingItemId = enrichingItemId,
         lastEnrichedPreview = lastEnrichedPreview,
         enrichedPreviews = enrichedPreviews,

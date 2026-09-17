@@ -69,7 +69,8 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 @Composable
 fun LiveTvScreen(
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onPlayChannelStream: ((LiveTvChannel) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val allChannels by LiveTvManager.channels.collectAsState()
@@ -221,7 +222,11 @@ fun LiveTvScreen(
                         Card(
                             onClick = {
                                 AudioFeedbackManager.playClick(context)
-                                LiveTvManager.tuneToChannel(context, channel)
+                                if (!channel.streamUrl.isNullOrBlank() && onPlayChannelStream != null) {
+                                    onPlayChannelStream(channel)
+                                } else {
+                                    LiveTvManager.tuneToChannel(context, channel)
+                                }
                             },
                             colors = CardDefaults.colors(
                                 containerColor = if (isCurrentFocused) NuvioTheme.colors.Surface.copy(alpha = 0.9f) else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.45f),
@@ -403,10 +408,15 @@ fun LiveTvScreen(
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
 
                             // Action Button: Tune to Bell Fibe
+                            // Action Button: Watch Live or Tune to Bell Fibe
                             Button(
                                 onClick = {
                                     AudioFeedbackManager.playClick(context)
-                                    LiveTvManager.tuneToChannel(context, channel)
+                                    if (!channel.streamUrl.isNullOrBlank() && onPlayChannelStream != null) {
+                                        onPlayChannelStream(channel)
+                                    } else {
+                                        LiveTvManager.tuneToChannel(context, channel)
+                                    }
                                 },
                                 colors = ButtonDefaults.colors(
                                     containerColor = NuvioTheme.colors.Primary,
@@ -426,7 +436,7 @@ fun LiveTvScreen(
                                         tint = Color.Black
                                     )
                                     Text(
-                                        text = "Tune Channel ${channel.number} on Bell Fibe",
+                                        text = if (!channel.streamUrl.isNullOrBlank()) "Watch Live in Nuvio" else "Tune Channel ${channel.number} on Bell Fibe",
                                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                         color = Color.Black
                                     )

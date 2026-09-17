@@ -104,6 +104,7 @@ data class PlayerUiState(
     val isCenterMixAvailable: Boolean = false,
     val showAudioOverlay: Boolean = false,
     val showSubtitleOverlay: Boolean = false,
+    val showLiveTvMiniGuide: Boolean = false,
     val showSubtitleStylePanel: Boolean = false,
     val showSubtitleTimingDialog: Boolean = false,
     val showSubtitleDelayOverlay: Boolean = false,
@@ -225,7 +226,9 @@ data class PlayerUiState(
     // When true, suppress all torrent stats text (buffer, seeds, peers, speed)
     // from loading overlay, rebuffering indicator, and corner overlay.
     val hideTorrentStats: Boolean = true
-)
+) {
+    val isLiveContent: Boolean get() = contentType.equals("live", ignoreCase = true)
+}
 
 data class PlaybackTimelineState(
     val currentPosition: Long = 0L,
@@ -345,6 +348,9 @@ sealed class PlayerEvent {
     data object OnDismissStreamInfo : PlayerEvent()
     data object OnTogglePlayerStatsHud : PlayerEvent()
     data object OnToggleTorrentStats : PlayerEvent()
+    data object OnShowLiveTvMiniGuide : PlayerEvent()
+    data object OnDismissLiveTvMiniGuide : PlayerEvent()
+    data class OnLiveTvChannelSelected(val channel: com.nuvio.tv.core.livetv.LiveTvChannel) : PlayerEvent()
 }
 
 data class ParentalWarning(

@@ -24,6 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -39,11 +42,18 @@ import com.nuvio.tv.ui.screens.home.HomeTab
 fun HomeTopTabRow(
     selectedTab: HomeTab,
     onTabSelected: (HomeTab) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null
 ) {
     Box(
         modifier = modifier
             .zIndex(10f)
+            .then(
+                if (downFocusRequester != null) {
+                    Modifier.focusProperties { down = downFocusRequester }
+                } else Modifier
+            )
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0x40121418))
             .border(
@@ -54,17 +64,23 @@ fun HomeTopTabRow(
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = if (downFocusRequester != null) {
+                Modifier.focusProperties { down = downFocusRequester }
+            } else Modifier
         ) {
             HomeTopTabItem(
                 title = stringResource(R.string.home_tab_tv_shows),
                 isSelected = selectedTab == HomeTab.TV_SHOWS,
-                onClick = { onTabSelected(HomeTab.TV_SHOWS) }
+                onClick = { onTabSelected(HomeTab.TV_SHOWS) },
+                focusRequester = focusRequester,
+                downFocusRequester = downFocusRequester
             )
             HomeTopTabItem(
                 title = stringResource(R.string.home_tab_movies),
                 isSelected = selectedTab == HomeTab.MOVIES,
-                onClick = { onTabSelected(HomeTab.MOVIES) }
+                onClick = { onTabSelected(HomeTab.MOVIES) },
+                downFocusRequester = downFocusRequester
             )
         }
     }
@@ -74,7 +90,9 @@ fun HomeTopTabRow(
 private fun HomeTopTabItem(
     title: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -121,6 +139,12 @@ private fun HomeTopTabItem(
                 } else Modifier
             )
             .background(backgroundColor)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(
+                if (downFocusRequester != null) {
+                    Modifier.focusProperties { down = downFocusRequester }
+                } else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

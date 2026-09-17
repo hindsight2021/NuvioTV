@@ -1225,7 +1225,21 @@ private fun PlaybackNavHost(
 
         composable(Screen.LiveTv.route) {
             com.nuvio.tv.ui.screens.livetv.LiveTvScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onPlayChannelStream = { channel ->
+                    val streamUrl = channel.streamUrl ?: return@LiveTvScreen
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = streamUrl,
+                            title = channel.name,
+                            contentName = channel.currentProgram.title,
+                            contentType = "live",
+                            poster = channel.currentProgram.posterUrl,
+                            backdrop = channel.currentProgram.backdropUrl,
+                            videoId = channel.id
+                        )
+                    )
+                }
             )
         }
 

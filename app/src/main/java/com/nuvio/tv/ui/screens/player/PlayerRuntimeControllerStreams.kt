@@ -18,12 +18,14 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -1655,11 +1657,12 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
     }
 
     val episodeForMode = state.nextEpisode ?: nextInfo
+    val preResolvedAvailable = preResolvedNextStream != null && preResolvedNextVideoId == nextVideo.id
     _uiState.update {
         it.copy(
             postPlayMode = PostPlayMode.AutoPlay(
                 nextEpisode = episodeForMode,
-                searching = true,
+                searching = !preResolvedAvailable,
             ),
             playbackEnded = false,
         )
@@ -1773,94 +1776,106 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 searchSettled.complete(Unit)
             }
 
-            val timeoutSeconds = playerSettings.streamAutoPlayTimeoutSeconds
+            if (preResolvedAvailable) {
+                selectedStream = preResolvedNextStream
+                autoSelectTriggered = true
+                searchSettled.complete(Unit)
+            } else {
+                val timeoutSeconds = playerSettings.streamAutoPlayTimeoutSeconds
 
-            val innerJob = launch {
-                streamRepository.getStreamsFromAllAddons(
-                    type = type,
-                    videoId = nextVideo.id,
-                    season = nextVideo.season,
-                    episode = nextVideo.episode
-                ).collect { result ->
-                    when (result) {
-                        is NetworkResult.Success -> {
-                            lastSuccessData = result.data
-                            if (!autoSelectTriggered) {
-                                val candidate = when {
-                                    timeoutElapsed -> trySelectStream(result.data)
-                                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode ->
-                                        tryBingeGroupOnly(result.data)
-                                    else -> null
+                val innerJob = launch {
+                    streamRepository.getStreamsFromAllAddons(
+                        type = type,
+                        videoId = nextVideo.id,
+                        season = nextVideo.season,
+                        episode = nextVideo.episode
+                    ).collect { result ->
+                        when (result) {
+                            is NetworkResult.Success -> {
+                                lastSuccessData = result.data
+                                if (!autoSelectTriggered) {
+                                    val candidate = when {
+                                        timeoutElapsed -> trySelectStream(result.data)
+                                        playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode ->
+                                            tryBingeGroupOnly(result.data)
+                                        else -> null
+                                    }
+                                    if (candidate != null) recordSelection(candidate)
                                 }
-                                if (candidate != null) recordSelection(candidate)
+                            }
+                            is NetworkResult.Error -> lastError = result
+                            NetworkResult.Loading -> Unit
+                        }
+                    }
+                    // Every addon has responded: take whatever matched, then settle so
+                    // the waiting code below resumes even if nothing was selected.
+                    if (!autoSelectTriggered) {
+                        lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
+                    }
+                    searchSettled.complete(Unit)
+                }
+
+                val timeoutMs = timeoutSeconds * 1_000L
+                if (PlayerSettings.isBoundedTimeout(timeoutSeconds)) {
+                    // Wait for the timeout, resuming as soon as a stream is settled.
+                    withTimeoutOrNull(timeoutMs) { searchSettled.await() }
+                    timeoutElapsed = true
+                    if (!autoSelectTriggered) {
+                        val data = lastSuccessData
+                        if (data != null) {
+                            // Streams arrived: full select once. If nothing matches,
+                            // respect the timeout and stop (the caller shows the picker).
+                            trySelectStream(data)?.let { recordSelection(it) }
+                        } else {
+                            // No addon responded yet: keep waiting for the first usable
+                            // result, bounded so we never hang indefinitely.
+                            withTimeoutOrNull(timeoutMs) { searchSettled.await() }
+                            if (!autoSelectTriggered) {
+                                lastSuccessData?.let { trySelectStream(it)?.let { s -> recordSelection(s) } }
                             }
                         }
-                        is NetworkResult.Error -> lastError = result
-                        NetworkResult.Loading -> Unit
                     }
+                    innerJob.cancel()
+                } else if (timeoutSeconds == 0) {
+                    timeoutElapsed = true
+                    withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
+                    if (!autoSelectTriggered) {
+                        lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
+                    }
+                    innerJob.cancel()
+                } else {
+                    withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
+                    if (!autoSelectTriggered) {
+                        lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
+                    }
+                    innerJob.cancel()
                 }
-                // Every addon has responded: take whatever matched, then settle so
-                // the waiting code below resumes even if nothing was selected.
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
-                }
-                searchSettled.complete(Unit)
             }
 
-            val timeoutMs = timeoutSeconds * 1_000L
-            if (PlayerSettings.isBoundedTimeout(timeoutSeconds)) {
-                // Wait for the timeout, resuming as soon as a stream is settled.
-                withTimeoutOrNull(timeoutMs) { searchSettled.await() }
-                timeoutElapsed = true
-                if (!autoSelectTriggered) {
-                    val data = lastSuccessData
-                    if (data != null) {
-                        // Streams arrived: full select once. If nothing matches,
-                        // respect the timeout and stop (the caller shows the picker).
-                        trySelectStream(data)?.let { recordSelection(it) }
-                    } else {
-                        // No addon responded yet: keep waiting for the first usable
-                        // result, bounded so we never hang indefinitely.
-                        withTimeoutOrNull(timeoutMs) { searchSettled.await() }
-                        if (!autoSelectTriggered) {
-                            lastSuccessData?.let { trySelectStream(it)?.let { s -> recordSelection(s) } }
-                        }
-                    }
-                }
-                innerJob.cancel()
-            } else if (timeoutSeconds == 0) {
-                timeoutElapsed = true
-                withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
-                }
-                innerJob.cancel()
+            val streamToPlay = if (preResolvedAvailable && selectedStream == preResolvedNextStream) {
+                preResolvedNextStream
             } else {
-                withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
+                selectedStream?.let {
+                    resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
                 }
-                innerJob.cancel()
-            }
-
-            val streamToPlay = selectedStream?.let {
-                resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
             }
             if (streamToPlay != null) {
                 val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
-                for (remaining in 3 downTo 1) {
-                    _uiState.update { current ->
-                        val episodeForMode = current.nextEpisode ?: nextInfo
-                        current.copy(
-                            postPlayMode = PostPlayMode.AutoPlay(
-                                nextEpisode = episodeForMode,
-                                searching = false,
-                                sourceName = sourceName,
-                                countdownSec = remaining,
-                            ),
-                        )
+                if (!userInitiated) {
+                    for (remaining in 3 downTo 1) {
+                        _uiState.update { current ->
+                            val episodeForMode = current.nextEpisode ?: nextInfo
+                            current.copy(
+                                postPlayMode = PostPlayMode.AutoPlay(
+                                    nextEpisode = episodeForMode,
+                                    searching = false,
+                                    sourceName = sourceName,
+                                    countdownSec = remaining,
+                                ),
+                            )
+                        }
+                        delay(1000)
                     }
-                    delay(1000)
                 }
                 _uiState.update {
                     it.copy(
@@ -1896,6 +1911,121 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 )
             }
             showEpisodeStreamPicker(video = nextVideo, forceRefresh = false)
+        }
+    }
+}
+
+internal fun PlayerRuntimeController.preResolveNextEpisodeStreamIfNeeded(nextVideo: Video) {
+    val type = contentType ?: return
+    if (type.equals("cloud", ignoreCase = true)) return
+    val nextVideoId = nextVideo.id
+    if (preResolvedNextVideoId == nextVideoId && (preResolvedNextStream != null || preResolveNextEpisodeJob?.isActive == true)) {
+        return
+    }
+
+    preResolveNextEpisodeJob?.cancel()
+    preResolveNextVideoId = nextVideoId
+    preResolvedNextStream = null
+
+    preResolveNextEpisodeJob = scope.launch(Dispatchers.IO) {
+        try {
+            val playerSettings = playerSettingsDataStore.playerSettings.first()
+            val installedAddons = addonRepository.getInstalledAddons().first().enabledAddons()
+            val installedAddonOrder = installedAddons.map { it.displayName }
+
+            val shouldAutoSelectInManualMode =
+                playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL &&
+                    (playerSettings.streamAutoPlayNextEpisodeEnabled ||
+                        playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode)
+            val bingeGroupOnlyManualMode =
+                shouldAutoSelectInManualMode &&
+                    (!playerSettings.streamAutoPlayNextEpisodeEnabled ||
+                        !playerSettings.streamAutoPlayNextEpisodeFallbackEnabled) &&
+                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
+
+            val effectiveMode = if (shouldAutoSelectInManualMode) {
+                StreamAutoPlayMode.FIRST_STREAM
+            } else {
+                playerSettings.streamAutoPlayMode
+            }
+            val effectiveSource = if (shouldAutoSelectInManualMode) {
+                StreamAutoPlaySource.ALL_SOURCES
+            } else {
+                playerSettings.streamAutoPlaySource
+            }
+            val effectiveSelectedAddons = if (shouldAutoSelectInManualMode) {
+                emptySet()
+            } else {
+                playerSettings.streamAutoPlaySelectedAddons
+            }
+            val effectiveSelectedPlugins = if (shouldAutoSelectInManualMode) {
+                emptySet()
+            } else {
+                playerSettings.streamAutoPlaySelectedPlugins
+            }
+            val effectiveRegex = if (shouldAutoSelectInManualMode) {
+                ""
+            } else {
+                playerSettings.streamAutoPlayRegex
+            }
+
+            streamRepository.getStreamsFromAllAddons(
+                type = type,
+                videoId = nextVideo.id,
+                season = nextVideo.season,
+                episode = nextVideo.episode
+            ).takeWhile { preResolvedNextStream == null }.collect { result ->
+                if (result is NetworkResult.Success && result.data.isNotEmpty()) {
+                    val ordered = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                    val all = ordered.flatMap { it.streams }
+
+                    val match = if (currentStreamBingeGroup != null && playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) {
+                        StreamAutoPlaySelector.selectAutoPlayStream(
+                            streams = all,
+                            mode = effectiveMode,
+                            regexPattern = effectiveRegex,
+                            source = effectiveSource,
+                            installedAddonNames = installedAddonOrder.toSet(),
+                            selectedAddons = effectiveSelectedAddons,
+                            selectedPlugins = effectiveSelectedPlugins,
+                            preferredBingeGroup = currentStreamBingeGroup,
+                            preferBingeGroupInSelection = true,
+                            bingeGroupOnly = bingeGroupOnlyManualMode
+                        )
+                    } else null
+
+                    val fallbackMatch = if (match == null && !bingeGroupOnlyManualMode && effectiveMode != StreamAutoPlayMode.MANUAL) {
+                        StreamAutoPlaySelector.selectAutoPlayStream(
+                            streams = all,
+                            mode = effectiveMode,
+                            regexPattern = effectiveRegex,
+                            source = effectiveSource,
+                            installedAddonNames = installedAddonOrder.toSet(),
+                            selectedAddons = effectiveSelectedAddons,
+                            selectedPlugins = effectiveSelectedPlugins,
+                            preferredBingeGroup = null,
+                            preferBingeGroupInSelection = false,
+                            bingeGroupOnly = false
+                        )
+                    } else null
+
+                    val candidate = match ?: fallbackMatch
+                    if (candidate != null) {
+                        val resolved = resolveDirectDebridStreamIfNeeded(candidate, nextVideo.season, nextVideo.episode)
+                        if (resolved != null && preResolvedNextVideoId == nextVideoId) {
+                            preResolvedNextStream = resolved
+                            Log.i(
+                                PlayerRuntimeController.TAG,
+                                "PRE_RESOLVE: Next episode (${nextVideo.id}) pre-resolved successfully: ${resolved.name ?: resolved.addonName}"
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            // Normal flow
+        } catch (e: Throwable) {
+            Log.w(PlayerRuntimeController.TAG, "PRE_RESOLVE: Failed to pre-resolve next episode: ${e.message}")
         }
     }
 }
@@ -1972,3 +2102,56 @@ private fun PlayerRuntimeController.playNextCloudLibraryFile(
         }
     }
 }
+
+@androidx.annotation.OptIn(UnstableApi::class)
+internal fun PlayerRuntimeController.switchToLiveTvChannel(channel: com.nuvio.tv.core.livetv.LiveTvChannel) {
+    val url = channel.streamUrl
+    if (url.isNullOrBlank()) {
+        com.nuvio.tv.core.livetv.LiveTvManager.tuneToChannel(context, channel)
+        return
+    }
+
+    stopTorrentStream()
+    nextEpisodeAutoPlayJob?.cancel()
+    nextEpisodeAutoPlayJob = null
+    preResolveNextEpisodeJob?.cancel()
+    preResolveNextEpisodeJob = null
+    preResolvedNextStream = null
+    preResolvedNextVideoId = null
+
+    flushPlaybackSnapshotForSwitchOrExit()
+    resetLoadingOverlayForNewStream()
+    releasePlayer(flushPlaybackState = false)
+
+    currentStreamUrl = url
+    currentHeaders = emptyMap()
+    currentVideoId = channel.id
+
+    hasRetriedCurrentStreamAfter416 = false
+    resetErrorRetryState()
+    hasRetriedCurrentStreamAfterUnexpectedNpe = false
+    hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
+    lastSavedPosition = 0L
+
+    _uiState.update {
+        it.copy(
+            isBuffering = true,
+            error = null,
+            title = channel.name,
+            contentName = channel.currentProgram.title,
+            contentType = "live",
+            poster = channel.currentProgram.posterUrl,
+            backdrop = channel.currentProgram.backdropUrl,
+            currentStreamName = channel.name,
+            currentStreamUrl = url,
+            showLiveTvMiniGuide = false,
+            showControls = false
+        )
+    }
+
+    initializePlayer(url, emptyMap())
+}
+

@@ -55,6 +55,8 @@ object NuvioExoPlayerPerformanceHelper {
     const val DEFAULT_NUVIO_BACK_BUFFER_MS = 1_500
     const val DEFAULT_NUVIO_INITIAL_BITRATE_ESTIMATE = 50_000_000L     // 50 Mbps
     const val DEFAULT_NUVIO_CONNECTION_POOL_SIZE = 8
+    const val DEFAULT_NUVIO_BUFFER_FOR_PLAYBACK_MS = 1_000
+    const val DEFAULT_NUVIO_BUFFER_FOR_REBUFFER_MS = 2_000
 
     // ─── Customization Variables ──────────────────────────────────────────────
     @Volatile
@@ -64,10 +66,10 @@ object NuvioExoPlayerPerformanceHelper {
     var maxBufferMs: Int = DEFAULT_NUVIO_MAX_BUFFER_MS
 
     @Volatile
-    var bufferForPlaybackMs: Int = 3_000
+    var bufferForPlaybackMs: Int = DEFAULT_NUVIO_BUFFER_FOR_PLAYBACK_MS
 
     @Volatile
-    var bufferForPlaybackAfterRebufferMs: Int = 3_000
+    var bufferForPlaybackAfterRebufferMs: Int = DEFAULT_NUVIO_BUFFER_FOR_REBUFFER_MS
 
     @Volatile
     var backBufferMs: Int = DEFAULT_NUVIO_BACK_BUFFER_MS
@@ -94,8 +96,20 @@ object NuvioExoPlayerPerformanceHelper {
         
         minBufferMs = if (customBuffers) bufferSettings.minBufferMs else DEFAULT_NUVIO_MIN_BUFFER_MS
         maxBufferMs = if (customBuffers) bufferSettings.maxBufferMs else DEFAULT_NUVIO_MAX_BUFFER_MS
-        bufferForPlaybackMs = if (customBuffers) bufferSettings.bufferForPlaybackMs else 3_000
-        bufferForPlaybackAfterRebufferMs = if (customBuffers) bufferSettings.bufferForPlaybackAfterRebufferMs else 3_000
+        bufferForPlaybackMs = if (settings.nuvioPerformanceModeEnabled) {
+            bufferSettings.bufferForPlaybackMs.coerceAtMost(1_500).coerceAtLeast(1_000)
+        } else if (customBuffers) {
+            bufferSettings.bufferForPlaybackMs
+        } else {
+            DEFAULT_NUVIO_BUFFER_FOR_PLAYBACK_MS
+        }
+        bufferForPlaybackAfterRebufferMs = if (settings.nuvioPerformanceModeEnabled) {
+            bufferSettings.bufferForPlaybackAfterRebufferMs.coerceAtMost(2_000).coerceAtLeast(1_000)
+        } else if (customBuffers) {
+            bufferSettings.bufferForPlaybackAfterRebufferMs
+        } else {
+            DEFAULT_NUVIO_BUFFER_FOR_REBUFFER_MS
+        }
         backBufferMs = if (customBuffers) bufferSettings.backBufferDurationMs else DEFAULT_NUVIO_BACK_BUFFER_MS
 
         val safeLimitMb = getSafeNativeMemoryLimitMb(context)

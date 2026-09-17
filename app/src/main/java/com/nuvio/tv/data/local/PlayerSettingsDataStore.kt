@@ -1705,7 +1705,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 val safeLimitMb = NuvioExoPlayerPerformanceHelper.getSafeNativeMemoryLimitMb(context)
                 prefs[minBufferMsKey] = 200_000
                 prefs[maxBufferMsKey] = 280_000
-                prefs[bufferForPlaybackMsKey] = 1_500
+                prefs[bufferForPlaybackMsKey] = 1_000
                 prefs[bufferForPlaybackAfterRebufferMsKey] = 1_500
                 prefs[targetBufferSizeMbKey] = safeLimitMb
                 prefs[backBufferDurationMsKey] = 12_000

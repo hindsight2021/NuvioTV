@@ -383,6 +383,10 @@ internal fun PlayerRuntimeController.resetPostPlayOverlayState(clearEpisode: Boo
     }
     if (clearEpisode) {
         nextEpisodeVideo = null
+        preResolveNextEpisodeJob?.cancel()
+        preResolveNextEpisodeJob = null
+        preResolvedNextStream = null
+        preResolvedNextVideoId = null
     }
 }
 
@@ -415,6 +419,14 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         }
         return
     }
+
+    // Pre-resolve next episode stream in background when approaching the end (within 90s)
+    val effectiveDuration = effectiveDurationEarly
+    val remainingMs = effectiveDuration - positionMs
+    if (state.nextEpisode.hasAired && remainingMs in 1..90_000L) {
+        preResolveNextEpisodeStreamIfNeeded(nextEpisodeVideo!!)
+    }
+
     if (state.postPlayMode != null || state.postPlayDismissedForCurrentEpisode) return
 
     val effectiveDuration = effectiveDurationEarly

@@ -148,7 +148,9 @@ fun ModernHomeContent(
     scrollToTopTrigger: Int = 0,
     onRequestLazyCatalogLoad: (String) -> Unit = {},
     onRowItemFocusedCallback: (String, Int, Boolean) -> Unit = { _, _, _ -> },
-    blockLeftOnFirstExpandedItem: Boolean = false
+    blockLeftOnFirstExpandedItem: Boolean = false,
+    topTabRowFocusRequester: FocusRequester? = null,
+    heroFocusRequester: FocusRequester? = null
 ) {
     val onRowItemFocusedPassedDown = rememberUpdatedState(onRowItemFocusedCallback)
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
@@ -1249,6 +1251,8 @@ fun ModernHomeContent(
                 isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                 heroInLandscapeEnabled = uiState.heroInLandscapeEnabled,
                 heroItems = effectiveHeroList.asStable(),
+                heroFocusRequester = heroFocusRequester,
+                topTabRowFocusRequester = topTabRowFocusRequester,
                 onActiveHeroItemChange = { activeHeroBannerItem = it },
                 onHeroItemClick = { item -> onNavigateToDetail(item.id, item.apiType, "") },
                 showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,

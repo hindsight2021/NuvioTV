@@ -271,6 +271,8 @@ fun PlayerScreen(
             returnToDetailsFromEndPrompt()
         } else if (uiState.error != null) {
             exitPlayerFromError()
+        } else if (uiState.showLiveTvMiniGuide) {
+            viewModel.onEvent(PlayerEvent.OnDismissLiveTvMiniGuide)
         } else if (uiState.showAudioOverlay || uiState.showSubtitleOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay)
         } else if (uiState.showStreamInfoOverlay) {
@@ -684,6 +686,7 @@ fun PlayerScreen(
                         uiState.showSubtitleStylePanel || uiState.showSpeedDialog ||
                         uiState.showSubtitleDelayOverlay || uiState.showSubtitleTimingDialog ||
                         uiState.showMoreDialog ||
+                        uiState.showLiveTvMiniGuide ||
                         shouldConfirmNextEpisodeOnEnd ||
                         uiState.postPlayMode is PostPlayMode.StillWatching ||
                         postPlayRecommendationState.isVisible ||
@@ -733,8 +736,30 @@ fun PlayerScreen(
                                 false
                             }
                         }
+                        KeyEvent.KEYCODE_CHANNEL_UP -> {
+                            if (uiState.isLiveContent) {
+                                com.nuvio.tv.core.livetv.LiveTvManager.getAdjacentChannel(uiState.currentVideoId.orEmpty(), forward = true)?.let { nextChannel ->
+                                    viewModel.onEvent(PlayerEvent.OnLiveTvChannelSelected(nextChannel))
+                                }
+                                return@onKeyEvent true
+                            }
+                            false
+                        }
+                        KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                            if (uiState.isLiveContent) {
+                                com.nuvio.tv.core.livetv.LiveTvManager.getAdjacentChannel(uiState.currentVideoId.orEmpty(), forward = false)?.let { prevChannel ->
+                                    viewModel.onEvent(PlayerEvent.OnLiveTvChannelSelected(prevChannel))
+                                }
+                                return@onKeyEvent true
+                            }
+                            false
+                        }
                         KeyEvent.KEYCODE_DPAD_LEFT,
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (uiState.isLiveContent && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !uiState.showControls) {
+                                viewModel.onEvent(PlayerEvent.OnShowLiveTvMiniGuide)
+                                return@onKeyEvent true
+                            }
                             val overlayButtonsCoexist = skipButtonActuallyVisible &&
                                 uiState.postPlayMode is PostPlayMode.AutoPlay
                             if (!uiState.showControls && !overlayButtonsCoexist) {
@@ -1551,6 +1576,17 @@ fun PlayerScreen(
                 )
             }
         }
+
+        // Live TV Mini Guide Overlay
+        LiveTvMiniGuideOverlay(
+            visible = uiState.showLiveTvMiniGuide,
+            onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissLiveTvMiniGuide) },
+            onSelectChannel = { channel -> viewModel.onEvent(PlayerEvent.OnLiveTvChannelSelected(channel)) },
+            currentChannelId = uiState.currentVideoId,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2.6f)
+        )
 
         // Audio track dialog
         AudioSelectionOverlay(

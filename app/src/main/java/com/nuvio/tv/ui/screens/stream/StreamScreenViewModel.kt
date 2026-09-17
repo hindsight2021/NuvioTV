@@ -704,33 +704,58 @@ class StreamScreenViewModel @Inject constructor(
                                         }
                                     }
                                 }
-                            } else if (directFlowActive && persistedBingeGroup != null) {
-                                // Before timeout: eagerly check binge group only
-                                // (no fallback to FIRST_STREAM/REGEX yet). If a
-                                // match is found we can start playback immediately
-                                // without waiting for the full timeout.
+                            } else if (directFlowActive) {
+                                // Before timeout:
+                                // 1. Eagerly check binge group match first if available
                                 val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
                                     result.data, installedAddonOrder
                                 )
                                 val allStreams = orderedStreams.flatMap { it.streams }
-                                val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(
-                                    streams = allStreams,
-                                    mode = playerSettings.streamAutoPlayMode,
-                                    regexPattern = playerSettings.streamAutoPlayRegex,
-                                    source = playerSettings.streamAutoPlaySource,
-                                    installedAddonNames = installedAddonOrder.toSet(),
-                                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
-                                    preferredBingeGroup = persistedBingeGroup,
-                                    preferBingeGroupInSelection = true,
-                                    bingeGroupOnly = true
-                                )
-                                if (earlyMatch != null) {
+                                val earlyMatch = if (persistedBingeGroup != null) {
+                                    StreamAutoPlaySelector.selectAutoPlayStream(
+                                        streams = allStreams,
+                                        mode = playerSettings.streamAutoPlayMode,
+                                        regexPattern = playerSettings.streamAutoPlayRegex,
+                                        source = playerSettings.streamAutoPlaySource,
+                                        installedAddonNames = installedAddonOrder.toSet(),
+                                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                        selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                                        preferredBingeGroup = persistedBingeGroup,
+                                        preferBingeGroupInSelection = true,
+                                        bingeGroupOnly = true
+                                    )
+                                } else null
+
+                                // 2. Early High-Quality Settle:
+                                // If no binge match or new content, but the user's top-priority addon
+                                // has emitted results and matches their autoplay profile with a playable stream,
+                                // settle immediately instead of stalling through the bounded timeout delay.
+                                val highQualityMatch = if (earlyMatch == null && playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
+                                    val topAddon = installedAddonOrder.firstOrNull()
+                                    val topAddonEmitted = topAddon == null || result.data.any { it.addonName == topAddon }
+                                    if (topAddonEmitted) {
+                                        StreamAutoPlaySelector.selectAutoPlayStream(
+                                            streams = allStreams,
+                                            mode = playerSettings.streamAutoPlayMode,
+                                            regexPattern = playerSettings.streamAutoPlayRegex,
+                                            source = playerSettings.streamAutoPlaySource,
+                                            installedAddonNames = installedAddonOrder.toSet(),
+                                            selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                            selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                                            preferredBingeGroup = null,
+                                            preferBingeGroupInSelection = false,
+                                            bingeGroupOnly = false
+                                        )
+                                    } else null
+                                } else null
+
+                                val matchToUse = earlyMatch ?: highQualityMatch
+                                if (matchToUse != null) {
                                     resolvedAutoPlayTarget = true
                                     autoSelectTriggered = true
                                     updateUiStateIfChanged {
                                         it.copy(
-                                            autoPlayStream = earlyMatch,
+                                            autoPlayStream = matchToUse,
                                             showDirectAutoPlayOverlay = true
                                         )
                                     }

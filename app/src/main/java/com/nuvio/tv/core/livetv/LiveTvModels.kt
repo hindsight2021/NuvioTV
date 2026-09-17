@@ -45,5 +45,8 @@ data class LiveTvChannel(
     val logoText: String,
     val accentColorHex: String = "#0055A5", // Classic Canadian Bell blue
     val currentProgram: LiveProgram,
-    val nextProgram: LiveProgram? = null
+    val nextProgram: LiveProgram? = null,
+    val streamUrl: String? = null,
+    val logoUrl: String? = null,
+    val isCustom: Boolean = false
 )

@@ -13,6 +13,11 @@ import java.util.Calendar
 object LiveTvManager {
     private const val TAG = "LiveTvManager"
     const val BELL_PACKAGE = "com.quickplay.android.bellmediaplayer"
+    private const val PREFS_NAME = "nuvio_livetv_prefs"
+    private const val KEY_CUSTOM_M3U = "custom_m3u_content"
+
+    private val _customChannels = MutableStateFlow<List<LiveTvChannel>>(emptyList())
+    val customChannels: StateFlow<List<LiveTvChannel>> = _customChannels.asStateFlow()
 
     private val _channels = MutableStateFlow<List<LiveTvChannel>>(emptyList())
     val channels: StateFlow<List<LiveTvChannel>> = _channels.asStateFlow()
@@ -357,7 +362,8 @@ object LiveTvManager {
                     startTimestampMs = slotStart,
                     endTimestampMs = slotEnd + 30 * 60_000L,
                     genre = "Nouvelles"
-                )
+                ),
+                streamUrl = "https://cbcrclive2.akamaized.net/hls/live/2043167/cbtn/master.m3u8"
             ),
             LiveTvChannel(
                 id = "1802",
@@ -378,7 +384,7 @@ object LiveTvManager {
             )
         )
 
-        _channels.value = list
+        _channels.value = list + _customChannels.value
     }
 
     fun tuneToChannel(context: Context, channel: LiveTvChannel) {
@@ -454,5 +460,152 @@ object LiveTvManager {
         }
 
         Toast.makeText(context, "Could not open Bell Fibe TV app", Toast.LENGTH_LONG).show()
+    }
+
+    fun getChannelById(id: String): LiveTvChannel? {
+        return _channels.value.firstOrNull { it.id == id }
+    }
+
+    fun getAdjacentChannel(currentId: String, forward: Boolean): LiveTvChannel? {
+        val list = _channels.value
+        if (list.isEmpty()) return null
+        val idx = list.indexOfFirst { it.id == currentId }
+        if (idx == -1) return list.firstOrNull()
+        val targetIdx = if (forward) {
+            (idx + 1) % list.size
+        } else {
+            if (idx - 1 < 0) list.size - 1 else idx - 1
+        }
+        return list.getOrNull(targetIdx)
+    }
+
+    fun setCustomChannels(custom: List<LiveTvChannel>) {
+        _customChannels.value = custom
+        refreshChannels()
+    }
+
+    fun loadCustomM3uFromPrefs(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val m3u = prefs.getString(KEY_CUSTOM_M3U, null)
+            if (!m3u.isNullOrBlank()) {
+                val parsed = parseM3u(m3u)
+                if (parsed.isNotEmpty()) {
+                    _customChannels.value = parsed
+                    refreshChannels()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading saved custom M3U: ${e.message}")
+        }
+    }
+
+    fun saveCustomM3uToPrefs(context: Context, m3uContent: String): Int {
+        return try {
+            val parsed = parseM3u(m3uContent)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_CUSTOM_M3U, m3uContent).apply()
+            _customChannels.value = parsed
+            refreshChannels()
+            parsed.size
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving custom M3U: ${e.message}")
+            0
+        }
+    }
+
+    fun parseM3u(content: String): List<LiveTvChannel> {
+        val channels = mutableListOf<LiveTvChannel>()
+        val attributeRegex = Regex("""([A-Za-z0-9\-]+)\s*=\s*"([^"]*)"""")
+        var pendingAttributes: Map<String, String>? = null
+        var pendingName: String? = null
+
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance()
+        val currentMin = cal.get(Calendar.MINUTE)
+        val slotStart = now - (currentMin % 30) * 60_000L
+        val slotEnd = slotStart + 30 * 60_000L
+
+        for (rawLine in content.lineSequence()) {
+            val line = rawLine.trim()
+            if (line.isEmpty()) continue
+
+            when {
+                line.startsWith("#EXTINF", ignoreCase = true) -> {
+                    val attributes = attributeRegex.findAll(line)
+                        .associate { it.groupValues[1].lowercase() to it.groupValues[2].trim() }
+
+                    val commaIndex = line.lastIndexOf(',')
+                    val name = if (commaIndex >= 0 && commaIndex < line.length - 1) {
+                        line.substring(commaIndex + 1).trim()
+                    } else {
+                        ""
+                    }
+
+                    pendingAttributes = attributes
+                    pendingName = name.ifEmpty { attributes["tvg-name"].orEmpty() }
+                }
+
+                line.startsWith("#") -> {
+                    // Ignore metadata comment lines
+                }
+
+                else -> {
+                    val attributes = pendingAttributes ?: continue
+                    val name = pendingName.orEmpty().ifEmpty { "Channel ${channels.size + 1}" }
+
+                    val groupTitle = attributes["group-title"].orEmpty()
+                    val category = mapGroupTitleToCategory(groupTitle)
+
+                    val currentProgram = LiveProgram(
+                        title = "$name Live",
+                        description = "Live broadcast on $name",
+                        genre = groupTitle.ifEmpty { category.displayName },
+                        startTimestampMs = slotStart,
+                        endTimestampMs = slotEnd + 30 * 60_000L
+                    )
+
+                    val chNo = attributes["tvg-chno"]?.ifBlank { null }
+                        ?: attributes["channel-number"]?.ifBlank { null }
+                        ?: (2000 + channels.size).toString()
+
+                    val callSign = attributes["tvg-id"]?.ifBlank { null }
+                        ?: name.take(6).uppercase().trim()
+                    val logoText = callSign.take(5)
+
+                    channels += LiveTvChannel(
+                        id = attributes["tvg-id"]?.ifBlank { null } ?: "m3u_${channels.size}_${name.hashCode()}",
+                        number = chNo,
+                        name = name,
+                        callSign = callSign,
+                        category = category,
+                        logoText = logoText,
+                        accentColorHex = "#0055A5",
+                        currentProgram = currentProgram,
+                        streamUrl = line,
+                        logoUrl = attributes["tvg-logo"]?.ifBlank { null },
+                        isCustom = true
+                    )
+
+                    pendingAttributes = null
+                    pendingName = null
+                }
+            }
+        }
+
+        return channels
+    }
+
+    private fun mapGroupTitleToCategory(groupTitle: String): LiveTvCategory {
+        val normalized = groupTitle.lowercase()
+        return when {
+            normalized.contains("sport") -> LiveTvCategory.SPORTS
+            normalized.contains("news") -> LiveTvCategory.NEWS
+            normalized.contains("movie") || normalized.contains("film") || normalized.contains("cinema") ->
+                LiveTvCategory.MOVIES
+            normalized.contains("french") || normalized.contains("français") || normalized.contains("francais") ->
+                LiveTvCategory.FRENCH
+            else -> LiveTvCategory.ENTERTAINMENT
+        }
     }
 }

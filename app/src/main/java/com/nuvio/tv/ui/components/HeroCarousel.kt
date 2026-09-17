@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -84,6 +85,8 @@ fun HeroCarousel(
     onItemFocus: (MetaPreview) -> Unit = {},
     onActiveItemChanged: (MetaPreview) -> Unit = {},
     focusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     showImdbRatings: Boolean = true,
     showBackdrop: Boolean = true,
     fullWidth: Dp = Dp.Unspecified,
@@ -131,6 +134,14 @@ fun HeroCarousel(
             )
             .height(400.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(
+                if (upFocusRequester != null || downFocusRequester != null) {
+                    Modifier.focusProperties {
+                        if (upFocusRequester != null) up = upFocusRequester
+                        if (downFocusRequester != null) down = downFocusRequester
+                    }
+                } else Modifier
+            )
             .onFocusChanged {
                 isFocused = it.hasFocus || it.isFocused
             }

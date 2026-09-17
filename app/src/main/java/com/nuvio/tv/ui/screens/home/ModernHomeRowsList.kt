@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.focusGroup
@@ -149,6 +151,7 @@ internal fun ModernHomeRowsList(
     heroInLandscapeEnabled: Boolean = false,
     heroItems: StableList<MetaPreview> = StableList(),
     heroFocusRequester: FocusRequester? = null,
+    topTabRowFocusRequester: FocusRequester? = null,
     onActiveHeroItemChange: ((MetaPreview) -> Unit)? = null,
     onHeroItemClick: ((MetaPreview) -> Unit)? = null,
     showImdbRatings: Boolean = true,
@@ -379,10 +382,14 @@ internal fun ModernHomeRowsList(
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl)
         ) {
             if (heroInLandscapeEnabled && heroItems.list.isNotEmpty()) {
+                val firstRowKey = carouselRows.list.firstOrNull()?.key
+                val firstRowFocusReq = firstRowKey?.let { rowFocusRequesters.getOrPut(it) { FocusRequester() } }
                 item(key = "hero_carousel", contentType = "hero") {
                     HeroCarousel(
                         items = heroItems,
                         focusRequester = heroFocusRequester,
+                        upFocusRequester = topTabRowFocusRequester,
+                        downFocusRequester = firstRowFocusReq,
                         showImdbRatings = showImdbRatings,
                         showBackdrop = false,
                         animatedBackgroundMode = animatedBackgroundMode,
@@ -404,7 +411,10 @@ internal fun ModernHomeRowsList(
                 items = carouselRows.list,
                 key = { index, row -> "${row.key}_$index" },
                 contentType = { _, row -> row.apiType ?: "modern_home_row" }
-            ) { _, row ->
+            ) { index, row ->
+                val upFocusTarget = if (index == 0) {
+                    if (heroInLandscapeEnabled && heroItems.list.isNotEmpty()) heroFocusRequester else topTabRowFocusRequester
+                } else null
                 val stableOnContinueWatchingOptions = remember(onContinueWatchingOptions) {
                     { item: ContinueWatchingItem -> onContinueWatchingOptions(item) }
                 }
@@ -509,7 +519,8 @@ internal fun ModernHomeRowsList(
                     isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                     itemFocusRequesters = stableItemFocusRequestersByRow.getOrPut(row.key) {
                         StableRef(mutableMapOf())
-                    }
+                    },
+                    modifier = if (upFocusTarget != null) Modifier.focusProperties { up = upFocusTarget } else Modifier
                 )
             }
         }

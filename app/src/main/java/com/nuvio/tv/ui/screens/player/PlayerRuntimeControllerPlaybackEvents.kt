@@ -1611,6 +1611,15 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSourceStreamSelected -> {
             switchToSourceStream(event.stream)
         }
+        PlayerEvent.OnShowLiveTvMiniGuide -> {
+            _uiState.update { it.copy(showLiveTvMiniGuide = true, showControls = false) }
+        }
+        PlayerEvent.OnDismissLiveTvMiniGuide -> {
+            _uiState.update { it.copy(showLiveTvMiniGuide = false) }
+        }
+        is PlayerEvent.OnLiveTvChannelSelected -> {
+            switchToLiveTvChannel(event.channel)
+        }
         PlayerEvent.OnDismissTransientOverlay -> {
             _uiState.update {
                 it.copy(
@@ -1620,7 +1629,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     showSubtitleTimingDialog = false,
                     showSpeedDialog = false,
                     showSubtitleDelayOverlay = false,
-                    showMoreDialog = false
+                    showMoreDialog = false,
+                    showLiveTvMiniGuide = false
                 )
             }
             scheduleHideControls()

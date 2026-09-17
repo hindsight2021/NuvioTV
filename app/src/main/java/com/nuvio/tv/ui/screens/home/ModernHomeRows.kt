@@ -472,7 +472,8 @@ internal fun ModernRowSection(
     onBackdropInteraction: () -> Unit,
     onExpandedCatalogFocusKeyChange: (String?) -> Unit,
     sharedPlaceholderShimmerOffsetState: State<Float>?,
-    itemFocusRequesters: StableRef<MutableMap<Int, FocusRequester>> = StableRef(mutableMapOf())
+    itemFocusRequesters: StableRef<MutableMap<Int, FocusRequester>> = StableRef(mutableMapOf()),
+    modifier: Modifier = Modifier
 ) {
     // Unwrap StableRef wrappers
     @Suppress("NAME_SHADOWING") val focusedItemByRow = focusedItemByRow.value
@@ -514,7 +515,7 @@ internal fun ModernRowSection(
         pinSpent.value = true
     }
     Column(
-        modifier = Modifier.then(
+        modifier = modifier.then(
             if (blockingFocusExit.value) {
                 Modifier.focusProperties {
                     up = FocusRequester.Cancel
