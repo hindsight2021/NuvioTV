@@ -17,6 +17,8 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
 
     initialPlaybackStarted = true
 
+    com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, currentVideoId)
+
     // Persist binge group from navigation args so that subsequent plays
     // (from CW, Details, or next-episode) can reuse the same source group.
     val bg = navigationArgs.bingeGroup

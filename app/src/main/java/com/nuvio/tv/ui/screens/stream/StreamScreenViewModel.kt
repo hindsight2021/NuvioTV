@@ -159,6 +159,10 @@ class StreamScreenViewModel @Inject constructor(
         )
     )
     val uiState: StateFlow<StreamScreenUiState> = _uiState.asStateFlow()
+
+    init {
+        com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
+    }
     val streamBadgeSettings = streamBadgeSettingsDataStore.settings
 
     val playerPreference = playerSettingsDataStore.playerSettings
@@ -1677,7 +1681,9 @@ class StreamScreenViewModel @Inject constructor(
                 com.nuvio.tv.core.player.resolveExternalNextEpisodeSnapshot(
                     videos = videos,
                     currentSeason = metadata.season,
-                    currentEpisode = metadata.episode
+                    currentEpisode = metadata.episode,
+                    contentId = metadata.contentId,
+                    currentVideoId = videoId
                 )
             },
             context = context
@@ -1816,8 +1822,9 @@ class StreamScreenViewModel @Inject constructor(
                 duration = effectiveDuration,
                 lastWatched = System.currentTimeMillis()
             )
-            val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
-            if (isChannel) {
+            val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, videoId) &&
+                com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
+            if (isChannelShuffle) {
                 val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
                 if (!trackInCw) {
                     Log.d(TAG, "Skipping external player progress save for channel/shuffle mode")

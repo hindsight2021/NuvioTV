@@ -183,6 +183,45 @@ object PlaylistManager {
         _channelMode.value = ChannelMode.NONE
     }
 
+    /**
+     * Determines whether the given content/video belongs to the currently active channel queue.
+     *
+     * Returns false when:
+     * - no channel mode is active,
+     * - the queue is empty,
+     * - or both [contentId] and [videoId] are null/blank.
+     *
+     * Otherwise returns true if any queued item matches the provided [videoId] or [contentId].
+     */
+    fun isChannelActiveFor(contentId: String?, videoId: String?): Boolean {
+        if (_channelMode.value == ChannelMode.NONE || _queue.value.isEmpty()) return false
+
+        val hasContentId = !contentId.isNullOrBlank()
+        val hasVideoId = !videoId.isNullOrBlank()
+
+        if (!hasContentId && !hasVideoId) return false
+
+        return _queue.value.any { item ->
+            (hasVideoId && item.videoId == videoId) ||
+                (hasContentId && item.contentId == contentId)
+        }
+    }
+
+    /**
+     * Clears the playlist if a channel mode is active but the given content/video
+     * does not belong to the current channel queue.
+     */
+    fun clearIfNotInChannel(contentId: String?, videoId: String?) {
+        if (_channelMode.value != ChannelMode.NONE && !isChannelActiveFor(contentId, videoId)) {
+            Log.d(
+                TAG,
+                "Active channel mode ${_channelMode.value} cleared because content " +
+                    "($contentId / $videoId) does not belong to channel queue"
+            )
+            clear()
+        }
+    }
+
     fun saveNamedPlaylist(context: Context, name: String) {
         try {
             val dir = File(context.filesDir, "playlists").apply { mkdirs() }

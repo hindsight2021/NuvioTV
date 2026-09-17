@@ -327,7 +327,9 @@ class PlayerViewModel @Inject constructor(
                 com.nuvio.tv.core.player.resolveExternalNextEpisodeSnapshot(
                     videos = videos,
                     currentSeason = metadata.season,
-                    currentEpisode = metadata.episode
+                    currentEpisode = metadata.episode,
+                    contentId = metadata.contentId,
+                    currentVideoId = metadata.videoId
                 )
             }
 

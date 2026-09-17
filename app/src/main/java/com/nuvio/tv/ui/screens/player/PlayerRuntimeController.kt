@@ -684,6 +684,9 @@ class PlayerRuntimeController(
         sourceStreamsScope = null
         episodeStreamsScope?.cancel()
         episodeStreamsScope = null
+        if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+            com.nuvio.tv.core.playlist.PlaylistManager.clear()
+        }
     }
 
 }

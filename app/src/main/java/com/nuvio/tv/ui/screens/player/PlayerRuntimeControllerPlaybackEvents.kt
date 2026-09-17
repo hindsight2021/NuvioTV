@@ -730,8 +730,9 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
     )
 
     scope.launch(kotlinx.coroutines.NonCancellable) {
-        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
-        if (isChannel) {
+        val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(progress.contentId, progress.videoId) &&
+            com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
+        if (isChannelShuffle) {
             val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
             if (!trackInCw) {
                 return@launch
@@ -843,8 +844,9 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     val requestGeneration = ++scrobbleStartRequestGeneration
     logScrobbleDiagnostic("start_queued", "requestGeneration=$requestGeneration")
     scope.launch {
-        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
-        if (isChannel) {
+        val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId) &&
+            com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
+        if (isChannelShuffle) {
             val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
             if (!trackInCw) return@launch
         }
@@ -901,8 +903,9 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
     val percent = provided ?: currentPlaybackProgressPercent()
     logScrobbleDiagnostic("stop_queued", "progress=$percent")
     scope.launch(kotlinx.coroutines.NonCancellable) {
-        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
-        if (isChannel) {
+        val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId) &&
+            com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
+        if (isChannelShuffle) {
             val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
             if (!trackInCw) return@launch
         }
@@ -941,8 +944,9 @@ internal fun PlayerRuntimeController.emitScrobblePause(progressPercent: Float? =
     }
     logScrobbleDiagnostic("pause_queued", "progress=$percent")
     scope.launch(kotlinx.coroutines.NonCancellable) {
-        val isChannel = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
-        if (isChannel) {
+        val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId) &&
+            com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
+        if (isChannelShuffle) {
             val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
             if (!trackInCw) return@launch
         }

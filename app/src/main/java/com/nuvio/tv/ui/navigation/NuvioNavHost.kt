@@ -243,6 +243,7 @@ private fun PlaybackNavHost(
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@onContinueWatchingClick
                     }
+                    com.nuvio.tv.core.playlist.PlaylistManager.clear()
                     navController.navigate(createContinueWatchingRoute(item))
                 },
                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning@{ item ->
@@ -250,6 +251,7 @@ private fun PlaybackNavHost(
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@onContinueWatchingStartFromBeginning
                     }
+                    com.nuvio.tv.core.playlist.PlaylistManager.clear()
                     navController.navigate(
                         createContinueWatchingRoute(item, startFromBeginning = true)
                     )
@@ -259,6 +261,7 @@ private fun PlaybackNavHost(
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@onContinueWatchingPlayManually
                     }
+                    com.nuvio.tv.core.playlist.PlaylistManager.clear()
                     navController.navigate(
                         createContinueWatchingRoute(item, manualSelection = true)
                     )
@@ -371,6 +374,7 @@ private fun PlaybackNavHost(
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
                 onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
+                    com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
                     navController.navigate(
                         Screen.Stream.createRoute(
                             videoId = videoId,
@@ -393,6 +397,7 @@ private fun PlaybackNavHost(
                     )
                 },
                 onPlayManuallyClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
+                    com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
                     navController.navigate(
                         Screen.Stream.createRoute(
                             videoId = videoId,
@@ -416,6 +421,7 @@ private fun PlaybackNavHost(
                     )
                 },
                 onPlayStartFromBeginningClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
+                    com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
                     navController.navigate(
                         Screen.Stream.createRoute(
                             videoId = videoId,

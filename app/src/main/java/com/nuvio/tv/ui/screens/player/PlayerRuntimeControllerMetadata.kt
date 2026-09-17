@@ -256,12 +256,12 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         return
     }
 
-    val isChannelActive = com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE
+    val isChannelActive = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId)
     val playlistNextVideo = if (isChannelActive) {
         val q = com.nuvio.tv.core.playlist.PlaylistManager.queue.value
         val matchIdx = q.indexOfFirst {
-            (it.videoId != null && it.videoId == currentVideoId) ||
-            (it.season == season && it.episode == episode)
+            (currentVideoId != null && it.videoId != null && it.videoId == currentVideoId) ||
+            (!contentId.isNullOrBlank() && it.contentId == contentId && it.season == season && it.episode == episode)
         }
         val nextItem = if (matchIdx >= 0 && matchIdx + 1 < q.size) {
             q[matchIdx + 1]
@@ -271,7 +271,11 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
 
         if (nextItem != null) {
             metaVideos.firstOrNull { it.id == nextItem.videoId }
-                ?: metaVideos.firstOrNull { it.season == nextItem.season && it.episode == nextItem.episode }
+                ?: metaVideos.firstOrNull {
+                    it.season == nextItem.season &&
+                    it.episode == nextItem.episode &&
+                    (contentId == null || nextItem.contentId == contentId)
+                }
                 ?: com.nuvio.tv.domain.model.Video(
                     id = nextItem.videoId ?: "${nextItem.contentId}:${nextItem.season}:${nextItem.episode}",
                     title = nextItem.title,
@@ -284,10 +288,10 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         } else null
     } else null
 
-    val resolvedNext = if (isChannelActive) {
+    val resolvedNext = if (isChannelActive && playlistNextVideo != null) {
         playlistNextVideo
     } else {
-        playlistNextVideo ?: PlayerNextEpisodeRules.resolveNextEpisode(
+        PlayerNextEpisodeRules.resolveNextEpisode(
             videos = metaVideos,
             currentSeason = season,
             currentEpisode = episode
