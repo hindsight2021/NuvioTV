@@ -89,19 +89,19 @@ class AmbientMuteEnforcementTest {
         }
         every { player.volume } returns 0.5f // Simulating external volume modification
         every { playerPool.getPlayer(any()) } returns player
-        coEvery { preloader.preload(any(), any()) } returns PreloadResult.Success(3600L)
+        val candidate = AmbientCandidate(
+            id = "yt_test_mute",
+            title = "Test Mute",
+            category = "aerial"
+        )
+
+        coEvery { preloader.preload(any(), any()) } returns PreloadResult.Success(candidate, "https://example.com/test.mp4")
         every { transitionController.state } returns MutableStateFlow(TransitionState())
 
         val controller = AmbientPlaybackController(
             playerPool = playerPool,
             preloader = preloader,
             transitionController = transitionController
-        )
-
-        val candidate = AmbientCandidate(
-            id = "yt_test_mute",
-            title = "Test Mute",
-            category = "aerial"
         )
 
         controller.playCandidate(candidate, immediate = true)
