@@ -12,6 +12,13 @@ import okhttp3.Request
 @UnstableApi
 object StreamSpeedTester {
 
+    data class ParallelPassResult(
+        val mbps: Double,
+        val subWindowMbps: List<Double> = emptyList(),
+        val failureReason: String? = null,
+        val clampTrips: Int = 0
+    )
+
     // 1. Measures single connection baseline speed (standard OkHttp)
     suspend fun runBaselineTest(
         url: String,
@@ -46,7 +53,7 @@ object StreamSpeedTester {
         if (elapsed > 0) (totalBytes * 8.0) / (elapsed * 1000.0) else 0.0
     }
 
-    // 2. Measures parallel connection speed at a specific chunk size
+    // 2. Measures parallel connection speed at a specific chunk size (legacy 3-arg overload)
     suspend fun runParallelChunkTest(
         url: String,
         headers: Map<String, String>,
@@ -98,6 +105,82 @@ object StreamSpeedTester {
         val finalBytes = if (totalBytesDownloaded > 0L) totalBytesDownloaded else totalBytesRead
         val elapsed = System.currentTimeMillis() - tStart
         if (elapsed > 0) (finalBytes * 8.0) / (elapsed * 1000.0) else 0.0
+    }
+
+    // 3. Measures parallel connection speed with configurable connections and sub-window sampling
+    suspend fun runParallelChunkTest(
+        url: String,
+        headers: Map<String, String>,
+        chunkSizeBytes: Long,
+        parallelConnections: Int,
+        depthChunks: Int = 4
+    ): ParallelPassResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val testDurationMs = 8000L
+        val subWindowMs = 500L
+        var totalBytesRead = 0L
+        var totalBytesDownloaded = 0L
+        val subWindowMbps = mutableListOf<Double>()
+        var lastSampleBytes = 0L
+        var lastSampleTime = System.currentTimeMillis()
+        val tStart = lastSampleTime
+        val tDeadline = tStart + testDurationMs
+
+        val transferListener = object : TransferListener {
+            override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+            override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+            override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+                if (isNetwork) {
+                    totalBytesDownloaded += bytesTransferred
+                }
+            }
+            override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+        }
+
+        try {
+            val okHttpFactory = OkHttpDataSource.Factory(PlayerPlaybackNetworking.playbackHttpClient).apply {
+                setDefaultRequestProperties(headers)
+            }
+            val dataSource = ParallelRangeDataSource(
+                upstreamFactory = okHttpFactory,
+                parallelConnections = parallelConnections,
+                chunkSize = chunkSizeBytes,
+                useNativeMemory = true
+            ).apply {
+                addTransferListener(transferListener)
+            }
+            dataSource.open(DataSpec(android.net.Uri.parse(url)))
+            val buffer = ByteArray(64 * 1024)
+            while (System.currentTimeMillis() < tDeadline) {
+                val read = dataSource.read(buffer, 0, buffer.size)
+                if (read == -1) break
+                totalBytesRead += read
+
+                val now = System.currentTimeMillis()
+                if (now - lastSampleTime >= subWindowMs) {
+                    val currentBytes = if (totalBytesDownloaded > 0L) totalBytesDownloaded else totalBytesRead
+                    val deltaBytes = currentBytes - lastSampleBytes
+                    val deltaMs = now - lastSampleTime
+                    if (deltaMs > 0) {
+                        subWindowMbps.add((deltaBytes * 8.0) / (deltaMs * 1000.0))
+                    }
+                    lastSampleBytes = currentBytes
+                    lastSampleTime = now
+                }
+            }
+            dataSource.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext ParallelPassResult(
+                mbps = 0.0,
+                subWindowMbps = subWindowMbps,
+                failureReason = e.message ?: "Unknown error"
+            )
+        }
+
+        val finalBytes = if (totalBytesDownloaded > 0L) totalBytesDownloaded else totalBytesRead
+        val elapsed = System.currentTimeMillis() - tStart
+        val mbps = if (elapsed > 0) (finalBytes * 8.0) / (elapsed * 1000.0) else 0.0
+        ParallelPassResult(mbps = mbps, subWindowMbps = subWindowMbps)
     }
 
     suspend fun getStreamContentLength(

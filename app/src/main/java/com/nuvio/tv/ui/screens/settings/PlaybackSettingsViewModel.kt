@@ -531,4 +531,12 @@ class PlaybackSettingsViewModel @Inject constructor(
     suspend fun setNuvioPerformanceModeEnabled(enabled: Boolean) {
         playerSettingsDataStore.setNuvioPerformanceModeEnabled(enabled)
     }
+
+    suspend fun setHideUncachedStreams(enabled: Boolean) {
+        playerSettingsDataStore.setHideUncachedStreams(enabled)
+    }
+
+    suspend fun setEnableEndCreditsNextEpisodePrompt(enabled: Boolean) {
+        playerSettingsDataStore.setEnableEndCreditsNextEpisodePrompt(enabled)
+    }
 }

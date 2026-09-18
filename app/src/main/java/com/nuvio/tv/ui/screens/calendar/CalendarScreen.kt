@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -245,7 +246,10 @@ fun CalendarScreen(
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(uiState.filteredItems, key = { it.id }) { item ->
+                            itemsIndexed(
+                                items = uiState.filteredItems,
+                                key = { index, item -> "${item.type}_${item.id}_${item.date}_${item.season}_${item.episode}_$index" }
+                            ) { _, item ->
                                 CalendarGridItem(
                                     item = item,
                                     onClick = {
@@ -329,7 +333,10 @@ private fun DayNavigator(
     onSelect: (Int) -> Unit
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        itemsIndexed(days) { index, day ->
+        itemsIndexed(
+            items = days,
+            key = { index, day -> "${day.date}_$index" }
+        ) { index, day ->
             val isSelected = index == selectedDayIndex
             Card(
                 onClick = { onSelect(index) },
@@ -461,8 +468,16 @@ private fun CalendarGridItem(
                     )
                 }
 
-                // Top-Left Badge
+                // Top-Left Event Badge
                 val topLeftBadge = when {
+                    item.isNextUpForUser ->
+                        "▶ NEXT UP" to Color(0xFF10B981)
+                    item.isSeriesPremiere ->
+                        "🌟 SERIES PREMIERE" to Color(0xFFF59E0B)
+                    item.isSeasonPremiere ->
+                        "🎉 S${item.season ?: 1} PREMIERE" to Color(0xFF0EA5E9)
+                    item.isSeasonFinale ->
+                        "🎬 S${item.season ?: 1} FINALE" to Color(0xFFF43F5E)
                     item.isAvailableToStream || item.type == CalendarItemType.DIGITAL_MOVIE ->
                         "⚡ STREAM NOW" to Color(0xFF10B981)
                     item.type == CalendarItemType.TV_EPISODE ->
@@ -488,8 +503,31 @@ private fun CalendarGridItem(
                     }
                 }
 
-                // Top-Right Rating Badge
-                if (item.rating != null && item.rating > 0f) {
+                // Top-Right User Status / Rating Badge
+                val topRightBadge = when {
+                    item.isActivelyWatching ->
+                        "⚡ WATCHING" to Color(0xFF10B981)
+                    item.isWatchlist ->
+                        "📌 WATCHLIST" to Color(0xFF3B82F6)
+                    else -> null
+                }
+
+                if (topRightBadge != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(topRightBadge.second.copy(alpha = 0.95f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = topRightBadge.first,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 8.sp),
+                            color = Color.White
+                        )
+                    }
+                } else if (item.rating != null && item.rating > 0f) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -537,15 +575,42 @@ private fun CalendarGridItem(
                 }
             }
 
-            // Title below poster
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = if (isFocused) NuvioTheme.colors.Primary else NuvioTheme.colors.TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-            )
+            // Content Info below poster
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (isFocused) NuvioTheme.colors.Primary else NuvioTheme.colors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (item.type == CalendarItemType.TV_EPISODE) {
+                    val epText = buildString {
+                        append("S${item.season ?: 1}·E${item.episode ?: 1}")
+                        if (!item.episodeTitle.isNullOrBlank()) {
+                            append(" • ${item.episodeTitle}")
+                        }
+                    }
+                    Text(
+                        text = epText,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = NuvioTheme.colors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (!item.userStatusNote.isNullOrBlank()) {
+                    Text(
+                        text = item.userStatusNote,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Medium),
+                        color = if (item.isNextUpForUser) Color(0xFF34D399) else Color(0xFF60A5FA),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
@@ -599,53 +664,163 @@ private fun CalendarPreviewPane(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                // Release Status Badges
-                Row(
+                // Release & Tracking Status Badges
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
+                    if (item.isActivelyWatching) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF10B981).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFF10B981), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "⚡ ACTIVELY WATCHING",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF34D399)
+                                )
+                            }
+                        }
+                    } else if (item.isWatchlist) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF3B82F6).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFF3B82F6), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "📌 ON WATCHLIST",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF60A5FA)
+                                )
+                            }
+                        }
+                    }
+
+                    if (item.isNextUpForUser) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF10B981).copy(alpha = 0.25f))
+                                    .border(1.dp, Color(0xFF10B981), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "▶ NEXT UP FOR YOU",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF34D399)
+                                )
+                            }
+                        }
+                    }
+
+                    if (item.isSeriesPremiere) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFF59E0B).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFFF59E0B), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🌟 SERIES PREMIERE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFFFBBF24)
+                                )
+                            }
+                        }
+                    } else if (item.isSeasonPremiere) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF0EA5E9).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFF0EA5E9), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🎉 SEASON ${item.season ?: 1} PREMIERE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF38BDF8)
+                                )
+                            }
+                        }
+                    }
+
+                    if (item.isSeasonFinale) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFF43F5E).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🎬 SEASON ${item.season ?: 1} FINALE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFFFB7185)
+                                )
+                            }
+                        }
+                    }
+
                     if (item.isAvailableToStream) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF10B981).copy(alpha = 0.22f))
-                                .border(1.dp, Color(0xFF10B981), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "⚡ AVAILABLE TO STREAM",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF34D399)
-                            )
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF10B981).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFF10B981), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "⚡ AVAILABLE TO STREAM",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF34D399)
+                                )
+                            }
                         }
                     } else if (item.digitalReleaseDate != null) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF06B6D4).copy(alpha = 0.22f))
-                                .border(1.dp, Color(0xFF06B6D4), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "DIGITAL: ${item.digitalReleaseDate}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF22D3EE)
-                            )
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF06B6D4).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFF06B6D4), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "DIGITAL: ${item.digitalReleaseDate}",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF22D3EE)
+                                )
+                            }
                         }
                     }
                     if (item.theatricalReleaseDate != null) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF8B5CF6).copy(alpha = 0.22f))
-                                .border(1.dp, Color(0xFF8B5CF6), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "THEATERS: ${item.theatricalReleaseDate}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFFA78BFA)
-                            )
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF8B5CF6).copy(alpha = 0.22f))
+                                    .border(1.dp, Color(0xFF8B5CF6), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "THEATERS: ${item.theatricalReleaseDate}",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFFA78BFA)
+                                )
+                            }
                         }
                     }
                 }
@@ -675,9 +850,34 @@ private fun CalendarPreviewPane(
                     text = subText,
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     color = NuvioTheme.colors.Primary,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (!item.userStatusNote.isNullOrBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (item.isNextUpForUser) Color(0xFF10B981).copy(alpha = 0.15f)
+                                else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.4f)
+                            )
+                            .border(
+                                1.dp,
+                                if (item.isNextUpForUser) Color(0xFF10B981).copy(alpha = 0.5f)
+                                else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.6f),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "Status: ${item.userStatusNote}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (item.isNextUpForUser) Color(0xFF34D399) else NuvioTheme.colors.TextSecondary
+                        )
+                    }
+                }
 
                 // Synopsis / Overview
                 if (!item.overview.isNullOrBlank()) {

@@ -1284,6 +1284,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 }
             }
         }
+        PlayerEvent.OnCancelPreviewSeek -> {
+            pendingPreviewSeekPosition = null
+            currentPlaybackPositionMs()?.let { updatePlaybackTimeline(currentPosition = it) }
+        }
         is PlayerEvent.OnSeekTo -> {
             if (_playbackTimeline.value.isLive) return
             pendingPreviewSeekPosition = null

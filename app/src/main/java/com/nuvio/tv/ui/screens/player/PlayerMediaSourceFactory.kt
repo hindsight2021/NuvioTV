@@ -790,6 +790,11 @@ private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) 
                 return androidx.media3.common.C.TIME_UNSET
             }
         }
+        val malformed = loadErrorInfo.exception.findCause<androidx.media3.common.ParserException>() != null ||
+            loadErrorInfo.exception.findCause<IllegalStateException>()?.message?.contains("varint") == true
+        if (malformed) {
+            return androidx.media3.common.C.TIME_UNSET
+        }
         val timeout = loadErrorInfo.exception.findCause<SocketTimeoutException>() != null
         return if (timeout) {
             when (loadErrorInfo.errorCount) {

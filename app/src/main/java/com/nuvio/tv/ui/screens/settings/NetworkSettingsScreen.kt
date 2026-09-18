@@ -377,6 +377,7 @@ fun AdvancedSettingsContent(
         }
     }
 
+    val assessmentState = rememberDeviceAssessmentState()
     val networkListState = rememberLazyListState()
     var showExperienceModeConfirmation by remember { mutableStateOf(false) }
     var showSentryDialog by remember { mutableStateOf(false) }
@@ -731,6 +732,35 @@ fun AdvancedSettingsContent(
                 }
             }
         }
+
+        item(key = "assessment_header") {
+            Text(
+                text = stringResource(R.string.assessment_section_header),
+                style = MaterialTheme.typography.titleSmall,
+                color = NuvioTheme.colors.TextTertiary,
+                modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
+            )
+        }
+
+        deviceAssessmentItems(
+            state = assessmentState,
+            diagnostics = dvDiagnostics,
+            onRun = {
+                runDeviceAssessment(
+                    scope = scope,
+                    context = context,
+                    state = assessmentState,
+                    settings = dvPlayerSettings,
+                    diagnostics = dvDiagnostics
+                )
+            },
+            onApply = {
+                runApplyAssessment(scope = scope, context = context, state = assessmentState)
+            },
+            onRevert = {
+                runRevertAssessment(scope = scope, context = context, state = assessmentState)
+            }
+        )
 
         item(key = "cache_header") {
             Text(

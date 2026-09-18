@@ -821,6 +821,7 @@ fun MetaDetailsScreen(
                     trailerUrl = uiState.trailerUrl,
                     trailerAudioUrl = uiState.trailerAudioUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
+                    detailTrailerAudioEnabled = uiState.detailTrailerAudioEnabled,
                     isTrailerPaused = isTrailerPaused,
                     showTrailerControls = uiState.showTrailerControls,
                     hideLogoDuringTrailer = uiState.hideLogoDuringTrailer,
@@ -1087,6 +1088,7 @@ private fun MetaDetailsContent(
     trailerUrl: String?,
     trailerAudioUrl: String?,
     isTrailerPlaying: Boolean,
+    detailTrailerAudioEnabled: Boolean = true,
     isTrailerPaused: Boolean = false,
     showTrailerControls: Boolean,
     hideLogoDuringTrailer: Boolean,
@@ -2410,6 +2412,7 @@ private fun MetaDetailsContent(
                 trailerAudioUrl = sharedTrailerAudioUrl,
                 isLoading = isSharedTrailerLoading,
                 errorMessage = sharedTrailerErrorMessage,
+                muted = !detailTrailerAudioEnabled,
                 onDismiss = onDismissSharedTrailer,
                 onRetry = onRetrySharedTrailer
             )

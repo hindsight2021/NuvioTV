@@ -96,6 +96,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetStillWatchingEnabled: (Boolean) -> Unit,
     onSetStillWatchingEpisodeThreshold: (Int) -> Unit,
+    onSetHideUncachedStreams: (Boolean) -> Unit = {},
+    onSetEnableEndCreditsNextEpisodePrompt: (Boolean) -> Unit = {},
     onItemFocused: () -> Unit = {}
 ) {
     val effectiveAutoPlaySource = if (
@@ -141,6 +143,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
             title = stringResource(R.string.autoplay_stream_selection),
             subtitle = modeLabel,
             onClick = onShowModeDialog,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "stream_hide_uncached") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.hide_uncached_streams_title),
+            subtitle = stringResource(R.string.hide_uncached_streams_sub),
+            isChecked = playerSettings.hideUncachedStreams,
+            onCheckedChange = onSetHideUncachedStreams,
             onFocused = onItemFocused
         )
     }
@@ -200,6 +213,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
             subtitle = stringResource(R.string.autoplay_next_episode_sub),
             isChecked = playerSettings.streamAutoPlayNextEpisodeEnabled,
             onCheckedChange = onSetStreamAutoPlayNextEpisodeEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "end_credits_next_episode_prompt") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Timer,
+            title = stringResource(R.string.end_credits_next_episode_prompt_title),
+            subtitle = stringResource(R.string.end_credits_next_episode_prompt_sub),
+            isChecked = playerSettings.enableEndCreditsNextEpisodePrompt,
+            onCheckedChange = onSetEnableEndCreditsNextEpisodePrompt,
             onFocused = onItemFocused
         )
     }

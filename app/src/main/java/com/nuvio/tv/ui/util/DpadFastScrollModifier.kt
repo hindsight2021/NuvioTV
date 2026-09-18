@@ -33,14 +33,14 @@ private const val DEFAULT_VERTICAL_VELOCITY_DP_PER_SEC = 3200f
  * focus shifts away from the container (e.g. to a system IME) so we never
  * get a matching UP for the DOWN that started the drag.
  */
-private const val DEFAULT_END_TIMEOUT_MS = 160L
+private const val DEFAULT_END_TIMEOUT_MS = DpadNavigationTiming.HELD_SCROLL_END_TIMEOUT_MS
 
 /**
  * Upper bound on a single frame's delta so a long frame stall (GC, layout
  * thrash) can't teleport the list by hundreds of dp on the next frame.
- * Roughly three frames at 60 Hz.
+ * Roughly two frames at 60 Hz.
  */
-private const val DEFAULT_MAX_FRAME_DT_SEC = 0.048f
+private const val DEFAULT_MAX_FRAME_DT_SEC = 0.032f
 
 private enum class FastScrollMode { None, Vertical }
 
@@ -94,7 +94,7 @@ fun Modifier.dpadVerticalFastScroll(
     resolveVerticalLanding: (sign: Int) -> String?,
     onFastScrollingChanged: (Boolean) -> Unit = {},
     shouldHaltForward: () -> Boolean = { false },
-    horizontalGateMs: Long = 80L,
+    horizontalGateMs: Long = DpadNavigationTiming.STANDARD_HORIZONTAL_REPEAT_MS,
     verticalVelocityDpPerSec: Float = DEFAULT_VERTICAL_VELOCITY_DP_PER_SEC,
     endTimeoutMs: Long = DEFAULT_END_TIMEOUT_MS,
     maxFrameDtSec: Float = DEFAULT_MAX_FRAME_DT_SEC,

@@ -156,10 +156,68 @@ internal object PlayerPlaybackNetworking {
             setRequestProperty("User-Agent", headers["User-Agent"] ?: PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
             headers.forEach { (key, value) ->
                 if (key.equals("Range", ignoreCase = true)) return@forEach
-                if (key.equals("User-Agent", ignoreCase = true)) return@forEach
                 setRequestProperty(key, value)
             }
             range?.let { setRequestProperty("Range", it) }
+        }
+    }
+
+    @Volatile
+    private var lastWarmUrl: String? = null
+
+    @Volatile
+    private var lastWarmAtMs: Long = 0L
+
+    private const val WARM_DEDUP_WINDOW_MS = 60_000L
+
+    /**
+     * Pre-warms the HTTP/HTTPS playback connection for a stream URL so TCP handshake,
+     * TLS negotiation, and CDN edge caches are already warmed when playback begins.
+     * Fires a non-blocking 256 KB Range GET request and releases the connection back
+     * into OkHttp's connection pool upon completion.
+     */
+    fun prewarmPlaybackConnection(url: String?, headers: Map<String, String>? = null) {
+        val target = url?.trim().orEmpty()
+        if (!target.startsWith("http://", ignoreCase = true) &&
+            !target.startsWith("https://", ignoreCase = true)
+        ) {
+            return
+        }
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        val warmSuppressed = target == lastWarmUrl && (nowMs - lastWarmAtMs) in 0 until WARM_DEDUP_WINDOW_MS
+        if (warmSuppressed) {
+            return
+        }
+        lastWarmUrl = target
+        lastWarmAtMs = nowMs
+
+        try {
+            val requestBuilder = okhttp3.Request.Builder().url(target)
+            headers?.forEach { (name, value) ->
+                if (!name.equals("Range", ignoreCase = true)) {
+                    requestBuilder.header(name, value)
+                }
+            }
+            requestBuilder.header("Range", "bytes=0-262143")
+            val request = requestBuilder.build()
+
+            playbackHttpClient.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                    // Benign fire-and-forget; failure leaves ExoPlayer to connect normally.
+                }
+
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    response.use { resp ->
+                        try {
+                            resp.body?.source()?.readByteString()
+                        } catch (_: Throwable) {
+                            // Ignored
+                        }
+                    }
+                }
+            })
+        } catch (_: Throwable) {
+            // Ignored
         }
     }
 }

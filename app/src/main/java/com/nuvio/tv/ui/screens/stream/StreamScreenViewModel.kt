@@ -160,8 +160,19 @@ class StreamScreenViewModel @Inject constructor(
     )
     val uiState: StateFlow<StreamScreenUiState> = _uiState.asStateFlow()
 
+    private var hideUncachedStreams: Boolean = false
+
     init {
         com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
+        viewModelScope.launch {
+            playerSettingsDataStore.playerSettings
+                .map { it.hideUncachedStreams }
+                .distinctUntilChanged()
+                .collectLatest { hide ->
+                    hideUncachedStreams = hide
+                    reapplyStreamFilter()
+                }
+        }
     }
     val streamBadgeSettings = streamBadgeSettingsDataStore.settings
 
@@ -174,6 +185,33 @@ class StreamScreenViewModel @Inject constructor(
         .distinctUntilChanged()
 
     fun enableP2p() = torrentSettings.setP2pEnabled(true)
+
+    private fun computeFilteredStreams(allStreams: List<Stream>, filterAddon: String?): List<Stream> {
+        val byAddon = if (filterAddon == null) {
+            allStreams
+        } else {
+            allStreams.filter { it.addonName == filterAddon }
+        }
+        return if (hideUncachedStreams) {
+            byAddon.filterNot { it.debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED }
+        } else {
+            byAddon
+        }
+    }
+
+    private fun reapplyStreamFilter() {
+        streamFilterExpandJob?.cancel()
+        updateUiStateIfChanged { state ->
+            val fullFiltered = computeFilteredStreams(state.allStreams, state.selectedAddonFilter)
+            streamFilterFullList = fullFiltered
+            val pageEnd = state.filteredStreams.size.coerceAtMost(fullFiltered.size)
+                .coerceAtLeast(STREAM_FILTER_PAGE_SIZE.coerceAtMost(fullFiltered.size))
+            state.copy(
+                filteredStreams = if (pageEnd >= fullFiltered.size) fullFiltered
+                    else fullFiltered.subList(0, pageEnd)
+            )
+        }
+    }
 
     private inline fun updateUiStateIfChanged(
         transform: (StreamScreenUiState) -> StreamScreenUiState
@@ -215,11 +253,7 @@ class StreamScreenViewModel @Inject constructor(
                         }
                         val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
                         val currentFilter = state.selectedAddonFilter
-                        val fullFiltered = if (currentFilter == null) {
-                            updatedAllStreams
-                        } else {
-                            updatedAllStreams.filter { it.addonName == currentFilter }
-                        }
+                        val fullFiltered = computeFilteredStreams(updatedAllStreams, currentFilter)
                         streamFilterFullList = fullFiltered
                         val pageEnd = state.filteredStreams.size.coerceAtMost(fullFiltered.size)
                             .coerceAtLeast(STREAM_FILTER_PAGE_SIZE.coerceAtMost(fullFiltered.size))
@@ -534,11 +568,7 @@ class StreamScreenViewModel @Inject constructor(
                 }
 
                 val currentFilter = _uiState.value.selectedAddonFilter
-                val fullFiltered = if (currentFilter == null) {
-                    allStreams
-                } else {
-                    allStreams.filter { it.addonName == currentFilter }
-                }
+                val fullFiltered = computeFilteredStreams(allStreams, currentFilter)
                 streamFilterFullList = fullFiltered
                 val paginatedStreams = if (fullFiltered.size > STREAM_FILTER_PAGE_SIZE) {
                     fullFiltered.subList(0, STREAM_FILTER_PAGE_SIZE)
@@ -639,11 +669,7 @@ class StreamScreenViewModel @Inject constructor(
                                     addonStreams.streams
                                 }
                                 val currentFilter = state.selectedAddonFilter
-                                val fullFiltered = if (currentFilter == null) {
-                                    updatedAllStreams
-                                } else {
-                                    updatedAllStreams.filter { it.addonName == currentFilter }
-                                }
+                                val fullFiltered = computeFilteredStreams(updatedAllStreams, currentFilter)
                                 streamFilterFullList = fullFiltered
                                 val pageEnd = state.filteredStreams.size.coerceAtMost(fullFiltered.size)
                                     .coerceAtLeast(STREAM_FILTER_PAGE_SIZE.coerceAtMost(fullFiltered.size))
@@ -1163,11 +1189,7 @@ class StreamScreenViewModel @Inject constructor(
             if (state.selectedAddonFilter == addonName) {
                 return@updateUiStateIfChanged state
             }
-            val fullFiltered = if (addonName == null) {
-                state.allStreams
-            } else {
-                state.allStreams.filter { it.addonName == addonName }
-            }
+            val fullFiltered = computeFilteredStreams(state.allStreams, addonName)
             streamFilterFullList = fullFiltered
             val paginatedStreams = if (fullFiltered.size > STREAM_FILTER_PAGE_SIZE) {
                 fullFiltered.subList(0, STREAM_FILTER_PAGE_SIZE)

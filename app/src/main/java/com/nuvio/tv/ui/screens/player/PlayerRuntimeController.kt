@@ -115,6 +115,8 @@ class PlayerRuntimeController(
         internal const val SWITCH_TRACE_ENABLED = false
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
         internal const val FIRST_FRAME_TIMEOUT_MS = 12_000L
+        internal const val STARTUP_WATCHDOG_TIMEOUT_MS = 20_000L
+        internal const val STARTUP_WATCHDOG_CEILING_MS = 60_000L
         // Stall watchdog: re-seeks past the buffered edge if bufferedPosition stops
         // advancing during STATE_BUFFERING. Fires before OkHttp's readTimeout.
         internal const val STALL_WATCHDOG_THRESHOLD_MS = 15_000L
@@ -348,6 +350,7 @@ class PlayerRuntimeController(
     internal var progressJob: Job? = null
     internal var vodTelemetryJob: Job? = null
     internal var firstFrameWatchdogJob: Job? = null
+    internal var startupWatchdogJob: Job? = null
     internal var stallWatchdogJob: Job? = null
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null

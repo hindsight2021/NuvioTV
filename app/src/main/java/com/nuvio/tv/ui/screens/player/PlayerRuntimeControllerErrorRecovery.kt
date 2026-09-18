@@ -311,6 +311,9 @@ internal fun PlayerRuntimeController.attemptAutoRetry(
     return true
 }
 
+private const val MAX_DEAD_SOURCE_FAILOVERS = 3
+private var deadSourceFailoverCount = 0
+
 /**
  * Resets the retry counter. Call this whenever playback enters a healthy state
  * (first frame rendered, or user-initiated retry).
@@ -318,10 +321,71 @@ internal fun PlayerRuntimeController.attemptAutoRetry(
 internal fun PlayerRuntimeController.resetErrorRetryState() {
     startupRetryCount = 0
     errorRetryCount = 0
+    deadSourceFailoverCount = 0
     parsingErrorProbeAttempted = false
     pendingAudioPcmFallbackRebuild = false
     errorRetryJob?.cancel()
     errorRetryJob = null
+}
+
+/**
+ * Mid-play source failover for unrecoverable malformed container errors or dead sources.
+ * When the first frame has already rendered and an unrecoverable stream error occurs,
+ * automatically advances to the next equivalent live source from cached streams.
+ */
+internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: String): Boolean {
+    if (deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
+        Log.w(PlayerRuntimeController.TAG, "advanceToNextLiveSource: failover budget ($MAX_DEAD_SOURCE_FAILOVERS) exhausted")
+        return false
+    }
+
+    val allStreams = _uiState.value.sourceAllStreams
+    if (allStreams.isEmpty()) {
+        Log.w(PlayerRuntimeController.TAG, "advanceToNextLiveSource: no source streams cached")
+        return false
+    }
+
+    val currentUrl = currentStreamUrl
+    val currentHash = _uiState.value.currentStreamInfoHash
+    val currentName = _uiState.value.currentStreamName
+
+    val currentIndex = allStreams.indexOfFirst { stream ->
+        (currentUrl.isNotBlank() && stream.getStreamUrl() == currentUrl) ||
+            (currentHash != null && stream.infoHash.equals(currentHash, ignoreCase = true)) ||
+            (currentName != null && stream.getDisplayNameOrNull() == currentName)
+    }
+
+    val nextCandidates = if (currentIndex >= 0 && currentIndex < allStreams.lastIndex) {
+        allStreams.subList(currentIndex + 1, allStreams.size)
+    } else if (currentIndex > 0) {
+        allStreams.filterIndexed { index, _ -> index != currentIndex }
+    } else if (currentIndex == -1 && allStreams.size > 1) {
+        allStreams
+    } else {
+        emptyList()
+    }
+
+    val nextCandidate = nextCandidates.firstOrNull { candidate ->
+        !candidate.getStreamUrl().isNullOrBlank() || candidate.isTorrent() || candidate.isDirectDebrid()
+    } ?: return false
+
+    deadSourceFailoverCount++
+    Log.w(
+        PlayerRuntimeController.TAG,
+        "advanceToNextLiveSource: failover $deadSourceFailoverCount/$MAX_DEAD_SOURCE_FAILOVERS for: $detailedError. " +
+            "Switching to: ${nextCandidate.getDisplayNameOrNull() ?: nextCandidate.addonName}"
+    )
+
+    _uiState.update {
+        it.copy(
+            loadingMessage = "Switching to backup stream...",
+            showLoadingOverlay = true,
+            error = null
+        )
+    }
+
+    switchToSourceStream(nextCandidate)
+    return true
 }
 
 internal fun PlayerRuntimeController.scheduleStableProgressReset() {
@@ -467,6 +531,12 @@ internal fun PlayerRuntimeController.tryParsingErrorProbeFallback(
         error.cause?.toString()?.contains("UnrecognizedInputFormatException") == true
 
     if (!isSourceOrParsingError) return false
+    if (hasRenderedFirstFrame &&
+        currentStreamMimeType != null &&
+        currentStreamMimeType != androidx.media3.common.MimeTypes.APPLICATION_M3U8
+    ) {
+        return false
+    }
     if (parsingErrorProbeAttempted) return false
     parsingErrorProbeAttempted = true
 

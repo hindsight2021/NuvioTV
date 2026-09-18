@@ -36,7 +36,8 @@ data class ThemeSettingsUiState(
     val amoledMode: Boolean = false,
     val amoledSurfacesMode: Boolean = false,
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
-    val availableSettingsUiStyles: List<SettingsUiStyle> = SettingsUiStyle.entries.toList()
+    val availableSettingsUiStyles: List<SettingsUiStyle> = SettingsUiStyle.entries.toList(),
+    val appDimPercent: Int = ThemeDataStore.DEFAULT_APP_DIM_PERCENT
 )
 
 sealed class ThemeSettingsEvent {
@@ -46,6 +47,7 @@ sealed class ThemeSettingsEvent {
     data class ToggleAmoledMode(val enabled: Boolean) : ThemeSettingsEvent()
     data class ToggleAmoledSurfacesMode(val enabled: Boolean) : ThemeSettingsEvent()
     data class SelectSettingsUiStyle(val style: SettingsUiStyle) : ThemeSettingsEvent()
+    data class SelectAppDim(val percent: Int) : ThemeSettingsEvent()
     data object DismissAppIconFailure : ThemeSettingsEvent()
 }
 
@@ -133,6 +135,15 @@ class ThemeSettingsViewModel @Inject constructor(
                     }
                 }
         }
+        viewModelScope.launch {
+            themeDataStore.appDimPercent
+                .distinctUntilChanged()
+                .collectLatest { percent ->
+                    _uiState.update { state ->
+                        if (state.appDimPercent == percent) state else state.copy(appDimPercent = percent)
+                    }
+                }
+        }
     }
 
     private fun currentTheme(): AppTheme {
@@ -147,6 +158,7 @@ class ThemeSettingsViewModel @Inject constructor(
             is ThemeSettingsEvent.ToggleAmoledMode -> setAmoledMode(event.enabled)
             is ThemeSettingsEvent.ToggleAmoledSurfacesMode -> setAmoledSurfacesMode(event.enabled)
             is ThemeSettingsEvent.SelectSettingsUiStyle -> selectSettingsUiStyle(event.style)
+            is ThemeSettingsEvent.SelectAppDim -> setAppDim(event.percent)
             ThemeSettingsEvent.DismissAppIconFailure -> appIconManager.clearFailure()
         }
     }
@@ -195,6 +207,13 @@ class ThemeSettingsViewModel @Inject constructor(
         restoreStyleFocus = true
         viewModelScope.launch {
             themeDataStore.setSettingsUiStyle(style)
+        }
+    }
+
+    private fun setAppDim(percent: Int) {
+        if (_uiState.value.appDimPercent == percent) return
+        viewModelScope.launch {
+            themeDataStore.setAppDimPercent(percent)
         }
     }
 }

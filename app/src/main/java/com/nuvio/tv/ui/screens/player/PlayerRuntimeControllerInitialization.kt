@@ -1087,6 +1087,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     phase = "starting_stream",
                     message = context.getString(R.string.player_loading_starting)
                 )
+                scheduleStartupWatchdog()
                 val isTunneledPlayback = playerSettings.effectiveTunnelingEnabled
                 // Hold playWhenReady=false through prepare() so audio does not race ahead
                 // while the video decoder is still opening. The first STATE_READY primes the
@@ -1217,6 +1218,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 readyTransition.nextState.shouldEnforceAutoplayOnFirstReady
                             if (readyTransition.nextState.hasRenderedFirstFrame && isTunneledPlayback) {
                                 hasRenderedFirstFrame = true
+                                cancelStartupWatchdog()
+                                retractStartupTimeoutErrorAfterFirstFrame()
                             }
                             when (val action = readyTransition.action) {
                                 is PlayerStartupPlaybackPolicy.ReadyAction.TunneledFirstReady -> {
@@ -1372,6 +1375,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                         val isFirstFrame = !hasRenderedFirstFrame  // capture BEFORE flipping
                         hasRenderedFirstFrame = true
                         mediaSourceFactory.unlockStartupPrefetch()
+                        if (_uiState.value.sourceAllStreams.isEmpty()) {
+                            loadSourceStreams(forceRefresh = false)
+                        }
                         if (isFirstFrame && _uiState.value.postPlayDismissedForCurrentEpisode) {
                             _uiState.update { it.copy(postPlayDismissedForCurrentEpisode = false) }
                         }
@@ -1384,6 +1390,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                         }
                         refreshStableProgressResetGate()
                         cancelFirstFrameWatchdog()
+                        cancelStartupWatchdog()
+                        retractStartupTimeoutErrorAfterFirstFrame()
                         _uiState.update {
                             it.copy(
                                 showLoadingOverlay = false,
@@ -1404,6 +1412,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     override fun onPlayerError(error: PlaybackException) {
                         if (isReleasingPlayer && error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT) return
                         cancelFirstFrameWatchdog()
+                        cancelStartupWatchdog()
                         val detailedError = error.toDisplayMessage(context)
                         cancelStableProgressReset()
 
@@ -1610,6 +1619,17 @@ internal fun PlayerRuntimeController.initializePlayer(
                         if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                             return
                         }
+
+                        // Mid-play failover: a mid-play malformed container error (or unrecoverable IO error)
+                        // will not recover on a same-URL re-prepare either. Advance immediately to the next live source.
+                        if (hasRenderedFirstFrame &&
+                            (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                                error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED) &&
+                            advanceToNextLiveSource(detailedError)
+                        ) {
+                            return
+                        }
+
                         if (attemptAutoRetry(error, detailedError)) {
                             return
                         }
@@ -2055,6 +2075,7 @@ internal fun PlayerRuntimeController.buildStartupSubtitleConfigurations(startupS
 
 internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     cancelFirstFrameWatchdog()
+    cancelStartupWatchdog()
     cancelStallWatchdog()
     val preparingMessage = context.getString(R.string.player_loading_preparing)
     resetLoadingDiagnostics(
@@ -2188,11 +2209,15 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor))
-        val baseAudioSink = builder.build()
+        val defaultStartThresholdFrames = 262144 // ~5.5 s at 48 kHz
+        val reducedStartThresholdFrames = runCatching {
+            android.provider.Settings.Global.getString(context.contentResolver, "nuvio_reduced_start_threshold")
+        }.getOrNull()?.trim()?.toIntOrNull() ?: defaultStartThresholdFrames
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
             sink = baseAudioSink,
             initialForcePcm = initialForcePcm,
-            forcePcmForBluetooth = bluetoothForcePcm
+            forcePcmForBluetooth = bluetoothForcePcm,
+            reducedStartThresholdFrames = reducedStartThresholdFrames
         )
         playbackSpeedAwareAudioSink.setInitialPlaybackSpeed(playbackSpeedProvider())
         onPlaybackSpeedAwareAudioSinkCreated(playbackSpeedAwareAudioSink)

@@ -169,6 +169,8 @@ import com.nuvio.tv.domain.model.resolveAppTheme
 import com.nuvio.tv.domain.model.resolveCustomThemeColors
 import com.nuvio.tv.domain.deeplink.AppDeepLink
 import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.ui.components.AppDimmerOverlay
+import com.nuvio.tv.ui.components.LocalAppDimPercent
 import com.nuvio.tv.ui.components.NuvioScrollDefaults
 import com.nuvio.tv.ui.components.BrandWordmark
 import com.nuvio.tv.ui.components.LocalCardDepthStyle
@@ -708,6 +710,7 @@ open class MainActivity : ComponentActivity() {
                         brandWordmarkRes = resolvedTheme.brandWordmarkResource
                     )
                 }
+                val appDimPercent by themeDataStore.appDimPercent.collectAsState(initial = ThemeDataStore.DEFAULT_APP_DIM_PERCENT)
                 CompositionLocalProvider(
                     LocalDensity provides clampedFontScaleDensity,
                     LocalBringIntoViewSpec provides bringIntoViewSpec,
@@ -718,7 +721,8 @@ open class MainActivity : ComponentActivity() {
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool,
                     LocalSplashBackground provides splashBackground,
                     LocalStartupLoadingState provides startupLoadingState,
-                    LocalStartupSplashEnabled provides startupSplashEnabled
+                    LocalStartupSplashEnabled provides startupSplashEnabled,
+                    LocalAppDimPercent provides appDimPercent
                 ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -1319,6 +1323,7 @@ open class MainActivity : ComponentActivity() {
                             modifier = Modifier.graphicsLayer { alpha = splashAlpha }
                         )
                     }
+                    AppDimmerOverlay(dimPercent = appDimPercent)
                     }
                 }
                 }

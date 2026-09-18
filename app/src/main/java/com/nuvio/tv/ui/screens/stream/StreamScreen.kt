@@ -467,6 +467,15 @@ fun StreamScreen(
                             }
                         }
                     },
+                    onStreamFocused = { stream ->
+                        if (!stream.isDirectDebrid() && !stream.needsLocalDebridResolve()) {
+                            val directUrl = stream.getStreamUrl()
+                            if (!directUrl.isNullOrBlank()) {
+                                com.nuvio.tv.ui.screens.player.PlayerPlaybackNetworking
+                                    .prewarmPlaybackConnection(directUrl, stream.behaviorHints?.proxyHeaders?.request)
+                            }
+                        }
+                    },
                     focusedStreamIndex = focusedStreamIndex,
                     shouldRestoreFocusedStream = restoreFocusedStream,
                     onRestoreFocusedStreamHandled = {
@@ -715,6 +724,8 @@ private fun LeftContentSection(
     }
 }
 
+private const val FOCUS_WARM_SETTLE_MS = 500L
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RightStreamSection(
@@ -731,6 +742,7 @@ private fun RightStreamSection(
     onAddonFilterSelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     onStreamSelected: (Stream) -> Unit,
+    onStreamFocused: (Stream) -> Unit = {},
     focusedStreamIndex: Int,
     shouldRestoreFocusedStream: Boolean,
     onRestoreFocusedStreamHandled: () -> Unit,
@@ -906,6 +918,7 @@ private fun RightStreamSection(
                         StreamsList(
                             streams = streams,
                             onStreamSelected = onStreamSelected,
+                            onStreamFocused = onStreamFocused,
                             focusedStreamIndex = focusedStreamIndex,
                             shouldRestoreFocusedStream = shouldRestoreFocusedStream,
                             onRestoreFocusedStreamHandled = onRestoreFocusedStreamHandled,
@@ -1024,6 +1037,7 @@ private fun EmptyState() {
 private fun StreamsList(
     streams: List<Stream>,
     onStreamSelected: (Stream) -> Unit,
+    onStreamFocused: (Stream) -> Unit = {},
     focusedStreamIndex: Int = 0,
     shouldRestoreFocusedStream: Boolean = false,
     onRestoreFocusedStreamHandled: () -> Unit = {},
@@ -1110,8 +1124,9 @@ private fun StreamsList(
         state = streamListState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(NuvioTheme.spacing.lg)
-            .onFocusChanged { onFocusChanged(it.hasFocus) }
+            .onFocusChanged {
+                onFocusChanged(it.hasFocus)
+            }
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
 
@@ -1161,6 +1176,7 @@ private fun StreamsList(
                     badgePlacement = badgePlacement,
                     reserveBadgeSpace = hasBadgeRules && stream.badges.isEmpty(),
                     onClick = { onStreamSelected(stream) },
+                    onFocusSettled = { onStreamFocused(stream) },
                     focusRequester = when {
                         shouldRestoreFocusedStream && index == focusedStreamIndex.coerceIn(0, (streams.lastIndex).coerceAtLeast(0)) -> restoreFocusRequester
                         else -> streamFocusRequesters.getOrPut(streamKeys[index]) { FocusRequester() }
@@ -1190,6 +1206,7 @@ private fun StreamCard(
     badgePlacement: StreamBadgePlacement,
     reserveBadgeSpace: Boolean = false,
     onClick: () -> Unit,
+    onFocusSettled: () -> Unit = {},
     focusRequester: FocusRequester? = null,
     onFocusChanged: ((Boolean) -> Unit)? = null,
     onUpKey: (() -> Unit)? = null
@@ -1204,6 +1221,13 @@ private fun StreamCard(
     val hasGradientFocusRing = NuvioTheme.palette.focusRingGradient.size > 1
 
     var isFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            kotlinx.coroutines.delay(FOCUS_WARM_SETTLE_MS)
+            onFocusSettled()
+        }
+    }
 
     // Track whether badges transitioned from empty to non-empty while this
     // card was composed. If they did, we animate. If the card enters

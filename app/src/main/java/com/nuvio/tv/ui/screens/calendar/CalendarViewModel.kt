@@ -48,6 +48,8 @@ class CalendarViewModel @Inject constructor(
                 val dayItems = currentDayGroup?.items ?: emptyList()
                 return when (selectedCategory) {
                     CalendarCategory.ALL -> dayItems
+                    CalendarCategory.ACTIVELY_WATCHING ->
+                        dayItems.filter { it.isActivelyWatching }
                     CalendarCategory.TV_EPISODES ->
                         dayItems.filter { it.type == CalendarItemType.TV_EPISODE }
                     CalendarCategory.DIGITAL_STREAMING ->

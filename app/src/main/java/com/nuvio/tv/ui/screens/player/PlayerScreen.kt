@@ -59,6 +59,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
@@ -68,6 +69,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
+import com.nuvio.tv.ui.components.AppDimmerOverlay
+import com.nuvio.tv.ui.components.LocalAppDimPercent
+import com.nuvio.tv.ui.screens.settings.SliderSettingsItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -180,6 +184,8 @@ fun PlayerScreen(
     var reportCodeVisible by remember { mutableStateOf(false) }
     var exitDispatched by remember { mutableStateOf(false) }
     var externalHandoffInProgress by remember { mutableStateOf(false) }
+    val appDimPercent by viewModel.appDimPercent.collectAsState()
+    var showDimmerDialog by remember { mutableStateOf(false) }
 
     val exitPlayer: () -> Unit = exitPlayer@{
         if (exitDispatched) return@exitPlayer
@@ -1202,6 +1208,55 @@ fun PlayerScreen(
                 .zIndex(2.1f),
         )
 
+        val playbackTimeline by viewModel.playbackTimeline.collectAsState()
+        val remainingMediaMs = if (!playbackTimeline.isLive && playbackTimeline.duration > 0L) {
+            (playbackTimeline.duration - playbackTimeline.currentPosition).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+
+        val showEndCreditsPrompt = uiState.enableEndCreditsNextEpisodePrompt &&
+            uiState.currentSeason != null &&
+            uiState.currentEpisode != null &&
+            uiState.nextEpisode?.hasAired == true &&
+            uiState.postPlayMode == null &&
+            !postPlayRecommendationState.isVisible &&
+            !uiState.showLoadingOverlay &&
+            !uiState.showPauseOverlay &&
+            !uiState.showStreamInfoOverlay &&
+            !uiState.showEpisodesPanel &&
+            !uiState.showSourcesPanel &&
+            !uiState.showAudioOverlay &&
+            !uiState.showSubtitleOverlay &&
+            !uiState.showSubtitleStylePanel &&
+            !uiState.showSubtitleDelayOverlay &&
+            !uiState.showSubtitleTimingDialog &&
+            !uiState.showSpeedDialog &&
+            !uiState.showMoreDialog &&
+            remainingMediaMs in 1..20_000L
+
+        AnimatedVisibility(
+            visible = showEndCreditsPrompt,
+            enter = fadeIn(tween(NuvioMotion.tokens.durations.fast)) + slideInVertically(
+                initialOffsetY = { it / 2 },
+                animationSpec = tween(NuvioMotion.tokens.durations.fast)
+            ),
+            exit = fadeOut(tween(NuvioMotion.tokens.durations.fast)) + slideOutVertically(
+                targetOffsetY = { it / 2 },
+                animationSpec = tween(NuvioMotion.tokens.durations.fast)
+            ),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 26.dp, bottom = if (uiState.showControls) 122.dp else 30.dp)
+                .zIndex(2.2f)
+        ) {
+            val remainingSec = (remainingMediaMs / 1000L).coerceAtLeast(1L)
+            EndCreditsNextEpisodePill(
+                remainingSec = remainingSec,
+                onClick = { viewModel.onEvent(PlayerEvent.OnPlayNextEpisode) }
+            )
+        }
+
         // Parental guide overlay (shows when video first starts playing)
         ParentalGuideOverlay(
             warnings = uiState.parentalWarnings,
@@ -1293,6 +1348,7 @@ fun PlayerScreen(
                 onShowAudioDialog = { viewModel.onEvent(PlayerEvent.OnShowAudioOverlay) },
                 onShowSubtitleDialog = { viewModel.onEvent(PlayerEvent.OnShowSubtitleOverlay) },
                 onShowSpeedDialog = { viewModel.onEvent(PlayerEvent.OnShowSpeedDialog) },
+                onShowDimmerDialog = { showDimmerDialog = true },
                 onToggleAspectRatio = {
                     Log.d("PlayerScreen", "onToggleAspectRatio called - dispatching event")
                     viewModel.onEvent(PlayerEvent.OnToggleAspectRatio)
@@ -1672,6 +1728,14 @@ fun PlayerScreen(
             )
         }
 
+        if (showDimmerDialog) {
+            AppDimmerDialog(
+                dimPercent = appDimPercent,
+                onDimPercentChanged = { viewModel.setAppDimPercent(it) },
+                onDismiss = { showDimmerDialog = false }
+            )
+        }
+
         if (uiState.showSpeedDialog) {
             SpeedSelectionDialog(
                 currentSpeed = uiState.playbackSpeed,
@@ -1755,6 +1819,7 @@ private fun ExoPlayerSurface(
     val latestAspectMode by rememberUpdatedState(aspectMode)
     val latestBindSubtitleView by rememberUpdatedState(onBindSubtitleView)
     val latestSubtitleStyle by rememberUpdatedState(subtitleStyle)
+    val latestUseLibass by rememberUpdatedState(useLibass)
     val playerView = remember(context, player) {
         PlayerView(context).apply {
             useController = false
@@ -1827,7 +1892,11 @@ private fun ExoPlayerSurface(
                 // Re-apply subtitle style when tracks change so style is applied
                 // even when subtitles are enabled after initial player setup.
                 playerView.post {
-                    playerView.applySubtitleStyleIfNeeded(latestSubtitleStyle, force = true)
+                    playerView.applySubtitleStyleIfNeeded(
+                        subtitleStyle = latestSubtitleStyle,
+                        useLibass = latestUseLibass,
+                        force = true
+                    )
                 }
             }
         }
@@ -1871,8 +1940,11 @@ private fun ExoPlayerSurface(
         )
     }
 
-    LaunchedEffect(playerView, subtitleStyle) {
-        playerView.applySubtitleStyleIfNeeded(subtitleStyle)
+    LaunchedEffect(playerView, subtitleStyle, useLibass) {
+        playerView.applySubtitleStyleIfNeeded(
+            subtitleStyle = subtitleStyle,
+            useLibass = useLibass
+        )
     }
 }
 
@@ -1891,7 +1963,8 @@ private fun PlayerView.applyExoAspectMode(mode: AspectMode) {
 
 private data class SubtitleAppliedConfig(
     val style: SubtitleStyleSettings,
-    val isAss: Boolean
+    val isAss: Boolean,
+    val useLibass: Boolean
 )
 
 private fun PlayerView.isAssOrSsaSubtitleSelected(): Boolean {
@@ -1926,10 +1999,11 @@ private fun PlayerView.isAssOrSsaSubtitleSelected(): Boolean {
 
 private fun PlayerView.applySubtitleStyleIfNeeded(
     subtitleStyle: SubtitleStyleSettings,
+    useLibass: Boolean = false,
     force: Boolean = false
 ) {
     val isAss = isAssOrSsaSubtitleSelected()
-    val config = SubtitleAppliedConfig(subtitleStyle, isAss)
+    val config = SubtitleAppliedConfig(subtitleStyle, isAss, useLibass)
     if (!force && getTag(R.id.player_view_subtitle_style_tag) == config) {
         return
     }
@@ -1940,6 +2014,12 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
         return
     }
     setTag(R.id.player_view_subtitle_style_tag, config)
+
+    if (!useLibass && isAss) {
+        subView.applyEmbeddedAssStyle()
+        return
+    }
+
     subView.apply {
         val baseFontSize = 24f
         val scaledFontSize = baseFontSize * (subtitleStyle.size / 100f)
@@ -1969,7 +2049,7 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
             )
         )
 
-        setApplyEmbeddedStyles(!isAss)
+        setApplyEmbeddedStyles(true)
 
         val bottomPaddingFraction =
             (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
@@ -2077,6 +2157,7 @@ private fun PlayerControlsOverlay(
     onShowAudioDialog: () -> Unit,
     onShowSubtitleDialog: () -> Unit,
     onShowSpeedDialog: () -> Unit,
+    onShowDimmerDialog: () -> Unit = {},
     onToggleAspectRatio: () -> Unit,
     onSwitchPlayerEngine: () -> Unit,
     onReportPlaybackIssue: () -> Unit,
@@ -2363,6 +2444,14 @@ private fun PlayerControlsOverlay(
                                 onFocused = onResetHideTimer
                             )
                             ControlButton(
+                                icon = Icons.Default.BrightnessMedium,
+                                contentDescription = stringResource(R.string.cd_app_dimmer),
+                                onClick = onShowDimmerDialog,
+                                upFocusRequester = progressUpTarget,
+                                onDownKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                            ControlButton(
                                 icon = Icons.Default.AspectRatio,
                                 iconPainter = customAspectPainter,
                                 contentDescription = stringResource(R.string.cd_aspect_ratio),
@@ -2517,6 +2606,22 @@ private fun ReportControlButton(
     }
 }
 
+/** Filters duplicate click callbacks from a noisy/long-running TV remote (e.g. Shield Pro). */
+private class PlayerClickGate {
+    private var lastAcceptedAtMs = Long.MIN_VALUE
+
+    fun accept(): Boolean {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (lastAcceptedAtMs != Long.MIN_VALUE &&
+            now - lastAcceptedAtMs < PlayerRemoteInputRouter.ONE_SHOT_DEBOUNCE_MS
+        ) {
+            return false
+        }
+        lastAcceptedAtMs = now
+        return true
+    }
+}
+
 @Composable
 private fun ControlButton(
     icon: ImageVector,
@@ -2530,9 +2635,10 @@ private fun ControlButton(
     onFocused: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val clickGate = remember { PlayerClickGate() }
 
     IconButton(
-        onClick = onClick,
+        onClick = { if (clickGate.accept()) onClick() },
         enabled = enabled,
         modifier = Modifier
             .size(NuvioTheme.spacing.xxxl)
@@ -2630,6 +2736,7 @@ private fun ProgressBar(
         label = "bufferedProgress"
     )
     var isFocused by remember { mutableStateOf(false) }
+    val remoteInputRouter = remember { PlayerRemoteInputRouter() }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -2655,68 +2762,44 @@ private fun ProgressBar(
             }
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_LEFT,
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            onSeekCommit()
-                            return@onPreviewKeyEvent true
-                        }
+                val native = keyEvent.nativeKeyEvent
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN && native.action == KeyEvent.ACTION_DOWN) {
+                    if (downFocusRequester != null) {
+                        try {
+                            downFocusRequester.requestFocus()
+                        } catch (_: Exception) {}
+                        return@onPreviewKeyEvent true
                     }
-                    return@onPreviewKeyEvent false
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP && native.action == KeyEvent.ACTION_DOWN) {
+                    if (upFocusRequester != null) {
+                        try {
+                            upFocusRequester.requestFocus()
+                        } catch (_: Exception) {}
+                        return@onPreviewKeyEvent true
+                    } else if (onUpKey != null) {
+                        onUpKey.invoke()
+                        return@onPreviewKeyEvent true
+                    }
                 }
 
-                // testing additional key handling for DPAD_LEFT and DPAD_RIGHT to allow seek in focus (check)
-                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (downFocusRequester != null) {
-                                try {
-                                    downFocusRequester.requestFocus()
-                                } catch (_: Exception) {
-                                }
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        KeyEvent.KEYCODE_DPAD_UP -> {
-                            if (upFocusRequester != null) {
-                                try {
-                                    upFocusRequester.requestFocus()
-                                } catch (_: Exception) {
-                                }
-                                true
-                            } else if (onUpKey != null) {
-                                onUpKey.invoke()
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            onSeekPreview(
-                                PlayerScrubRates.deltaMsForKeyRepeat(
-                                    repeatCount = keyEvent.nativeKeyEvent.repeatCount,
-                                    forward = false
-                                )
-                            )
-                            true
-                        }
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            onSeekPreview(
-                                PlayerScrubRates.deltaMsForKeyRepeat(
-                                    repeatCount = keyEvent.nativeKeyEvent.repeatCount,
-                                    forward = true
-                                )
-                            )
-                            true
-                        }
-                        else -> false
+                val result = remoteInputRouter.handle(
+                    keyCode = native.keyCode,
+                    action = native.action,
+                    holdDurationMs = native.eventTime - native.downTime,
+                    mode = PlayerRemoteInputMode.CONTROLS_VISIBLE,
+                    canceled = native.isCanceled,
+                    eventTimeMs = native.eventTime,
+                    allowDpadSeek = true
+                )
+                result.actions.forEach { action ->
+                    when (action) {
+                        is PlayerRemoteAction.PreviewSeek -> onSeekPreview(action.deltaMs)
+                        PlayerRemoteAction.CommitPreviewSeek -> onSeekCommit()
+                        else -> Unit
                     }
-                } else {
-                    false
                 }
+                result.consumed
             }
             .clip(RoundedCornerShape(3.dp))
             .background(
@@ -3492,6 +3575,82 @@ private fun SpeedSelectionDialog(
                     }
                 }
             }
+            AppDimmerOverlay(dimPercent = LocalAppDimPercent.current)
+        }
+    }
+}
+
+@Composable
+private fun AppDimmerDialog(
+    dimPercent: Int,
+    onDimPercentChanged: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val firstFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        runCatching { firstFocusRequester.requestFocus() }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .width(440.dp)
+                .clip(RoundedCornerShape(NuvioTheme.radii.xxl))
+                .background(Color.Black.copy(alpha = 0.90f))
+                .border(
+                    BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                    RoundedCornerShape(NuvioTheme.radii.xxl)
+                )
+        ) {
+            Column(
+                modifier = Modifier.padding(NuvioTheme.spacing.xl),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+            ) {
+                Text(
+                    text = stringResource(R.string.player_dimmer_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioTheme.colors.TextPrimary
+                )
+                Text(
+                    text = stringResource(R.string.player_dimmer_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.65f)
+                )
+
+                SliderSettingsItem(
+                    icon = Icons.Default.BrightnessMedium,
+                    title = stringResource(R.string.player_dimmer_title),
+                    value = dimPercent,
+                    valueText = if (dimPercent == 0) {
+                        stringResource(R.string.appearance_app_dimmer_off)
+                    } else {
+                        "${dimPercent}%"
+                    },
+                    minValue = 0,
+                    maxValue = 90,
+                    step = 5,
+                    onValueChange = onDimPercentChanged,
+                    modifier = Modifier.focusRequester(firstFocusRequester)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                ) {
+                    val presets = listOf(0, 25, 50, 75)
+                    presets.forEach { preset ->
+                        val label = if (preset == 0) "Off" else "${preset}%"
+                        DialogButton(
+                            text = label,
+                            onClick = { onDimPercentChanged(preset) },
+                            isPrimary = dimPercent == preset,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            AppDimmerOverlay(dimPercent = dimPercent)
         }
     }
 }
@@ -3534,6 +3693,7 @@ private fun MoreActionsDialog(
                     onClick = onOpenInExternalPlayer
                 )
             }
+            AppDimmerOverlay(dimPercent = LocalAppDimPercent.current)
         }
     }
 }
@@ -3727,3 +3887,62 @@ private fun PlayerBufferingIndicator(
         }
     }
 }
+
+@Composable
+private fun EndCreditsNextEpisodePill(
+    remainingSec: Long,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .onFocusChanged { isFocused = it.isFocused },
+        colors = CardDefaults.colors(
+            containerColor = Color(0xFF1E1E1E).copy(alpha = 0.85f),
+            focusedContainerColor = NuvioTheme.colors.Secondary
+        ),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(999.dp)),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, Color.White),
+                shape = RoundedCornerShape(999.dp)
+            )
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.SkipNext,
+                contentDescription = null,
+                tint = if (isFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.Primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = stringResource(R.string.end_credits_next_episode_pill, remainingSec.toInt()),
+                color = if (isFocused) NuvioTheme.colors.OnSecondary else Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "•",
+                color = if (isFocused) NuvioTheme.colors.OnSecondary.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.5f),
+                fontSize = 14.sp
+            )
+            Text(
+                text = stringResource(R.string.end_credits_next_episode_play_now),
+                color = if (isFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.Primary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+

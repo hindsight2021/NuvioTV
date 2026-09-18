@@ -304,7 +304,9 @@ data class PlayerSettings(
     val enableBufferLogs: Boolean = false,
     val resizeMode: Int = 0,
     // Nuvio ExoPlayer Performance Mode
-    val nuvioPerformanceModeEnabled: Boolean = DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED
+    val nuvioPerformanceModeEnabled: Boolean = DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED,
+    val hideUncachedStreams: Boolean = false,
+    val enableEndCreditsNextEpisodePrompt: Boolean = false
 ) {
     /** Prefer FFmpeg/extension audio decoder (EXTENSION_RENDERER_MODE_PREFER). */
     val isPreferAppDecoder: Boolean
@@ -572,6 +574,9 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private val enableBufferLogsKey = booleanPreferencesKey("enable_buffer_logs")
     private val resizeModeKey = intPreferencesKey("resize_mode")
+    private val assessmentRevertSnapshotKey = stringPreferencesKey("assessment_revert_snapshot_json")
+    private val hideUncachedStreamsKey = booleanPreferencesKey("hide_uncached_streams")
+    private val enableEndCreditsNextEpisodePromptKey = booleanPreferencesKey("enable_end_credits_next_episode_prompt")
 
     // Subtitle style keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -968,6 +973,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 enableHttp2 = prefs[enableHttp2Key] ?: PlayerSettings.DEFAULT_ENABLE_HTTP2,
                 nuvioPerformanceModeEnabled = (prefs[nuvioPerformanceModeEnabledKey] ?: PlayerSettings.DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED) &&
                         android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O,
+                hideUncachedStreams = prefs[hideUncachedStreamsKey] ?: false,
+                enableEndCreditsNextEpisodePrompt = prefs[enableEndCreditsNextEpisodePromptKey] ?: false,
                 subtitleStyle = run {
                     val resolvedPreferredLanguage = resolveSubtitlePreferredLanguage(
                         prefs[subtitlePreferredLanguageKey],
@@ -1728,6 +1735,32 @@ class PlayerSettingsDataStore @Inject constructor(
                 prefs.remove(parallelChunkSizeMbKey)
                 prefs[bufferBudgetManagedKey] = true
             }
+        }
+    }
+
+    val assessmentRevertSnapshot: Flow<String?> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs -> prefs[assessmentRevertSnapshotKey] }
+    }
+
+    suspend fun setAssessmentRevertSnapshot(snapshotJson: String?) {
+        store().edit { prefs ->
+            if (snapshotJson == null) {
+                prefs.remove(assessmentRevertSnapshotKey)
+            } else {
+                prefs[assessmentRevertSnapshotKey] = snapshotJson
+            }
+        }
+    }
+
+    suspend fun setHideUncachedStreams(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[hideUncachedStreamsKey] = enabled
+        }
+    }
+
+    suspend fun setEnableEndCreditsNextEpisodePrompt(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[enableEndCreditsNextEpisodePromptKey] = enabled
         }
     }
 

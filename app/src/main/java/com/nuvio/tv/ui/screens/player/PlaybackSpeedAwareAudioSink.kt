@@ -1,11 +1,16 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.media.AudioTrack
+import android.os.Build
+import android.util.Log
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.audio.AudioOffloadSupport
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.ForwardingAudioSink
+import java.nio.ByteBuffer
 
 /**
  * Audio sink wrapper that forces a decode-to-PCM path when:
@@ -14,12 +19,20 @@ import androidx.media3.exoplayer.audio.ForwardingAudioSink
  *
  * Bluetooth cannot carry TrueHD / Atmos / DTS-HD passthrough. Forcing PCM lets MediaCodec/FFmpeg
  * decode to the format the BT stack actually accepts; the system then encodes to SBC/AAC/aptX/LDAC.
+ *
+ * Also supports lower DIRECT start threshold frames on API 31+ to eliminate cold-start passthrough freeze.
  */
 internal class PlaybackSpeedAwareAudioSink(
     sink: AudioSink,
     initialForcePcm: Boolean = false,
-    forcePcmForBluetooth: Boolean = false
+    forcePcmForBluetooth: Boolean = false,
+    private val reducedStartThresholdFrames: Int = 0
 ) : ForwardingAudioSink(sink) {
+
+    private val baseSink: AudioSink = sink
+    private var startThresholdAppliedThisTrack: Boolean = false
+    private var cachedAudioTrackField: java.lang.reflect.Field? = null
+    private var audioTrackFieldLookupFailed: Boolean = false
 
     // Set when the sink is built with forcePcm (error recovery). Don't clear on speed reset.
     private val startedWithForcedPcm: Boolean = initialForcePcm
@@ -66,6 +79,12 @@ internal class PlaybackSpeedAwareAudioSink(
 
     fun isBluetoothForcePcm(): Boolean = bluetoothForcePcm
 
+    val isCurrentlyPassthrough: Boolean
+        get() {
+            val format = currentInputFormat ?: return false
+            return isEncodedPassthroughCandidate(format) && !bluetoothForcePcm && !forcePcmForCurrentSession
+        }
+
     override fun setListener(listener: AudioSink.Listener) {
         this.listener = listener
         super.setListener(listener)
@@ -73,8 +92,54 @@ internal class PlaybackSpeedAwareAudioSink(
 
     override fun configure(inputFormat: Format, specifiedBufferSize: Int, outputChannels: IntArray?) {
         currentInputFormat = inputFormat
+        startThresholdAppliedThisTrack = false
         markPcmFallbackIfNeeded(inputFormat, playbackSpeed)
         super.configure(inputFormat, specifiedBufferSize, outputChannels)
+    }
+
+    override fun flush() {
+        startThresholdAppliedThisTrack = false
+        super.flush()
+    }
+
+    override fun reset() {
+        startThresholdAppliedThisTrack = false
+        super.reset()
+    }
+
+    override fun handleBuffer(
+        buffer: ByteBuffer,
+        bufferPresentationTimeUs: Long,
+        encodedAccessUnitCount: Int
+    ): Boolean {
+        if (isCurrentlyPassthrough && reducedStartThresholdFrames > 0 &&
+            !startThresholdAppliedThisTrack && Build.VERSION.SDK_INT >= 31
+        ) {
+            try {
+                val defaultSink = baseSink as? DefaultAudioSink
+                val stTrack = if (defaultSink != null && !audioTrackFieldLookupFailed) {
+                    val field = cachedAudioTrackField
+                        ?: DefaultAudioSink::class.java.getDeclaredField("audioTrack")
+                            .apply { isAccessible = true }
+                            .also { cachedAudioTrackField = it }
+                    field.get(defaultSink) as? AudioTrack
+                } else null
+                if (stTrack != null) {
+                    val buf = stTrack.bufferSizeInFrames
+                    if (buf > 0) {
+                        val target = reducedStartThresholdFrames.coerceIn(1, (buf - 1).coerceAtLeast(1))
+                        val ret = stTrack.setStartThresholdInFrames(target)
+                        Log.w("PlaybackSpeedSink", "STHRESH: applied req=$reducedStartThresholdFrames target=$target ret=$ret buf=$buf")
+                        startThresholdAppliedThisTrack = true
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w("PlaybackSpeedSink", "STHRESH: apply failed: ${t.message}")
+                audioTrackFieldLookupFailed = true
+                startThresholdAppliedThisTrack = true
+            }
+        }
+        return super.handleBuffer(buffer, bufferPresentationTimeUs, encodedAccessUnitCount)
     }
 
     override fun setPlaybackParameters(playbackParameters: PlaybackParameters) {

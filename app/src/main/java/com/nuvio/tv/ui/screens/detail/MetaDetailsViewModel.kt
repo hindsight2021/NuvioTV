@@ -572,6 +572,17 @@ class MetaDetailsViewModel @Inject constructor(
                     calculateNextToWatch()
                 }
         }
+        viewModelScope.launch {
+            trailerSettingsDataStore.settings.collectLatest { settings ->
+                _uiState.update { state ->
+                    if (state.detailTrailerAudioEnabled == settings.detailAudioEnabled) {
+                        state
+                    } else {
+                        state.copy(detailTrailerAudioEnabled = settings.detailAudioEnabled)
+                    }
+                }
+            }
+        }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -1591,7 +1602,8 @@ class MetaDetailsViewModel @Inject constructor(
                             useTmdbReleaseDates = settings.useReleaseDates
                         ),
                         thumbnail = if (settings.useEpisodes) ep?.thumbnail ?: video.thumbnail else video.thumbnail,
-                        runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime
+                        runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime,
+                        rating = video.rating ?: (if (settings.useEpisodes) ep?.rating else null)
                     )
                 }
             )

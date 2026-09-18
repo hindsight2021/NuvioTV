@@ -23,6 +23,8 @@ class ThemeDataStore @Inject constructor(
 ) {
     companion object {
         private const val FEATURE = "theme_settings"
+        const val DEFAULT_APP_DIM_PERCENT = 0
+        const val MAX_APP_DIM_PERCENT = 90
     }
 
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
@@ -34,6 +36,7 @@ class ThemeDataStore @Inject constructor(
     private val amoledModeKey = booleanPreferencesKey("amoled_mode")
     private val amoledSurfacesModeKey = booleanPreferencesKey("amoled_surfaces_mode")
     private val settingsUiStyleKey = stringPreferencesKey("settings_ui_style")
+    private val appDimPercentKey = intPreferencesKey("app_dim_percent")
 
     val themeSelection: Flow<ThemeSelection> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
@@ -115,6 +118,19 @@ class ThemeDataStore @Inject constructor(
     suspend fun setSettingsUiStyle(style: SettingsUiStyle) {
         store().edit { prefs ->
             prefs[settingsUiStyleKey] = style.name
+        }
+    }
+
+    val appDimPercent: Flow<Int> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            prefs[appDimPercentKey]?.coerceIn(0, MAX_APP_DIM_PERCENT) ?: DEFAULT_APP_DIM_PERCENT
+        }
+    }
+
+    suspend fun setAppDimPercent(percent: Int, profileId: Int = profileManager.activeProfileId.value) {
+        val clamped = percent.coerceIn(0, MAX_APP_DIM_PERCENT)
+        store(profileId).edit { prefs ->
+            prefs[appDimPercentKey] = clamped
         }
     }
 

@@ -21,6 +21,7 @@ enum class CalendarItemType {
  */
 enum class CalendarCategory(val displayName: String) {
     ALL("All"),
+    ACTIVELY_WATCHING("Watching"),
     TV_EPISODES("TV Episodes"),
     DIGITAL_STREAMING("Available to Stream"),
     MOVIES("In Theaters")
@@ -50,7 +51,14 @@ data class CalendarMediaItem(
     val rank: Int? = null,
     val imdbId: String? = null,
     val tmdbId: String? = null,
-    val simklId: Long? = null
+    val simklId: Long? = null,
+    val isActivelyWatching: Boolean = false,
+    val isWatchlist: Boolean = false,
+    val isSeriesPremiere: Boolean = false,
+    val isSeasonPremiere: Boolean = false,
+    val isSeasonFinale: Boolean = false,
+    val isNextUpForUser: Boolean = false,
+    val userStatusNote: String? = null
 )
 
 /**

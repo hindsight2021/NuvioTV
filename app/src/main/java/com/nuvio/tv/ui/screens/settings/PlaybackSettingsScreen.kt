@@ -410,6 +410,12 @@ fun PlaybackSettingsContent(
                 onSetEnableHttp2 = { enabled ->
                     coroutineScope.launch { viewModel.setEnableHttp2(enabled) }
                     memoryUsageTrigger++
+                },
+                onSetHideUncachedStreams = { enabled ->
+                    coroutineScope.launch { viewModel.setHideUncachedStreams(enabled) }
+                },
+                onSetEnableEndCreditsNextEpisodePrompt = { enabled ->
+                    coroutineScope.launch { viewModel.setEnableEndCreditsNextEpisodePrompt(enabled) }
                 }
             )
         }

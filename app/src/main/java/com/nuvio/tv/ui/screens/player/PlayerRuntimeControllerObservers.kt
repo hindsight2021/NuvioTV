@@ -353,7 +353,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                             resolvedInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER,
                     persistAudioAmplification = settings.persistAudioAmplification,
                     audioAmplificationDb = resolvedAudioAmplificationDb,
-                    centerMixLevelDb = resolvedCenterMixLevelDb
+                    centerMixLevelDb = resolvedCenterMixLevelDb,
+                    enableEndCreditsNextEpisodePrompt = settings.enableEndCreditsNextEpisodePrompt
                 )
             }
 
@@ -857,6 +858,82 @@ internal fun PlayerRuntimeController.maybeScheduleStallWatchdog() {
     }
 }
 
+internal fun PlayerRuntimeController.cancelStartupWatchdog() {
+    startupWatchdogJob?.cancel()
+    startupWatchdogJob = null
+}
+
+internal fun PlayerRuntimeController.scheduleStartupWatchdog() {
+    cancelStartupWatchdog()
+    startupWatchdogJob = scope.launch {
+        val armedAtMs = System.currentTimeMillis()
+        var lastBufferedAheadMs = 0L
+        while (isActive) {
+            delay(PlayerRuntimeController.STARTUP_WATCHDOG_TIMEOUT_MS)
+            if (hasRenderedFirstFrame) return@launch
+            val livePlayer = _exoPlayer ?: return@launch
+            val elapsedMs = System.currentTimeMillis() - armedAtMs
+            val bufferedAheadMs = livePlayer.totalBufferedDuration.coerceAtLeast(0L)
+            val anotherIntervalFits =
+                elapsedMs + PlayerRuntimeController.STARTUP_WATCHDOG_TIMEOUT_MS <=
+                    PlayerRuntimeController.STARTUP_WATCHDOG_CEILING_MS
+            if (bufferedAheadMs > lastBufferedAheadMs && anotherIntervalFits) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "STARTUP_WATCHDOG: no first frame ${elapsedMs}ms after starting_stream " +
+                        "but buffered-ahead growing (${lastBufferedAheadMs}ms -> ${bufferedAheadMs}ms); " +
+                        "extending (ceiling=${PlayerRuntimeController.STARTUP_WATCHDOG_CEILING_MS}ms)"
+                )
+                lastBufferedAheadMs = bufferedAheadMs
+                continue
+            }
+            val stateName = when (livePlayer.playbackState) {
+                Player.STATE_IDLE -> "IDLE"
+                Player.STATE_BUFFERING -> "BUFFERING"
+                Player.STATE_READY -> "READY"
+                Player.STATE_ENDED -> "ENDED"
+                else -> livePlayer.playbackState.toString()
+            }
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "STARTUP_WATCHDOG: no first frame ${elapsedMs}ms " +
+                    "after starting_stream (state=$stateName bufferedAheadMs=$bufferedAheadMs " +
+                    "pos=${livePlayer.currentPosition}); surfacing error"
+            )
+            _uiState.update {
+                if (it.error == null) {
+                    it.copy(
+                        error = context.getString(R.string.player_error_startup_timeout),
+                        showLoadingOverlay = false
+                    )
+                } else {
+                    it
+                }
+            }
+            return@launch
+        }
+    }
+}
+
+internal fun PlayerRuntimeController.retractStartupTimeoutErrorAfterFirstFrame() {
+    val startupTimeoutMessage = context.getString(R.string.player_error_startup_timeout)
+    var retracted = false
+    _uiState.update {
+        if (it.error == startupTimeoutMessage) {
+            retracted = true
+            it.copy(error = null)
+        } else {
+            it
+        }
+    }
+    if (retracted) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "STARTUP_WATCHDOG: first frame rendered after fire; retracting startup-timeout error"
+        )
+    }
+}
+
 internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
     if (hasRenderedFirstFrame || !currentStreamHasVideoTrack) return
     val player = _exoPlayer ?: return
@@ -943,6 +1020,7 @@ internal fun PlayerRuntimeController.scheduleDeferredPlayerReinitialize(
     clearResumeProgress: Boolean = false
 ) {
     cancelFirstFrameWatchdog()
+    cancelStartupWatchdog()
     cancelStallWatchdog()
     if (clearResumeProgress) {
         pendingResumeProgress = null

@@ -1673,7 +1673,8 @@ data class TmdbEpisodeEnrichment(
     val overview: String?,
     val thumbnail: String?,
     val airDate: String?,
-    val runtimeMinutes: Int?
+    val runtimeMinutes: Int?,
+    val rating: Double? = null
 )
 
 enum class TmdbEntityKind(val routeValue: String) {
@@ -1733,12 +1734,14 @@ private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
     val overview = overview?.takeIf { it.isNotBlank() }
     val thumbnail = stillPath?.takeIf { it.isNotBlank() }?.let { "https://image.tmdb.org/t/p/w500$it" }
     val airDate = airDate?.takeIf { it.isNotBlank() }
+    val rating = voteAverage?.takeIf { it > 0.0 }
     return TmdbEpisodeEnrichment(
         title = title,
         overview = overview,
         thumbnail = thumbnail,
         airDate = airDate,
-        runtimeMinutes = runtime
+        runtimeMinutes = runtime,
+        rating = rating
     )
 }
 

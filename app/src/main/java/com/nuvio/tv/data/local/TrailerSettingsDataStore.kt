@@ -24,12 +24,14 @@ class TrailerSettingsDataStore @Inject constructor(
 
     private val enabledKey = booleanPreferencesKey("trailer_enabled")
     private val delaySecondsKey = intPreferencesKey("trailer_delay_seconds")
+    private val detailAudioEnabledKey = booleanPreferencesKey("detail_trailer_audio_enabled")
 
     val settings: Flow<TrailerSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             TrailerSettings(
                 enabled = prefs[enabledKey] ?: true,
-                delaySeconds = prefs[delaySecondsKey] ?: 7
+                delaySeconds = prefs[delaySecondsKey] ?: 7,
+                detailAudioEnabled = prefs[detailAudioEnabledKey] ?: true
             )
         }
     }
@@ -41,9 +43,14 @@ class TrailerSettingsDataStore @Inject constructor(
     suspend fun setDelaySeconds(seconds: Int) {
         store().edit { it[delaySecondsKey] = seconds }
     }
+
+    suspend fun setDetailAudioEnabled(enabled: Boolean) {
+        store().edit { it[detailAudioEnabledKey] = enabled }
+    }
 }
 
 data class TrailerSettings(
     val enabled: Boolean = true,
-    val delaySeconds: Int = 7
+    val delaySeconds: Int = 7,
+    val detailAudioEnabled: Boolean = true
 )

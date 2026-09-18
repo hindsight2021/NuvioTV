@@ -1247,7 +1247,7 @@ private fun PlaybackNavHost(
             com.nuvio.tv.ui.screens.calendar.CalendarScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onItemClick = { item ->
-                    val itemId = item.imdbId ?: item.tmdbId?.let { "tmdb:$it" } ?: item.id
+                    val itemId = item.imdbId ?: item.tmdbId?.let { "tmdb:$it" } ?: item.id.substringBefore(':')
                     if (item.type == com.nuvio.tv.data.simkl.calendar.CalendarItemType.TV_EPISODE) {
                         navController.navigate(
                             Screen.Detail.createRoute(

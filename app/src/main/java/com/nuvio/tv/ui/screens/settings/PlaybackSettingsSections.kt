@@ -198,7 +198,9 @@ internal fun PlaybackSettingsSections(
     onSetVodCacheSizeMb: (Int) -> Unit,
     onResetBufferSettingsToDefaults: () -> Unit,
     onSetEnableHttp2: (Boolean) -> Unit,
-    onResetNetworkSettingsToDefaults: () -> Unit
+    onResetNetworkSettingsToDefaults: () -> Unit,
+    onSetHideUncachedStreams: (Boolean) -> Unit = {},
+    onSetEnableEndCreditsNextEpisodePrompt: (Boolean) -> Unit = {}
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
     var afrExpanded by rememberSaveable { mutableStateOf(false) }
@@ -561,6 +563,8 @@ internal fun PlaybackSettingsSections(
                 onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled,
                 onSetStillWatchingEnabled = onSetStillWatchingEnabled,
                 onSetStillWatchingEpisodeThreshold = onSetStillWatchingEpisodeThreshold,
+                onSetHideUncachedStreams = onSetHideUncachedStreams,
+                onSetEnableEndCreditsNextEpisodePrompt = onSetEnableEndCreditsNextEpisodePrompt,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )
 
