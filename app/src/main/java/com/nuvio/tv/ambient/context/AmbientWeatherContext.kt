@@ -10,17 +10,15 @@ import kotlinx.coroutines.flow.StateFlow
  * Provides ambient weather context derived from [HomeAssistantWeatherService].
  */
 @Singleton
-class AmbientWeatherContext @Inject constructor(
-    private val weatherService: HomeAssistantWeatherService
-) {
+class AmbientWeatherContext @Inject constructor() {
 
-    val weatherState: StateFlow<HomeAssistantWeather> = weatherService.weatherState
+    val weatherState: StateFlow<HomeAssistantWeather> = HomeAssistantWeatherService.weatherState
 
     /**
      * Returns a list of semantic tags describing the current weather condition.
      */
     fun getCurrentWeatherTags(): List<String> {
-        val condition = weatherService.weatherState.value.condition.lowercase()
+        val condition = HomeAssistantWeatherService.weatherState.value.condition.lowercase()
 
         return when {
             condition.contains("rain") || condition.contains("pouring") ->
@@ -51,19 +49,19 @@ class AmbientWeatherContext @Inject constructor(
     }
 
     fun isRaining(): Boolean {
-        val condition = weatherService.weatherState.value.condition.lowercase()
+        val condition = HomeAssistantWeatherService.weatherState.value.condition.lowercase()
         return condition.contains("rain") || condition.contains("pouring")
     }
 
     fun isSnowing(): Boolean {
-        val condition = weatherService.weatherState.value.condition.lowercase()
+        val condition = HomeAssistantWeatherService.weatherState.value.condition.lowercase()
         return condition.contains("snow") ||
             condition.contains("sleet") ||
             condition.contains("hail")
     }
 
     fun isCold(): Boolean {
-        val weather = weatherService.weatherState.value
+        val weather = HomeAssistantWeatherService.weatherState.value
         val condition = weather.condition.lowercase()
 
         val isSnowyCondition = condition.contains("snow") ||
@@ -82,6 +80,6 @@ class AmbientWeatherContext @Inject constructor(
     }
 
     suspend fun refresh() {
-        weatherService.refresh()
+        HomeAssistantWeatherService.refresh()
     }
 }
