@@ -3242,10 +3242,10 @@
     <string name="stream_test_file_label">File: %1$s</string>
     <string name="stream_test_row_warning_suffix">" ⚠"</string>
     <string name="stream_test_row_pm_suffix">" · PM"</string>
-    <string name="stream_test_verdict_leave_off">Recommendation: leave parallel connections off — a single connection already delivers %1$s, more than 2× this title's bitrate.</string>
-    <string name="stream_test_verdict_recommend">Recommendation: %1$d connections / %2$d MB chunks — %3$s. Lowest-memory configuration that meets 2× this title's bitrate; faster configurations may appear above but use more memory for no playback benefit.</string>
-    <string name="stream_test_verdict_marginal">Best result: %1$d connections / %2$d MB chunks at %3$s — above this title's %4$s average bitrate, but under the 2× headroom target. Playback should work, but may buffer during high-bitrate scenes or seeks.</string>
-    <string name="stream_test_verdict_cannot_sustain">This connection can't sustain this title — the fastest tested configuration (%1$d connections / %2$d MB chunks) reached %3$s, below the title's %4$s average bitrate. Expect buffering; consider a lower-bitrate version.</string>
+    <string name="stream_test_verdict_leave_off">Recommendation: leave parallel connections off — a single connection already delivers %1$s, more than 2× this title\'s bitrate.</string>
+    <string name="stream_test_verdict_recommend">Recommendation: %1$d connections / %2$d MB chunks — %3$s. Lowest-memory configuration that meets 2× this title\'s bitrate; faster configurations may appear above but use more memory for no playback benefit.</string>
+    <string name="stream_test_verdict_marginal">Best result: %1$d connections / %2$d MB chunks at %3$s — above this title\'s %4$s average bitrate, but under the 2× headroom target. Playback should work, but may buffer during high-bitrate scenes or seeks.</string>
+    <string name="stream_test_verdict_cannot_sustain">This connection can\'t sustain this title — the fastest tested configuration (%1$d connections / %2$d MB chunks) reached %3$s, below the title\'s %4$s average bitrate. Expect buffering; consider a lower-bitrate version.</string>
     <string name="stream_test_verdict_fastest_nobitrate">Fastest stable: %1$d connections / %2$d MB chunks at %3$s. Title bitrate unknown — play a video first for a tailored recommendation.</string>
     <string name="stream_test_verdict_pm_suffix">" Requires Nuvio Performance Mode."</string>
     <string name="stream_test_caveat">Measures raw download throughput only — real playback also depends on buffering, decoding and server load, and holds the target buffer in memory as well.</string>
@@ -3261,7 +3261,7 @@
     <string name="stream_test_detail_rate_limited">the source refused this connection count</string>
     <string name="stream_test_detail_no_transfer">rate-limited into moving almost no data</string>
     <string name="stream_test_note_skipped_generic">over the device budget</string>
-    <string name="stream_test_verdict_recommend_trade">Recommendation: %1$d connections / %2$d MB chunks — %3$s (%4$s× this title's bitrate). Chosen over %5$d × %6$d MB (2×+) because on this device's memory budget it leaves %7$d MB ≈ %8$d s of playback buffer instead of %9$d MB ≈ %10$d s — tank depth beats refill rate here.</string>
+    <string name="stream_test_verdict_recommend_trade">Recommendation: %1$d connections / %2$d MB chunks — %3$s (%4$s× this title\'s bitrate). Chosen over %5$d × %6$d MB (2×+) because on this device\'s memory budget it leaves %7$d MB ≈ %8$d s of playback buffer instead of %9$d MB ≈ %10$d s — tank depth beats refill rate here.</string>
 
     <!-- Device Assessment (Zero DV/HDR) -->
     <string name="assessment_value_on">On</string>
@@ -3290,24 +3290,24 @@
     <string name="assessment_item_afr">Auto Frame Rate &amp; Resolution</string>
     <string name="assessment_item_res_match">Resolution Matching</string>
     <string name="assessment_item_tunneling">Tunneled Playback</string>
-    <string name="assessment_grounds_parallel_off">Single connection measured %1$s — already ≥ 2× this title's bitrate; parallel adds memory for no benefit</string>
+    <string name="assessment_grounds_parallel_off">Single connection measured %1$s — already ≥ 2× this title\'s bitrate; parallel adds memory for no benefit</string>
     <string name="assessment_grounds_parallel_rec">Measured %1$s at %2$d × %3$d MB — cheapest configuration meeting 2× bitrate within the safe memory budget</string>
     <string name="assessment_grounds_parallel_rec_unsafe">Measured %1$s at %2$d × %3$d MB — meets 2× bitrate, but no configuration inside the safe budget did; this one exceeds the safe limit</string>
-    <string name="assessment_grounds_parallel_marginal">Fastest measured %1$s at %2$d × %3$d MB — above the title's bitrate but under the 2× margin; expect thin headroom</string>
-    <string name="assessment_grounds_parallel_cannot">Fastest measured %1$s at %2$d × %3$d MB — below the title's own bitrate; this link can't sustain the stream</string>
+    <string name="assessment_grounds_parallel_marginal">Fastest measured %1$s at %2$d × %3$d MB — above the title\'s bitrate but under the 2× margin; expect thin headroom</string>
+    <string name="assessment_grounds_parallel_cannot">Fastest measured %1$s at %2$d × %3$d MB — below the title\'s own bitrate; this link can\'t sustain the stream</string>
     <string name="assessment_grounds_parallel_fastest">Fastest measured %1$s at %2$d × %3$d MB — no title bitrate was known, so no sufficiency verdict</string>
     <string name="assessment_grounds_chunk">Paired with the connection count above, from the same measured pass</string>
     <string name="assessment_grounds_network_master">Master switch for the HTTP/2 and parallel settings below</string>
     <string name="assessment_grounds_http2">Multiplexes range requests over one connection; broadly beneficial, no probe needed</string>
-    <string name="assessment_grounds_perf_mode">Keeps remux-sized buffers off the Java heap so garbage collection can't stutter frames; memory limits scale to this device's %1$s tier (safe %2$d MB / warning %3$d MB) and counts above %4$d connections require it</string>
+    <string name="assessment_grounds_perf_mode">Keeps remux-sized buffers off the Java heap so garbage collection can\'t stutter frames; memory limits scale to this device\'s %1$s tier (safe %2$d MB / warning %3$d MB) and counts above %4$d connections require it</string>
     <string name="assessment_grounds_perf_mode_unsupported">Requires Android 8.0 or newer</string>
-    <string name="assessment_grounds_buffer_master">Off means media3's stock load control: a byte-computed target around 13 MB, which holds ≈ 1 s of a remux regardless of its duration values — the values below are sized to this device instead</string>
+    <string name="assessment_grounds_buffer_master">Off means media3\'s stock load control: a byte-computed target around 13 MB, which holds ≈ 1 s of a remux regardless of its duration values — the values below are sized to this device instead</string>
     <string name="assessment_grounds_managed_budget">Managed mode pins the target to the safe limit and ignores parallel-connection overhead; the explicit target below accounts for both</string>
     <string name="assessment_grounds_target_buffer">Target %1$d + %2$d MB connection overhead = %3$d MB ≤ the %4$d MB safe limit (largest %5$d MB step that fits)</string>
     <string name="assessment_grounds_allow_large_on">Needed so the target slider reaches %1$d MB on this device</string>
     <string name="assessment_grounds_allow_large_off">The recommended target fits the standard slider range</string>
-    <string name="assessment_grounds_max_buffer">A %1$d MB target holds ≈%2$d s of this title (%3$s) — seconds beyond that can't materialise</string>
-    <string name="assessment_grounds_max_buffer_nobitrate">No title bitrate known — the byte ceiling can't be computed; leaving the cap at %1$d s</string>
+    <string name="assessment_grounds_max_buffer">A %1$d MB target holds ≈%2$d s of this title (%3$s) — seconds beyond that can\'t materialise</string>
+    <string name="assessment_grounds_max_buffer_nobitrate">No title bitrate known — the byte ceiling can\'t be computed; leaving the cap at %1$d s</string>
     <string name="assessment_grounds_vod_auto">Auto sizes from free space (20%% of free within limits, 1 GB reserve) — ≈%1$s on this device right now</string>
     <string name="assessment_grounds_vod_off">Not enough free space for a useful cache (needs ≥ 100 MB after the 1 GB reserve) — the runtime would stream direct anyway</string>
     <string name="assessment_grounds_afr_on">Display reports multiple refresh rates at the current resolution (%1$s)</string>
@@ -3315,8 +3315,8 @@
     <string name="assessment_grounds_afr_single">Single-rate display at the current resolution — nothing to switch to</string>
     <string name="assessment_grounds_res_on">Display exposes multiple resolutions (%1$s)</string>
     <string name="assessment_grounds_res_single">Single-resolution display — nothing to switch to</string>
-    <string name="assessment_grounds_display_unknown">Couldn't inspect the display from this screen — leave as is and verify by eye</string>
-    <string name="assessment_grounds_tunneling">Seek/fast-forward and audio-sync quirks on some decoder stacks aren't queryable — verify on this chain before keeping it on</string>
+    <string name="assessment_grounds_display_unknown">Couldn\'t inspect the display from this screen — leave as is and verify by eye</string>
+    <string name="assessment_grounds_tunneling">Seek/fast-forward and audio-sync quirks on some decoder stacks aren\'t queryable — verify on this chain before keeping it on</string>
     <string name="assessment_profile_fast_title">Fast start</string>
     <string name="assessment_profile_fast_sub">Starts ≈%1$d s after tap; smallest stall cushion</string>
     <string name="assessment_profile_balanced_title">Balanced</string>
@@ -3326,7 +3326,7 @@
     <string name="assessment_section_header">Device assessment</string>
     <string name="assessment_run_title">Run device assessment</string>
     <string name="assessment_run_running">Assessing…</string>
-    <string name="assessment_run_subtitle">Measures your link against the last-played stream and checks this device's facts. For best results, play your most demanding title first — settings tuned for the heaviest case play lighter content fine, not the reverse.</string>
+    <string name="assessment_run_subtitle">Measures your link against the last-played stream and checks this device\'s facts. For best results, play your most demanding title first — settings tuned for the heaviest case play lighter content fine, not the reverse.</string>
     <string name="assessment_no_stream">No last-played stream — device rows will still run. For measured rows, play your most demanding typical title first, then rerun.</string>
     <string name="assessment_header_title">Device facts</string>
     <string name="assessment_header_device">Device</string>
@@ -3357,10 +3357,10 @@
     <string name="assessment_value_engine_auto">Auto</string>
     <string name="assessment_value_engine_mvp">MVP Player (libmpv)</string>
     <string name="assessment_grounds_engine_ok">Every assessed row below applies to the ExoPlayer path</string>
-    <string name="assessment_grounds_engine_switch">Every assessed row below applies to the ExoPlayer path — under the MVP player these settings don't take effect</string>
+    <string name="assessment_grounds_engine_switch">Every assessed row below applies to the ExoPlayer path — under the MVP player these settings don\'t take effect</string>
     <string name="assessment_item_ac3">Force AC-3 Transcoding (Optical/SPDIF)</string>
     <string name="assessment_grounds_ac3_hdmi">Audio route is %1$s (%2$s) — on an HDMI chain this setting only turns lossless passthrough into lossy AC-3</string>
-    <string name="assessment_grounds_ac3_unknown">Couldn't confirm an optical route from here — this setting only belongs on Optical/SPDIF outputs</string>
+    <string name="assessment_grounds_ac3_unknown">Couldn\'t confirm an optical route from here — this setting only belongs on Optical/SPDIF outputs</string>
     <string name="assessment_apply_title">Apply recommended settings</string>
     <string name="assessment_apply_arm_sub">Writes the Measured and Calculated rows plus the selected profile — Verify rows are never touched. A revert snapshot is kept.</string>
     <string name="assessment_apply_confirm_sub">Press again to confirm — about %1$d settings will be written</string>
@@ -3371,7 +3371,7 @@
     <string name="assessment_stability_insufficient">Link stability: not enough qualifying samples this run (%1$d passes with ≥ 4 sub-windows) — no profile suggestion</string>
     <string name="assessment_profile_values_capped">start %1$d s · rebuffer %2$d s · min %3$d s — memory-capped from %4$d s</string>
     <string name="assessment_profile_suggested_tag">Suggested</string>
-    <string name="assessment_grounds_res_choice">Display exposes multiple resolutions (%1$s) — matching lets the panel's scaler handle upscaling instead of this box's; which looks better is panel-dependent, so this stays your call</string>
+    <string name="assessment_grounds_res_choice">Display exposes multiple resolutions (%1$s) — matching lets the panel\'s scaler handle upscaling instead of this box\'s; which looks better is panel-dependent, so this stays your call</string>
     <string name="assessment_grounds_res_inert">Single-resolution display — this setting is inert here</string>
     <string name="assessment_already_set">✓ Already set</string>
 
