@@ -37,4 +37,22 @@ object PlayerScrubRates {
         val step = stepMsForKeyRepeat(repeatCount)
         return if (forward) step else -step
     }
+
+    /** Hold duration at which the scrub step doubles. */
+    const val LONG_HOLD_THRESHOLD_MS = 3_000L
+
+    /**
+     * Returns the seek delta magnitude (always positive) for a key that
+     * has been held for [holdDurationMs] milliseconds (0 for the initial
+     * press, so a tap gets the base step).
+     */
+    fun stepMsForHold(holdDurationMs: Long): Long {
+        return if (holdDurationMs >= LONG_HOLD_THRESHOLD_MS) STEP_MEDIUM_MS else STEP_SHORT_MS
+    }
+
+    /** Signed delta for a left/rewind (negative) or right/forward (positive) scrub. */
+    fun deltaMsForHold(holdDurationMs: Long, forward: Boolean): Long {
+        val step = stepMsForHold(holdDurationMs)
+        return if (forward) step else -step
+    }
 }

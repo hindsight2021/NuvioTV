@@ -2209,6 +2209,7 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor))
+        val baseAudioSink = builder.build()
         val defaultStartThresholdFrames = 262144 // ~5.5 s at 48 kHz
         val reducedStartThresholdFrames = runCatching {
             android.provider.Settings.Global.getString(context.contentResolver, "nuvio_reduced_start_threshold")

@@ -81,6 +81,71 @@ object MemoryBudget {
     fun totalUsageMb(bufferMb: Int, connectionCount: Int, chunkSizeMb: Int, parallelEnabled: Boolean): Int =
         bufferMb + if (parallelEnabled) parallelOverheadMb(connectionCount, chunkSizeMb) else 0
 
+    private const val PREFETCH_DEPTH_LOWER_MULTIPLE = 2
+    private const val PREFETCH_DEPTH_UPPER_MULTIPLE = 4
+
+    fun prefetchDepthChunks(
+        connections: Int,
+        chunkSizeMb: Int,
+        safeNativeLimitMb: Int,
+        reserveBufferMb: Int,
+    ): Int {
+        val chunkMb = chunkSizeMb.coerceAtLeast(1)
+        val chunkBudgetMb = (safeNativeLimitMb - reserveBufferMb.coerceAtLeast(0))
+            .coerceAtLeast(chunkMb * PREFETCH_DEPTH_LOWER_MULTIPLE)
+        val byBudget = chunkBudgetMb / chunkMb
+        return byBudget.coerceIn(
+            connections * PREFETCH_DEPTH_LOWER_MULTIPLE,
+            connections * PREFETCH_DEPTH_UPPER_MULTIPLE
+        )
+    }
+
+    private const val SWEEP_BUDGET_FRACTION = 0.75
+    const val SWEEP_CELL_MAX_CONCURRENT_MB = 128
+
+    fun sweepCellPrefetchDepth(
+        connections: Int,
+        chunkSizeMb: Int,
+        safeNativeLimitMb: Int
+    ): Int? {
+        val chunkMb = chunkSizeMb.coerceAtLeast(1)
+        if (connections * chunkMb > SWEEP_CELL_MAX_CONCURRENT_MB) return null
+        val budgetMb = (safeNativeLimitMb * SWEEP_BUDGET_FRACTION).toInt()
+        val depth = (budgetMb / chunkMb)
+            .coerceAtMost(connections * PREFETCH_DEPTH_UPPER_MULTIPLE)
+        return depth.takeIf { it >= connections + 1 }
+    }
+
+    fun displayParallelOverheadMb(
+        connectionCount: Int,
+        chunkSizeMb: Int,
+        safeNativeLimitMb: Int,
+        reserveBufferMb: Int,
+        deepPathActive: Boolean,
+    ): Int {
+        val depth = if (deepPathActive) {
+            prefetchDepthChunks(connectionCount, chunkSizeMb, safeNativeLimitMb, reserveBufferMb)
+        } else {
+            connectionCount + 1
+        }
+        val sessionHeadroom = if (isLowRamTier) 2 else 4
+        return (depth + sessionHeadroom) * chunkSizeMb
+    }
+
+    fun displayTotalUsageMb(
+        bufferMb: Int,
+        connectionCount: Int,
+        chunkSizeMb: Int,
+        parallelEnabled: Boolean,
+        safeNativeLimitMb: Int,
+        deepPathActive: Boolean,
+    ): Int =
+        bufferMb + if (parallelEnabled) {
+            displayParallelOverheadMb(connectionCount, chunkSizeMb, safeNativeLimitMb, bufferMb, deepPathActive)
+        } else {
+            0
+        }
+
     /** Hard chunk-size ceiling for this device tier; binds everywhere, including performance mode. */
     val tierMaxChunkMb: Int = if (isLowRamTier) LOW_RAM_MAX_CHUNK_MB else MAX_CHUNK_MB
 

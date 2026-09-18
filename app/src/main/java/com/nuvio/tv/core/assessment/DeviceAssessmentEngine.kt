@@ -642,7 +642,8 @@ object DeviceAssessmentEngine {
             safeLimitMb = safeLimitMb,
             warningLimitMb = warningLimitMb,
             displaySummary = displaySummary,
-            streamLabel = diagnostics.filename ?: diagnostics.host.takeIf { it.isNotBlank() },
+            streamLabel = diagnostics.streamUrl?.substringAfterLast('/')?.substringBefore('?')?.takeIf { it.isNotBlank() }
+                ?: diagnostics.host.takeIf { it.isNotBlank() },
             streamBitrateMbps = bitrateMbps
         )
 
