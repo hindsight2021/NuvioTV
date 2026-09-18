@@ -1,0 +1,49 @@
+blueprint:
+  name: "Nuvio TV - Pause on Interruption"
+  description: "Pauses Nuvio TV playback when a doorbell or sensor is triggered, then resumes after a set duration."
+  domain: automation
+  input:
+    nuvio_player:
+      name: "Nuvio TV Media Player"
+      selector:
+        entity:
+          domain: media_player
+          integration: nuvio
+    trigger_sensor:
+      name: "Doorbell / Motion Sensor"
+      selector:
+        entity:
+          domain: binary_sensor
+    resume_after_seconds:
+      name: "Resume Delay (Seconds)"
+      description: "Seconds to wait before automatically resuming playback (0 = do not auto-resume)."
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 300
+          unit_of_measurement: "s"
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input trigger_sensor
+    to: "on"
+
+condition:
+  - condition: state
+    entity_id: !input nuvio_player
+    state: "playing"
+
+action:
+  - service: media_player.media_pause
+    target:
+      entity_id: !input nuvio_player
+  - condition: template
+    value_template: "{{ (resume_delay | int) > 0 }}"
+  - delay:
+      seconds: !input resume_after_seconds
+  - service: media_player.media_play
+    target:
+      entity_id: !input nuvio_player

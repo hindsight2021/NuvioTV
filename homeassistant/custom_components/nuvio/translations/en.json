@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Nuvio TV",
+        "description": "Enter the IP address and 4-digit pairing PIN shown under Settings -> Integrations -> Remote Control on your Nuvio TV.",
+        "data": {
+          "host": "Host / IP Address",
+          "port": "Port",
+          "pin": "Pairing PIN (4 digits)",
+          "name": "Device Name"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate Nuvio TV",
+        "description": "The authentication token has expired or was regenerated on your TV. Enter the current 4-digit pairing PIN shown on your TV screen.",
+        "data": {
+          "pin": "Pairing PIN (4 digits)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Nuvio TV. Check the IP and make sure Remote Control is enabled in TV Settings.",
+      "invalid_auth": "Invalid pairing PIN. Check the PIN shown on your TV screen.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This Nuvio TV is already configured.",
+      "reauth_successful": "Reauthentication successful!"
+    }
+  }
+}

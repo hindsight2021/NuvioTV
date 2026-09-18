@@ -98,6 +98,7 @@ class PlayerViewModel @Inject constructor(
     private val tvRecommendationManager: com.nuvio.tv.core.recommendations.TvRecommendationManager,
     private val themeDataStore: ThemeDataStore,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
+    private val playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -168,6 +169,10 @@ class PlayerViewModel @Inject constructor(
         scope = viewModelScope
     )
 
+    init {
+        playerPlaybackBridge.register(controller)
+    }
+
     val uiState: StateFlow<PlayerUiState>
         get() = controller.uiState
 
@@ -197,6 +202,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun stopAndRelease() {
+        playerPlaybackBridge.unregister(controller)
         postPlayRecommendationController.stop()
         controller.stopAndRelease()
     }
@@ -266,6 +272,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        playerPlaybackBridge.unregister(controller)
         postPlayRecommendationController.stop()
         controller.onCleared()
         // Allow the trailer player to be re-created when returning to home screen.

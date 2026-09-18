@@ -1,0 +1,27 @@
+language: "en"
+intents:
+  NuvioPlayThematicChannel:
+    data:
+      - sentences:
+          - "play [thematic ]channel {topic} on [nuvio ][tv]"
+          - "start [thematic ]channel {topic} on [nuvio ][tv]"
+          - "put on {topic} channel on [nuvio ][tv]"
+          - "play {topic} on [nuvio ][tv]"
+  NuvioAiCommand:
+    data:
+      - sentences:
+          - "ask nuvio [to] {prompt}"
+          - "tell nuvio [to] {prompt}"
+          - "nuvio {prompt}"
+  NuvioOpenScreen:
+    data:
+      - sentences:
+          - "open [the ]{screen} [screen ][page ]on [nuvio ][tv]"
+          - "go to [the ]{screen} [screen ][page ]on [nuvio ][tv]"
+          - "show [the ]{screen} [screen ][page ]on [nuvio ][tv]"
+  NuvioSendDpad:
+    data:
+      - sentences:
+          - "press {key} on [nuvio ][tv]"
+          - "send {key} to [nuvio ][tv]"
+          - "click {key} on [nuvio ][tv]"

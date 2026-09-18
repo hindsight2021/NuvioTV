@@ -1,0 +1,76 @@
+blueprint:
+  name: "Nuvio TV - Cinematic Lighting Mode"
+  description: "Automatically dims lights when Nuvio TV starts playing, and brightens them when paused or stopped."
+  domain: automation
+  input:
+    nuvio_player:
+      name: "Nuvio TV Media Player"
+      description: "Select the Nuvio TV media player entity."
+      selector:
+        entity:
+          domain: media_player
+          integration: nuvio
+    lights_to_dim:
+      name: "Lights to Dim"
+      description: "Lights or light group to dim during playback."
+      selector:
+        target:
+          entity:
+            domain: light
+    dim_brightness:
+      name: "Dimmed Brightness (%)"
+      description: "Brightness level while playing."
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    bright_brightness:
+      name: "Paused / Stopped Brightness (%)"
+      description: "Brightness level while paused or idle."
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input nuvio_player
+    to: "playing"
+    id: "playing"
+  - platform: state
+    entity_id: !input nuvio_player
+    to: "paused"
+    id: "paused"
+  - platform: state
+    entity_id: !input nuvio_player
+    to: "idle"
+    id: "stopped"
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: "playing"
+        sequence:
+          - service: light.turn_on
+            target: !input lights_to_dim
+            data:
+              brightness_pct: !input dim_brightness
+              transition: 2
+      - conditions:
+          - condition: trigger
+            id:
+              - "paused"
+              - "stopped"
+        sequence:
+          - service: light.turn_on
+            target: !input lights_to_dim
+            data:
+              brightness_pct: !input bright_brightness
+              transition: 1.5

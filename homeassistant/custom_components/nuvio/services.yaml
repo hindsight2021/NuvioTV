@@ -1,0 +1,61 @@
+ai_command:
+  name: AI Command
+  description: Send a natural language command or request to Nuvio TV's AI assistant.
+  fields:
+    prompt:
+      name: Prompt
+      description: Natural language query (e.g. "Find 90s action movies", "Play something funny", "Pause playback")
+      required: true
+      example: "Find Christopher Nolan sci-fi movies"
+      selector:
+        text:
+
+play_thematic_channel:
+  name: Play Thematic Channel
+  description: Generate and start playing a continuous thematic virtual channel on Nuvio TV.
+  fields:
+    topic:
+      name: Topic
+      description: The topic or vibe of the channel (e.g. "Cyberpunk 80s", "Classic Sitcoms", "Space Exploration")
+      required: true
+      example: "Cyberpunk and Neo-Noir"
+      selector:
+        text:
+
+open_screen:
+  name: Open Screen
+  description: Navigate Nuvio TV to a specific screen.
+  fields:
+    screen:
+      name: Screen
+      description: The screen to open
+      required: true
+      example: "search"
+      selector:
+        select:
+          options:
+            - "home"
+            - "search"
+            - "live_tv"
+            - "settings"
+            - "library"
+
+send_dpad:
+  name: Send DPAD Key
+  description: Send a directional or action key to Nuvio TV.
+  fields:
+    key:
+      name: Key
+      description: DPAD navigation key to trigger
+      required: true
+      example: "dpad_center"
+      selector:
+        select:
+          options:
+            - "dpad_up"
+            - "dpad_down"
+            - "dpad_left"
+            - "dpad_right"
+            - "dpad_center"
+            - "back"
+            - "home"

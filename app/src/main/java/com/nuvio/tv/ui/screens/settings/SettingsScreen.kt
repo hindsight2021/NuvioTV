@@ -107,6 +107,7 @@ internal enum class SettingsCategory {
     CONTENT_DISCOVERY,
     INTEGRATION,
     PLAYBACK,
+    AMBIENT,
     ADVANCED,
     TRACKING,
     ABOUT,
@@ -119,7 +120,8 @@ private enum class IntegrationSettingsSection {
     Tmdb,
     MdbList,
     AnimeSkip,
-    AiAssistant
+    AiAssistant,
+    RemoteControl
 }
 
 internal enum class SettingsSectionDestination {
@@ -223,6 +225,13 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
+        category = SettingsCategory.AMBIENT,
+        title = "Ambient Screensaver",
+        icon = Icons.Default.Tv,
+        subtitle = "Cinematic 4K visuals, contextual mood and Home Assistant sync",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
         category = SettingsCategory.TRACKING,
         title = stringResource(R.string.settings_tracking_title),
         icon = Icons.Default.Sync,
@@ -263,7 +272,8 @@ fun SettingsScreen(
     onNavigateToSupportersContributors: () -> Unit = {},
     onNavigateToLicensesAttributions: () -> Unit = {},
     profileViewModel: ProfileSettingsViewModel = hiltViewModel(),
-    experienceModeViewModel: ExperienceModeSettingsViewModel = hiltViewModel()
+    experienceModeViewModel: ExperienceModeSettingsViewModel = hiltViewModel(),
+    ambientViewModel: com.nuvio.tv.ambient.ui.AmbientViewModel = hiltViewModel()
 ) {
     val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
     val experienceModeState by remember(experienceModeViewModel) {
@@ -297,6 +307,7 @@ fun SettingsScreen(
                 SettingsCategory.CONTENT_DISCOVERY -> true
                 SettingsCategory.INTEGRATION -> true
                 SettingsCategory.ADVANCED -> true
+                SettingsCategory.AMBIENT -> true
                 else -> true
             }
         }
@@ -321,6 +332,7 @@ fun SettingsScreen(
             SettingsCategory.CONTENT_DISCOVERY to FocusRequester(),
             SettingsCategory.INTEGRATION to FocusRequester(),
             SettingsCategory.PLAYBACK to FocusRequester(),
+            SettingsCategory.AMBIENT to FocusRequester(),
             SettingsCategory.ADVANCED to FocusRequester(),
             SettingsCategory.ABOUT to FocusRequester(),
             SettingsCategory.ACCOUNT to FocusRequester()
@@ -332,6 +344,7 @@ fun SettingsScreen(
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
+    val integrationRemoteControlFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -717,12 +730,14 @@ fun SettingsScreen(
                                 integrationTmdbFocusRequester = integrationTmdbFocusRequester,
                                 integrationMdbListFocusRequester = integrationMdbListFocusRequester,
                                 integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
+                                integrationRemoteControlFocusRequester = integrationRemoteControlFocusRequester,
                                 onNavigateToManageProfiles = onNavigateToManageProfiles,
                                 onNavigateToAddons = onNavigateToAddons,
                                 onNavigateToPlugins = onNavigateToPlugins,
                                 onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn,
                                 onNavigateToSupportersContributors = onNavigateToSupportersContributors,
-                                onNavigateToLicensesAttributions = onNavigateToLicensesAttributions
+                                onNavigateToLicensesAttributions = onNavigateToLicensesAttributions,
+                                ambientViewModel = ambientViewModel
                             )
                         }
                     }
@@ -892,12 +907,14 @@ fun SettingsScreen(
                         integrationTmdbFocusRequester = integrationTmdbFocusRequester,
                         integrationMdbListFocusRequester = integrationMdbListFocusRequester,
                         integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
+                        integrationRemoteControlFocusRequester = integrationRemoteControlFocusRequester,
                         onNavigateToManageProfiles = onNavigateToManageProfiles,
                         onNavigateToAddons = onNavigateToAddons,
                         onNavigateToPlugins = onNavigateToPlugins,
                         onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn,
                         onNavigateToSupportersContributors = onNavigateToSupportersContributors,
-                        onNavigateToLicensesAttributions = onNavigateToLicensesAttributions
+                        onNavigateToLicensesAttributions = onNavigateToLicensesAttributions,
+                        ambientViewModel = ambientViewModel
                     )
                 }
             }
@@ -920,12 +937,14 @@ private fun SettingsDetailPane(
     integrationTmdbFocusRequester: FocusRequester,
     integrationMdbListFocusRequester: FocusRequester,
     integrationAnimeSkipFocusRequester: FocusRequester,
+    integrationRemoteControlFocusRequester: FocusRequester,
     onNavigateToManageProfiles: () -> Unit,
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
     onNavigateToAuthQrSignIn: () -> Unit,
     onNavigateToSupportersContributors: () -> Unit,
-    onNavigateToLicensesAttributions: () -> Unit
+    onNavigateToLicensesAttributions: () -> Unit,
+    ambientViewModel: com.nuvio.tv.ambient.ui.AmbientViewModel
 ) {
     when (selectedCategory) {
         SettingsCategory.EXPERIENCE -> EssentialAdvancedSettingsContent(
@@ -976,6 +995,15 @@ private fun SettingsDetailPane(
                 }
             )
         }
+        SettingsCategory.AMBIENT -> AmbientSettingsContent(
+            settingsDataStore = ambientViewModel.settingsDataStore,
+            coordinator = ambientViewModel.coordinator,
+            initialFocusRequester = if (allowDetailAutofocus) {
+                contentFocusRequesters[SettingsCategory.AMBIENT]
+            } else {
+                null
+            }
+        )
         SettingsCategory.ADVANCED -> if (isEssentialMode) {
             EssentialAdvancedSettingsContent(
                 experienceModeViewModel = experienceModeViewModel,
@@ -1008,6 +1036,7 @@ private fun SettingsDetailPane(
             tmdbFocusRequester = integrationTmdbFocusRequester,
             mdbListFocusRequester = integrationMdbListFocusRequester,
             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
+            remoteControlFocusRequester = integrationRemoteControlFocusRequester,
             autoFocusEnabled = allowDetailAutofocus
         )
         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -1161,6 +1190,7 @@ private fun IntegrationSettingsContent(
     tmdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
+    remoteControlFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -1178,6 +1208,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.AiAssistant -> aiAssistantFocusRequester
+            IntegrationSettingsSection.RemoteControl -> remoteControlFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -1210,6 +1241,13 @@ private fun IntegrationSettingsContent(
                                     subtitle = stringResource(R.string.settings_debrid_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
                                     modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                                )
+                            }
+                            item(key = "integration_hub_remote_control") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.settings_remote_control_title),
+                                    subtitle = stringResource(R.string.settings_remote_control_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.RemoteControl) }
                                 )
                             }
                             item(key = "integration_hub_ai") {
@@ -1274,6 +1312,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.AnimeSkip -> {
             AnimeSkipSettingsContent(
                 initialFocusRequester = animeSkipFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.RemoteControl -> {
+            RemoteControlSettingsContent(
+                initialFocusRequester = remoteControlFocusRequester
             )
         }
     }

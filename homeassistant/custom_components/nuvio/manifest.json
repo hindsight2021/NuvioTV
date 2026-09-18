@@ -1,0 +1,16 @@
+{
+  "domain": "nuvio",
+  "name": "Nuvio TV",
+  "codeowners": [
+    "@nuvio"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/nuvio/nuvio-tv",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/nuvio/nuvio-tv/issues",
+  "requirements": [
+    "aiohttp>=3.8.0"
+  ],
+  "version": "1.0.0"
+}

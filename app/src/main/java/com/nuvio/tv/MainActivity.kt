@@ -325,6 +325,21 @@ open class MainActivity : ComponentActivity() {
     @Inject
     lateinit var deepLinkHandler: DeepLinkHandler
 
+    @Inject
+    lateinit var nuvioControlManager: com.nuvio.tv.core.control.NuvioControlManager
+
+    @Inject
+    lateinit var navigationCommander: com.nuvio.tv.core.control.NavigationCommander
+
+    @Inject
+    lateinit var ambientCoordinator: com.nuvio.tv.ambient.coordinator.AmbientCoordinator
+
+    @Inject
+    lateinit var ambientIdleController: com.nuvio.tv.ambient.coordinator.AmbientIdleController
+
+    @Inject
+    lateinit var ambientPlayerPool: com.nuvio.tv.ambient.playback.AmbientPlayerPool
+
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
 
@@ -373,6 +388,15 @@ open class MainActivity : ComponentActivity() {
         externalPlaybackTracker.activityLauncher = externalPlayerLauncher
 
         PluginRuntimeHooks.onActivityCreate(this)
+        nuvioControlManager.start()
+
+        ambientIdleController.setPlaybackActiveProvider {
+            externalPlaybackTracker.pendingMetadata != null ||
+                trailerPlayerPool.isPlaying
+        }
+        ambientIdleController.start {
+            ambientCoordinator.startAmbient()
+        }
 
         window?.decorView?.post {
             val snapshot = com.nuvio.tv.core.player.DisplayCapabilities.detect(this)
@@ -917,6 +941,47 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // Handle external navigation and remote control commands from NavigationCommander
+                    LaunchedEffect(navController) {
+                        navigationCommander.requests.collect { request ->
+                            when (request) {
+                                is com.nuvio.tv.core.control.NavigationRequest.NavigateTo -> {
+                                    navController.navigate(request.route) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                                is com.nuvio.tv.core.control.NavigationRequest.OpenDetails -> {
+                                    navController.navigate(
+                                        Screen.Detail.createRoute(itemId = request.contentId, itemType = request.contentType)
+                                    ) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                                is com.nuvio.tv.core.control.NavigationRequest.Search -> {
+                                    navController.navigate(Screen.Search.route) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                                is com.nuvio.tv.core.control.NavigationRequest.SendDpad -> {
+                                    val keyEventCode = when (request.key) {
+                                        com.nuvio.tv.core.control.DpadKey.UP -> KeyEvent.KEYCODE_DPAD_UP
+                                        com.nuvio.tv.core.control.DpadKey.DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
+                                        com.nuvio.tv.core.control.DpadKey.LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
+                                        com.nuvio.tv.core.control.DpadKey.RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
+                                        com.nuvio.tv.core.control.DpadKey.SELECT -> KeyEvent.KEYCODE_DPAD_CENTER
+                                        com.nuvio.tv.core.control.DpadKey.BACK -> KeyEvent.KEYCODE_BACK
+                                        com.nuvio.tv.core.control.DpadKey.MENU -> KeyEvent.KEYCODE_MENU
+                                    }
+                                    window?.decorView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyEventCode))
+                                    window?.decorView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyEventCode))
+                                }
+                                com.nuvio.tv.core.control.NavigationRequest.PopBack -> {
+                                    navController.popBackStack()
+                                }
+                            }
+                        }
+                    }
+
                     // Navigate to content when launched from the Continue Watching channel row.
                     LaunchedEffect(navController) {
                         if (launchContentId != null && launchContentType != null && layoutChosen) {
@@ -1323,6 +1388,13 @@ open class MainActivity : ComponentActivity() {
                             modifier = Modifier.graphicsLayer { alpha = splashAlpha }
                         )
                     }
+                    val ambientUiState by ambientCoordinator.uiState.collectAsState()
+                    if (ambientUiState.isAmbientActive) {
+                        com.nuvio.tv.ambient.ui.AmbientScreen(
+                            playerPool = ambientPlayerPool,
+                            onDismiss = { ambientCoordinator.stopAmbient() }
+                        )
+                    }
                     AppDimmerOverlay(dimPercent = appDimPercent)
                     }
                 }
@@ -1392,7 +1464,13 @@ open class MainActivity : ComponentActivity() {
     // and then immediately exiting the app).
     val longPressBackHeld = mutableStateOf(false)
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        ambientIdleController.notifyUserActivity()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        ambientIdleController.notifyUserActivity()
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP,
@@ -1435,6 +1513,9 @@ open class MainActivity : ComponentActivity() {
         super.onStart()
         startupSyncService.startPeriodicSurfacePulls()
         androidTvChannelSyncService.onForegroundChanged(true)
+        ambientIdleController.start {
+            ambientCoordinator.startAmbient()
+        }
     }
 
     override fun onStop() {
@@ -1444,9 +1525,14 @@ open class MainActivity : ComponentActivity() {
         // App going to background (e.g. user returning to the launcher): reconcile the
         // Continue Watching channel once so Projectivy repaints it with fresh progress.
         androidTvChannelSyncService.onForegroundChanged(false)
+        ambientIdleController.stop()
+        ambientCoordinator.stopAmbient()
     }
 
     override fun onDestroy() {
+        ambientIdleController.stop()
+        ambientCoordinator.stopAmbient()
+        nuvioControlManager.stop()
         super.onDestroy()
         com.nuvio.tv.core.sound.AudioFeedbackManager.release()
         PluginRuntimeHooks.onActivityDestroy()

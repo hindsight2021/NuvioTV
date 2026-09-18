@@ -3383,4 +3383,42 @@
     <string name="end_credits_next_episode_pill">Next episode in %1$ds</string>
     <string name="end_credits_next_episode_play_now">Play Now</string>
 
+    <!-- Remote Control & API -->
+    <string name="settings_remote_control_title">Remote Control &amp; API</string>
+    <string name="settings_remote_control_subtitle">Control Nuvio from Home Assistant, web browser, or mobile app</string>
+    <string name="settings_remote_control_enable_title">Enable Remote Control Server</string>
+    <string name="settings_remote_control_enable_subtitle">Expose local REST API, Home Assistant endpoint, and Web Remote</string>
+    <string name="settings_remote_control_status_title">Server Status</string>
+    <string name="settings_remote_control_status_subtitle">Click to restart the remote control server</string>
+    <string name="settings_remote_control_status_running">Running on %1$s</string>
+    <string name="settings_remote_control_status_stopped">Stopped</string>
+    <string name="settings_remote_control_pin_title">Pairing PIN</string>
+    <string name="settings_remote_control_pin_subtitle">Click to generate a new 4-digit pairing PIN</string>
+    <string name="settings_remote_control_token_title">API Token</string>
+    <string name="settings_remote_control_token_subtitle">Click to regenerate the API authentication token</string>
+    <string name="settings_remote_control_home_assistant_title">Home Assistant Integration</string>
+    <string name="settings_remote_control_home_assistant_body">Add the Nuvio integration to Home Assistant with these connection parameters:</string>
+    <string name="settings_remote_control_home_assistant_host">Host (IP)</string>
+    <string name="settings_remote_control_home_assistant_port">Port</string>
+    <string name="settings_remote_control_home_assistant_pin">PIN</string>
+    <string name="settings_remote_control_value_unknown">Unknown</string>
+    <string name="settings_remote_control_qr_title">Pair or Open Web Remote</string>
+    <string name="settings_remote_control_qr_caption">Scan with your phone camera to pair or open the interactive Web Remote</string>
+    <string name="settings_remote_control_qr_content_description">Remote Control Pairing QR Code</string>
+
+    <!-- Nuvio Ambient Screensaver -->
+    <string name="ambient_screensaver_title">Nuvio Ambient</string>
+    <string name="ambient_screensaver_subtitle">Cinematic idle visuals, 4K HDR and Home Assistant intelligence</string>
+    <string name="ambient_channel_for_you">For You</string>
+    <string name="ambient_channel_auto">Auto</string>
+    <string name="ambient_channel_aerial">Aerial</string>
+    <string name="ambient_channel_world">World</string>
+    <string name="ambient_channel_after_dark">After Dark</string>
+    <string name="ambient_channel_nature">Nature</string>
+    <string name="ambient_channel_space">Space</string>
+    <string name="ambient_channel_cities">Cities</string>
+    <string name="ambient_channel_weather">Weather</string>
+    <string name="ambient_channel_fireplace">Fireplace</string>
+    <string name="ambient_channel_cinema">Cinema</string>
+
 </resources>
