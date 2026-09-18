@@ -86,6 +86,12 @@ class TrailerPlayerPool @Inject constructor(
     }
 
     /**
+     * Returns true if the trailer player is active and currently playing.
+     */
+    val isPlaying: Boolean
+        get() = _player?.isPlaying == true
+
+    /**
      * Releases codec resources so the detail-screen player can claim hardware decoders.
      * The ExoPlayer instance is released here; [reclaim] will create a fresh one.
      */

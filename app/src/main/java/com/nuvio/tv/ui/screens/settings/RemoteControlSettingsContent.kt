@@ -89,7 +89,7 @@ fun RemoteControlSettingsContent(
                             title = stringResource(R.string.settings_remote_control_enable_title),
                             subtitle = stringResource(R.string.settings_remote_control_enable_subtitle),
                             checked = uiState.isEnabled,
-                            onToggle = { viewModel.setEnabled(it) },
+                            onToggle = { viewModel.setEnabled(!uiState.isEnabled) },
                             modifier = Modifier
                                 .padding(top = NuvioTheme.spacing.xxs)
                                 .then(
