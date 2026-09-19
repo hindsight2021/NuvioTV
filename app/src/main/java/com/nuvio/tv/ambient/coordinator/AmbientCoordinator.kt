@@ -150,14 +150,8 @@ class AmbientCoordinator @Inject constructor(
 
                         Log.w(TAG, "playCandidate returned false for candidate=${candidate.id}, trying next")
                         runCatching {
-                            historyRepository.recordPlayback(
-                                candidateId = candidate.id,
-                                playedAtEpochMs = System.currentTimeMillis(),
-                                durationSeconds = 0,
-                                wasInterrupted = false,
-                                playbackFailed = true
-                            )
-                        }.onFailure { Log.w(TAG, "recordPlayback(failed start) failed", it) }
+                            historyRepository.recordFailure(candidate.id)
+                        }.onFailure { Log.w(TAG, "recordFailure failed", it) }
                     }
 
                     val candidate = playedCandidate
