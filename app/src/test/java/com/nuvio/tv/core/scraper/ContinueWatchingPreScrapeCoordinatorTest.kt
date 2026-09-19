@@ -91,14 +91,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         preScrapeCount: Int = 3
     ) = PlayerSettings(
         continueWatchingPreScrapeEnabled = preScrapeEnabled,
-        continueWatchingPreScrapeCount = preScrapeCount,
-        streamReuseLastLinkCacheHours = 24,
-        streamAutoPlayMode = StreamAutoPlayMode.MANUAL,
-        streamAutoPlayRegex = null,
-        streamAutoPlaySource = null,
-        streamAutoPlaySelectedAddons = emptyList(),
-        streamAutoPlaySelectedPlugins = emptyList(),
-        streamAutoPlayPreferBingeGroupForNextEpisode = false
+        continueWatchingPreScrapeCount = preScrapeCount
     )
 
     @Before
@@ -114,7 +107,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         addonRepository = mockk(relaxed = true)
         bingeGroupCacheDataStore = mockk(relaxed = true)
 
-        every { bingeGroupCacheDataStore.get(any()) } returns null
+        coEvery { bingeGroupCacheDataStore.get(any()) } returns null
         coEvery { addonRepository.getInstalledAddons() } returns flowOf(emptyList<Addon>())
 
         coordinator = ContinueWatchingPreScrapeCoordinator(
