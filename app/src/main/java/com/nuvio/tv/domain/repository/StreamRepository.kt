@@ -23,7 +23,8 @@ interface StreamRepository {
         videoId: String,
         season: Int? = null,
         episode: Int? = null,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        title: String? = null
     ): Flow<NetworkResult<List<AddonStreams>>>
 
     /**

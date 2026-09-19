@@ -1139,9 +1139,25 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.Search.route) { backStackEntry ->
+        composable(
+            route = Screen.Search.route,
+            arguments = listOf(
+                navArgument("query") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val queryArg = backStackEntry.arguments?.getString("query")?.takeIf { it.isNotBlank() }
             val searchViewModel: com.nuvio.tv.ui.screens.search.SearchViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel(backStackEntry)
+            androidx.compose.runtime.LaunchedEffect(queryArg) {
+                if (!queryArg.isNullOrBlank()) {
+                    searchViewModel.onEvent(com.nuvio.tv.ui.screens.search.SearchEvent.QueryChanged(queryArg))
+                    searchViewModel.onEvent(com.nuvio.tv.ui.screens.search.SearchEvent.SubmitSearch)
+                }
+            }
             SearchScreen(
                 viewModel = searchViewModel,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->

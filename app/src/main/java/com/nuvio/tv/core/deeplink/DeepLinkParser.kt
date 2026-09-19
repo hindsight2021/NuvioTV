@@ -8,8 +8,22 @@ object DeepLinkParser {
     fun parse(url: String): AppDeepLink? {
         val parsedUrl = runCatching { URI(url.trim()) }.getOrNull() ?: return null
         val scheme = parsedUrl.scheme?.lowercase().orEmpty()
+        val host = parsedUrl.host?.lowercase().orEmpty()
+        val pathSegments = parsedUrl.rawPath
+            ?.split("/")
+            .orEmpty()
+            .mapNotNull { segment -> decode(segment).trim().takeIf(String::isNotBlank) }
+
+        if (host == "search" || pathSegments.firstOrNull() == "search") {
+            val parameters = queryParameters(parsedUrl)
+            val query = firstParameter(parameters, "query", "search", "q")
+                ?: if (host == "search") pathSegments.firstOrNull() else pathSegments.drop(1).firstOrNull()
+            if (!query.isNullOrBlank()) {
+                return AppDeepLink.Search(query = query)
+            }
+        }
+
         if (scheme == "stremio") {
-            val host = parsedUrl.host?.lowercase().orEmpty()
             return if (looksLikeAddonHost(host)) {
                 customSchemeToHttpsUrl(url, scheme)?.let(AppDeepLink::AddonInstall)
             } else {
@@ -17,12 +31,6 @@ object DeepLinkParser {
             }
         }
         if (scheme != "nuvio") return null
-
-        val host = parsedUrl.host?.lowercase().orEmpty()
-        val pathSegments = parsedUrl.rawPath
-            ?.split("/")
-            .orEmpty()
-            .mapNotNull { segment -> decode(segment).trim().takeIf(String::isNotBlank) }
 
         return when (host) {
             "meta" -> parseMetaFromParameters(parsedUrl) ?: parseMetaFromPath(pathSegments)

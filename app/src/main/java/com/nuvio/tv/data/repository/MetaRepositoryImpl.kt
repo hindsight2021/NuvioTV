@@ -33,7 +33,8 @@ import javax.inject.Singleton
 class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository
 ) : MetaRepository {
     companion object {
         private const val TAG = "MetaRepository"
@@ -223,6 +224,17 @@ class MetaRepositoryImpl @Inject constructor(
         id: String,
         sourceAddonBaseUrl: String?
     ): Flow<NetworkResult<Meta>> = flow {
+        if (id.startsWith("local:")) {
+            emit(NetworkResult.Loading)
+            val localMeta = localMediaRepository.getLocalMeta(id, type)
+            if (localMeta != null) {
+                emit(NetworkResult.Success(localMeta))
+            } else {
+                emit(NetworkResult.Error(context.getString(R.string.error_meta_not_found)))
+            }
+            return@flow
+        }
+
         val cacheKey = metaLookupCacheKey(type, id)
         addonMetaCache[cacheKey]?.let { cached ->
             if (!cached.isExpired()) {
@@ -480,6 +492,17 @@ class MetaRepositoryImpl @Inject constructor(
         type: String,
         id: String
     ): Flow<NetworkResult<Meta>> = flow {
+        if (id.startsWith("local:")) {
+            emit(NetworkResult.Loading)
+            val localMeta = localMediaRepository.getLocalMeta(id, type)
+            if (localMeta != null) {
+                emit(NetworkResult.Success(localMeta))
+            } else {
+                emit(NetworkResult.Error(context.getString(R.string.error_meta_not_found)))
+            }
+            return@flow
+        }
+
         val cacheKey = metaLookupCacheKey(type, id)
         primaryAddonMetaCache[cacheKey]?.let { cached ->
             if (!cached.isExpired()) {

@@ -57,4 +57,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindWatchProgressRepository(impl: WatchProgressRepositoryImpl): WatchProgressRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLocalMediaRepository(impl: com.nuvio.tv.data.repository.LocalMediaRepositoryImpl): com.nuvio.tv.domain.repository.LocalMediaRepository
 }

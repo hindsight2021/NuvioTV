@@ -122,7 +122,8 @@ private enum class IntegrationSettingsSection {
     MdbList,
     AnimeSkip,
     AiAssistant,
-    RemoteControl
+    RemoteControl,
+    LocalNas
 }
 
 internal enum class SettingsSectionDestination {
@@ -346,6 +347,7 @@ fun SettingsScreen(
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationRemoteControlFocusRequester = remember { FocusRequester() }
+    val integrationLocalNasFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -732,6 +734,7 @@ fun SettingsScreen(
                                 integrationMdbListFocusRequester = integrationMdbListFocusRequester,
                                 integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                                 integrationRemoteControlFocusRequester = integrationRemoteControlFocusRequester,
+                                integrationLocalNasFocusRequester = integrationLocalNasFocusRequester,
                                 onNavigateToManageProfiles = onNavigateToManageProfiles,
                                 onNavigateToAddons = onNavigateToAddons,
                                 onNavigateToPlugins = onNavigateToPlugins,
@@ -909,6 +912,7 @@ fun SettingsScreen(
                         integrationMdbListFocusRequester = integrationMdbListFocusRequester,
                         integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                         integrationRemoteControlFocusRequester = integrationRemoteControlFocusRequester,
+                        integrationLocalNasFocusRequester = integrationLocalNasFocusRequester,
                         onNavigateToManageProfiles = onNavigateToManageProfiles,
                         onNavigateToAddons = onNavigateToAddons,
                         onNavigateToPlugins = onNavigateToPlugins,
@@ -939,6 +943,7 @@ private fun SettingsDetailPane(
     integrationMdbListFocusRequester: FocusRequester,
     integrationAnimeSkipFocusRequester: FocusRequester,
     integrationRemoteControlFocusRequester: FocusRequester,
+    integrationLocalNasFocusRequester: FocusRequester,
     onNavigateToManageProfiles: () -> Unit,
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
@@ -1038,6 +1043,7 @@ private fun SettingsDetailPane(
             mdbListFocusRequester = integrationMdbListFocusRequester,
             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
             remoteControlFocusRequester = integrationRemoteControlFocusRequester,
+            localNasFocusRequester = integrationLocalNasFocusRequester,
             autoFocusEnabled = allowDetailAutofocus
         )
         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -1192,6 +1198,7 @@ private fun IntegrationSettingsContent(
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     remoteControlFocusRequester: FocusRequester,
+    localNasFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -1210,6 +1217,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.AiAssistant -> aiAssistantFocusRequester
             IntegrationSettingsSection.RemoteControl -> remoteControlFocusRequester
+            IntegrationSettingsSection.LocalNas -> localNasFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -1249,6 +1257,13 @@ private fun IntegrationSettingsContent(
                                     title = stringResource(R.string.settings_remote_control_title),
                                     subtitle = stringResource(R.string.settings_remote_control_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.RemoteControl) }
+                                )
+                            }
+                            item(key = "integration_hub_local_nas") {
+                                SettingsActionRow(
+                                    title = "Local & NAS Storage",
+                                    subtitle = "Direct file playback from Shield mounts and network shares",
+                                    onClick = { onSelectSection(IntegrationSettingsSection.LocalNas) }
                                 )
                             }
                             item(key = "integration_hub_ai") {
@@ -1319,6 +1334,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.RemoteControl -> {
             RemoteControlSettingsContent(
                 initialFocusRequester = remoteControlFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.LocalNas -> {
+            LocalNasSettingsContent(
+                initialFocusRequester = localNasFocusRequester
             )
         }
     }

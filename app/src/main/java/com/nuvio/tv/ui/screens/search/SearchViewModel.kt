@@ -24,6 +24,7 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import java.time.LocalDate
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.toMetaPreview
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
@@ -57,6 +58,7 @@ class SearchViewModel @Inject constructor(
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     private val aiManager: com.nuvio.tv.core.ai.AiManager = com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()),
+    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -672,11 +674,46 @@ class SearchViewModel @Inject constructor(
                 if (showingRealRows) state else state.copy(catalogRows = placeholderRows)
             }
 
+            val localSearchJob = launch {
+                try {
+                    val localMatches = localMediaRepository.searchLocal(query)
+                    if (localMatches.isNotEmpty() && generation == searchGeneration) {
+                        val localKey = "local_nas_search"
+                        val localRow = CatalogRow(
+                            addonId = com.nuvio.tv.data.repository.LocalMediaRepositoryImpl.ADDON_ID_LOCAL_NAS,
+                            addonName = com.nuvio.tv.data.repository.LocalMediaRepositoryImpl.ADDON_NAME_LOCAL_NAS,
+                            addonBaseUrl = "local://storage",
+                            catalogId = "local_nas",
+                            catalogName = "Local NAS",
+                            type = ContentType.OTHER,
+                            rawType = "other",
+                            items = localMatches.map { it.toMetaPreview() },
+                            isLoading = false,
+                            hasMore = false,
+                            currentPage = 0,
+                            supportsSkip = false,
+                            skipStep = 0,
+                            extraArgs = emptyMap()
+                        )
+                        synchronized(catalogsMap) {
+                            catalogsMap[localKey] = localRow
+                            if (!catalogOrder.contains(localKey)) {
+                                catalogOrder.add(0, localKey)
+                            }
+                        }
+                        scheduleCatalogRowsUpdate()
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.w(TAG, "Local search error: ${e.message}")
+                }
+            }
+
             val jobs = searchTargets.map { (addon, catalog) ->
                 launch {
                     loadCatalog(addon, catalog, query, generation)
                 }
-            }
+            } + localSearchJob
             pendingCatalogResponses = jobs.size
             activeSearchJobs = jobs
 

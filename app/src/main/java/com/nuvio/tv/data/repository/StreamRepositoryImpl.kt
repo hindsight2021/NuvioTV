@@ -54,7 +54,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache()
     private val localPluginSearchPaused = MutableStateFlow(false)
@@ -89,7 +90,8 @@ class StreamRepositoryImpl @Inject constructor(
         videoId: String,
         season: Int?,
         episode: Int?,
-        forceRefresh: Boolean
+        forceRefresh: Boolean,
+        title: String?
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         val sourceConfiguration = captureSourceConfiguration()
         val requestKey = StreamSearchRequestKey(
@@ -123,7 +125,8 @@ class StreamRepositoryImpl @Inject constructor(
                     addons = sourceConfiguration.addons,
                     debridSettings = sourceConfiguration.debridSettings,
                     hasCompatiblePlugins = sourceConfiguration.pluginsEnabled &&
-                        sourceConfiguration.enabledScrapers.any { scraper -> scraper.supportsType(type) }
+                        sourceConfiguration.enabledScrapers.any { scraper -> scraper.supportsType(type) },
+                    title = title
                 )
             }
         )
@@ -161,7 +164,8 @@ class StreamRepositoryImpl @Inject constructor(
         episode: Int?,
         addons: List<Addon>,
         debridSettings: DebridSettings,
-        hasCompatiblePlugins: Boolean
+        hasCompatiblePlugins: Boolean,
+        title: String? = null
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         emit(NetworkResult.Loading)
 
@@ -183,8 +187,8 @@ class StreamRepositoryImpl @Inject constructor(
                 // Channel to receive results as they complete
                 val resultChannel = Channel<AddonStreams>(Channel.UNLIMITED)
                 
-                // Track number of pending jobs
-                val totalJobs = streamAddons.size + 1
+                // Track number of pending jobs (addons + plugins + local media)
+                val totalJobs = streamAddons.size + 1 + 1
                 val completedJobs = java.util.concurrent.atomic.AtomicInteger(0)
 
                 // Launch addon jobs
@@ -276,6 +280,34 @@ class StreamRepositoryImpl @Inject constructor(
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         Log.e(TAG, "Plugin execution failed: ${e.message}")
+                    } finally {
+                        if (completedJobs.incrementAndGet() >= totalJobs) {
+                            resultChannel.close()
+                        }
+                    }
+                }
+
+                launch {
+                    try {
+                        val localStreams = localMediaRepository.findMatchingStreams(
+                            type = type,
+                            title = title,
+                            season = season,
+                            episode = episode,
+                            videoId = videoId
+                        )
+                        if (localStreams.isNotEmpty()) {
+                            resultChannel.send(
+                                AddonStreams(
+                                    addonName = LocalMediaRepositoryImpl.ADDON_NAME_LOCAL_NAS,
+                                    addonLogo = null,
+                                    streams = localStreams
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.w(TAG, "Local media stream lookup failed: ${e.message}")
                     } finally {
                         if (completedJobs.incrementAndGet() >= totalJobs) {
                             resultChannel.close()

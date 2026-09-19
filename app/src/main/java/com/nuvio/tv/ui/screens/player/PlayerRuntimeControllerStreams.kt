@@ -227,7 +227,8 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
             videoId = vid,
             season = seasonArg,
             episode = episodeArg,
-            forceRefresh = forceRefresh
+            forceRefresh = forceRefresh,
+            title = contentName?.takeIf { it.isNotBlank() } ?: title.takeIf { it.isNotBlank() }
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
@@ -1145,7 +1146,8 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
             videoId = video.id,
             season = video.season,
             episode = video.episode,
-            forceRefresh = forceRefresh
+            forceRefresh = forceRefresh,
+            title = contentName?.takeIf { it.isNotBlank() } ?: title.takeIf { it.isNotBlank() }
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
@@ -1788,7 +1790,8 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                         type = type,
                         videoId = nextVideo.id,
                         season = nextVideo.season,
-                        episode = nextVideo.episode
+                        episode = nextVideo.episode,
+                        title = contentName?.takeIf { it.isNotBlank() } ?: title.takeIf { it.isNotBlank() }
                     ).collect { result ->
                         when (result) {
                             is NetworkResult.Success -> {
@@ -1973,7 +1976,8 @@ internal fun PlayerRuntimeController.preResolveNextEpisodeStreamIfNeeded(nextVid
                 type = type,
                 videoId = nextVideo.id,
                 season = nextVideo.season,
-                episode = nextVideo.episode
+                episode = nextVideo.episode,
+                title = contentName?.takeIf { it.isNotBlank() } ?: title.takeIf { it.isNotBlank() }
             ).takeWhile { preResolvedNextStream == null }.collect { result ->
                 if (result is NetworkResult.Success && result.data.isNotEmpty()) {
                     val ordered = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)

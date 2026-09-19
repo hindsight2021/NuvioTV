@@ -960,7 +960,7 @@ open class MainActivity : ComponentActivity() {
                                     }
                                 }
                                 is com.nuvio.tv.core.control.NavigationRequest.Search -> {
-                                    navController.navigate(Screen.Search.route) {
+                                    navController.navigate(Screen.Search.createRoute(request.query)) {
                                         launchSingleTop = true
                                     }
                                 }
@@ -1078,6 +1078,12 @@ open class MainActivity : ComponentActivity() {
                                     pendingDeepLinkUrl.value = null
                                 }
                                 Toast.makeText(context, installResult.message, Toast.LENGTH_LONG).show()
+                            }
+                            is AppDeepLink.Search -> {
+                                pendingDeepLinkUrl.value = null
+                                navController.navigate(Screen.Search.createRoute(deepLink.query)) {
+                                    launchSingleTop = true
+                                }
                             }
                             null -> {
                                 pendingDeepLinkUrl.value = null

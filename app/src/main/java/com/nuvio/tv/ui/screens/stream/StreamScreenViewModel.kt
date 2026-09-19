@@ -691,7 +691,8 @@ class StreamScreenViewModel @Inject constructor(
                     videoId = videoId,
                     season = season,
                     episode = episode,
-                    forceRefresh = forceRefresh
+                    forceRefresh = forceRefresh,
+                    title = contentName?.takeIf { it.isNotBlank() } ?: title.takeIf { it.isNotBlank() }
                 ).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
