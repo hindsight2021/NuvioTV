@@ -8,6 +8,7 @@ import android.os.storage.StorageManager
 import android.util.Log
 import com.nuvio.tv.domain.model.LocalMediaItem
 import com.nuvio.tv.domain.model.LocalMediaScanSummary
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -27,7 +28,7 @@ import kotlin.coroutines.coroutineContext
  */
 @Singleton
 class LocalMediaScanner @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
 
     companion object {

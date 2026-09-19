@@ -1042,7 +1042,9 @@ open class MainActivity : ComponentActivity() {
                                     returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
                                     returnToHomeOnBack = true
                                 )
-                            )
+                            ) {
+                                launchSingleTop = true
+                            }
                         } else {
                             navController.navigate(
                                 Screen.Detail.createRoute(

@@ -72,7 +72,14 @@ class DirectDebridResolver @Inject constructor(
         if (ownsResolve) deferred.start()
 
         return try {
-            val result = deferred.await()
+            val result = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+                deferred.await()
+            } ?: run {
+                if (ownsResolve) {
+                    deferred.cancel()
+                }
+                DirectDebridResolveResult.Error
+            }
             if (ownsResolve && result is DirectDebridResolveResult.Success) {
                 mutex.withLock {
                     resolvedCache[cacheKey] = CachedDirectDebridResolve(
