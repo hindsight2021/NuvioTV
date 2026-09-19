@@ -126,6 +126,7 @@ class NuvioClient:
         try:
             async with session.post(
                 url,
+                params={"pin": pin},
                 json={"pin": pin},
                 headers={"Accept": "application/json"},
                 timeout=client_timeout,

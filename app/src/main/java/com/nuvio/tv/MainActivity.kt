@@ -47,6 +47,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Explore
@@ -1744,11 +1746,14 @@ private fun LegacySidebarScaffold(
                         }
                     }
 
+                    val legacySidebarScrollState = rememberScrollState()
+
                     Column(
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .offset(y = 28.dp)
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .verticalScroll(legacySidebarScrollState),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalAlignment = Alignment.Start
                     ) {

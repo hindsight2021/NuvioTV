@@ -88,27 +88,25 @@ class AmbientPlaybackController @Inject constructor(
      * If immediate or no current playback, starts directly on activeSlot.
      * Otherwise preloads onto alternate slot and executes a 3-second crossfade.
      */
-    suspend fun playCandidate(candidate: AmbientCandidate, immediate: Boolean = false) {
+    suspend fun playCandidate(candidate: AmbientCandidate, immediate: Boolean = false): Boolean {
         val state = _playbackState.value
         val hasActivePlayback = state.currentCandidate != null && state.isPlaying
 
-        if (immediate || !hasActivePlayback) {
+        return if (immediate || !hasActivePlayback) {
             playImmediate(candidate)
         } else {
             val alternateSlot = state.activeSlot.other()
             val alternatePlayer = playerPool.getPlayer(alternateSlot)
             if (alternatePlayer == null) {
                 Log.w(TAG, "Cannot get player for alternate slot $alternateSlot")
-                playImmediate(candidate)
-                return
+                return playImmediate(candidate)
             }
 
             attachListenerIfNeeded(alternateSlot, alternatePlayer)
-            val result = preloader.preload(candidate, alternatePlayer)
+            val result = preloader.preload(candidate, alternatePlayer, autoPlay = false)
             if (result is PreloadResult.Failure) {
                 Log.w(TAG, "Preload failed for ${candidate.id}: ${result.reason}; falling back to immediate play")
-                playImmediate(candidate)
-                return
+                return playImmediate(candidate)
             }
 
             _playbackState.update { it.copy(nextCandidate = candidate) }
@@ -240,21 +238,35 @@ class AmbientPlaybackController @Inject constructor(
         }
     }
 
-    private suspend fun playImmediate(candidate: AmbientCandidate) {
+    private suspend fun playImmediate(candidate: AmbientCandidate): Boolean {
         val slot = _playbackState.value.activeSlot
         val player = playerPool.getPlayer(slot)
         if (player == null) {
             Log.w(TAG, "playImmediate: player for $slot is null")
             _playbackState.update { it.copy(error = "Player unavailable") }
-            return
+            return false
         }
 
         attachListenerIfNeeded(slot, player)
-        val result = preloader.preload(candidate, player)
+
+        // Reset transition state and make the target slot visible immediately
+        // so the player layer is shown while buffering begins.
+        transitionController.reset(slot)
+        _playbackState.update {
+            it.copy(
+                activeSlot = slot,
+                slotAAlpha = if (slot == PlayerSlot.SLOT_A) 1f else 0f,
+                slotBAlpha = if (slot == PlayerSlot.SLOT_B) 1f else 0f,
+                isTransitioning = false,
+                error = null
+            )
+        }
+
+        val result = preloader.preload(candidate, player, autoPlay = true)
         if (result is PreloadResult.Failure) {
             Log.w(TAG, "playImmediate: preload failed for ${candidate.id}: ${result.reason}")
             _playbackState.update { it.copy(error = "Failed to load candidate: ${result.reason}") }
-            return
+            return false
         }
 
         withContext(Dispatchers.Main) {
@@ -262,8 +274,6 @@ class AmbientPlaybackController @Inject constructor(
             player.playWhenReady = true
             player.play()
         }
-
-        transitionController.reset(slot)
 
         _playbackState.update {
             it.copy(
@@ -277,6 +287,8 @@ class AmbientPlaybackController @Inject constructor(
                 error = null
             )
         }
+
+        return true
     }
 
     private fun enforceMute(player: ExoPlayer) {

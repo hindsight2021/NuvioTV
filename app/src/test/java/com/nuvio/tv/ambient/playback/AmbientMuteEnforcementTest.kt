@@ -95,6 +95,7 @@ class AmbientMuteEnforcementTest {
             category = "aerial"
         )
 
+        coEvery { preloader.preload(any(), any(), any(), any()) } returns PreloadResult.Success(candidate, "https://example.com/test.mp4")
         coEvery { preloader.preload(any(), any()) } returns PreloadResult.Success(candidate, "https://example.com/test.mp4")
         every { transitionController.state } returns MutableStateFlow(TransitionState())
 

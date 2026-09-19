@@ -55,6 +55,7 @@ class AmbientCoordinator @Inject constructor(
 
         private const val SLOT_INDEX_A = 0
         private const val SLOT_INDEX_B = 1
+        private const val MAX_START_ATTEMPTS = 3
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -113,13 +114,59 @@ class AmbientCoordinator @Inject constructor(
                         settings.defaultChannel
                     }
 
-                    val candidate = feedResolver.resolveNextCandidate(channel)
+                    // Mount the ambient screen immediately so player surfaces attach before playback.
+                    _uiState.update {
+                        it.copy(
+                            isAmbientActive = true,
+                            currentChannel = channel,
+                            isOverlayVisible = true,
+                            errorMessage = null
+                        )
+                    }
+
+                    var playedCandidate: AmbientCandidate? = null
+                    var lastCandidate: AmbientCandidate? = null
+
+                    for (attempt in 0 until MAX_START_ATTEMPTS) {
+                        val candidate = feedResolver.resolveNextCandidate(channel, lastCandidate)
+                        if (candidate == null) {
+                            Log.w(TAG, "No candidate available for channel=$channel (attempt=${attempt + 1})")
+                            break
+                        }
+
+                        lastCandidate = candidate
+
+                        val started = runCatching {
+                            playbackController.playCandidate(candidate, immediate = true)
+                        }.getOrElse { t ->
+                            Log.w(TAG, "playCandidate threw for candidate=${candidate.id}", t)
+                            false
+                        }
+
+                        if (started) {
+                            playedCandidate = candidate
+                            break
+                        }
+
+                        Log.w(TAG, "playCandidate returned false for candidate=${candidate.id}, trying next")
+                        runCatching {
+                            historyRepository.recordPlayback(
+                                candidateId = candidate.id,
+                                playedAtEpochMs = System.currentTimeMillis(),
+                                durationSeconds = 0,
+                                wasInterrupted = false,
+                                playbackFailed = true
+                            )
+                        }.onFailure { Log.w(TAG, "recordPlayback(failed start) failed", it) }
+                    }
+
+                    val candidate = playedCandidate
                     if (candidate == null) {
-                        Log.w(TAG, "No candidate available for channel=$channel")
+                        Log.w(TAG, "No playable candidate after $MAX_START_ATTEMPTS attempts for channel=$channel")
                         _uiState.update {
                             it.copy(
                                 isAmbientActive = false,
-                                errorMessage = "No ambient content available"
+                                errorMessage = "Failed to load ambient content"
                             )
                         }
                         return@withLock
@@ -129,13 +176,8 @@ class AmbientCoordinator @Inject constructor(
                     nextCandidate = null
                     currentSceneStartedAtMs = System.currentTimeMillis()
 
-                    playbackController.playCandidate(candidate, immediate = true)
-
                     _uiState.update {
                         it.copy(
-                            isAmbientActive = true,
-                            currentChannel = channel,
-                            isOverlayVisible = true,
                             currentCandidate = candidate,
                             nextCandidate = null,
                             errorMessage = null

@@ -46,10 +46,10 @@ class AmbientPlayerPool @Inject constructor(
         private const val TAG = "AmbientPlayerPool"
 
         // Buffer tuning for 4K ambient playback
-        private const val MIN_BUFFER_MS = 25_000
+        private const val MIN_BUFFER_MS = 15_000
         private const val MAX_BUFFER_MS = 90_000
-        private const val BUFFER_FOR_PLAYBACK_MS = 2_500
-        private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 5_000
+        private const val BUFFER_FOR_PLAYBACK_MS = 1_500
+        private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 3_000
 
         private const val ALLOCATION_SIZE = 65_536
         private const val INITIAL_BITRATE_ESTIMATE = 50_000_000L // 50 Mbps

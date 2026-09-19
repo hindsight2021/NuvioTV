@@ -1,6 +1,8 @@
 package com.nuvio.tv.ambient.ui
 
+import android.view.LayoutInflater
 import android.view.ViewGroup
+import com.nuvio.tv.R
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -200,7 +202,7 @@ private fun AmbientPlayerLayer(
             .fillMaxSize()
             .graphicsLayer { this.alpha = alpha.coerceIn(0f, 1f) },
         factory = { ctx ->
-            PlayerView(ctx).apply {
+            (LayoutInflater.from(ctx).inflate(R.layout.ambient_player_view, null) as PlayerView).apply {
                 useController = false
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
@@ -217,6 +219,9 @@ private fun AmbientPlayerLayer(
             if (view.player !== currentPlayer) {
                 view.player = currentPlayer
             }
+        },
+        onRelease = { view ->
+            view.player = null
         }
     )
 }

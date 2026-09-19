@@ -57,7 +57,8 @@ class AmbientPreloader @Inject constructor(
     suspend fun preload(
         candidate: AmbientCandidate,
         player: ExoPlayer,
-        timeoutMs: Long = 15_000L
+        timeoutMs: Long = 20_000L,
+        autoPlay: Boolean = false
     ): PreloadResult {
         // 1. Resolve the stream URL (direct or via YouTube extraction).
         val resolvedVideoUrl = try {
@@ -106,8 +107,8 @@ class AmbientPreloader @Inject constructor(
 
                 player.setMediaSource(mediaSource)
                 player.prepare()
-                // Remain paused until the transition triggers playback.
-                player.playWhenReady = false
+                // Remain paused until the transition triggers playback, unless autoPlay is requested.
+                player.playWhenReady = autoPlay
             }
 
             // 3. Wait for readiness within the timeout.

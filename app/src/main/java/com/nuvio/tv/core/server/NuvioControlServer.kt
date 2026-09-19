@@ -317,8 +317,11 @@ class NuvioControlServer(
         val result = com.google.gson.JsonObject()
         try {
             val files = HashMap<String, String>()
-            session.parseBody(files)
-            val raw = files["postData"] ?: files["content"]
+            val raw = files["postData"]
+                ?: files["content"]?.let { contentPath ->
+                    val file = java.io.File(contentPath)
+                    if (file.exists()) runCatching { file.readText() }.getOrNull() else contentPath
+                }
             if (!raw.isNullOrBlank()) {
                 val parsed = gson.fromJson(raw, com.google.gson.JsonObject::class.java)
                 if (parsed != null) {

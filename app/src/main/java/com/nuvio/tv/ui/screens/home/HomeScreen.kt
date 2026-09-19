@@ -59,6 +59,7 @@ import com.nuvio.tv.ui.components.LocalStartupSplashEnabled
 import com.nuvio.tv.ui.components.shouldShowHomeStartupLoader
 import com.nuvio.tv.ui.components.HomeClockWithDate
 import com.nuvio.tv.ui.components.HomeTopTabRow
+import com.nuvio.tv.LocalContentFocusRequester
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
@@ -614,7 +615,7 @@ fun HomeScreen(
                         viewModel.onEvent(HomeEvent.SelectHomeTab(tab))
                     },
                     focusRequester = topTabRowFocusRequester,
-                    downFocusRequester = heroFocusRequester,
+                    downFocusRequester = LocalContentFocusRequester.current,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 28.dp)
