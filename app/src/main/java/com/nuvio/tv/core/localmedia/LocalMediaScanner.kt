@@ -43,7 +43,7 @@ class LocalMediaScanner @Inject constructor(
         private val IGNORED_DIR_NAMES: Set<String> = setOf(
             "android", "data", "obb", "cache", "tmp", "temp",
             "thumbnails", "logs", "lost.dir", ".thumbnails",
-            "recycle", "$recycle.bin", "system volume information", ".git"
+            "recycle", "\$recycle.bin", "system volume information", ".git"
         )
 
         /** Tokens that indicate sample / trailer / extra files. */

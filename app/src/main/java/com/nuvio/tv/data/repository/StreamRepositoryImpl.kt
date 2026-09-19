@@ -55,7 +55,7 @@ class StreamRepositoryImpl @Inject constructor(
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
     private val localDebridAvailabilityService: LocalDebridAvailabilityService,
-    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository
+    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache()
     private val localPluginSearchPaused = MutableStateFlow(false)
@@ -289,13 +289,13 @@ class StreamRepositoryImpl @Inject constructor(
 
                 launch {
                     try {
-                        val localStreams = localMediaRepository.findMatchingStreams(
+                        val localStreams = localMediaRepository?.findMatchingStreams(
                             type = type,
                             title = title,
                             season = season,
                             episode = episode,
                             videoId = videoId
-                        )
+                        ) ?: emptyList()
                         if (localStreams.isNotEmpty()) {
                             resultChannel.send(
                                 AddonStreams(

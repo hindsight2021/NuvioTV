@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.search
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
@@ -46,6 +47,8 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "SearchViewModel"
+
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
@@ -58,7 +61,7 @@ class SearchViewModel @Inject constructor(
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     private val aiManager: com.nuvio.tv.core.ai.AiManager = com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()),
-    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository,
+    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -676,7 +679,7 @@ class SearchViewModel @Inject constructor(
 
             val localSearchJob = launch {
                 try {
-                    val localMatches = localMediaRepository.searchLocal(query)
+                    val localMatches = localMediaRepository?.searchLocal(query) ?: emptyList()
                     if (localMatches.isNotEmpty() && generation == searchGeneration) {
                         val localKey = "local_nas_search"
                         val localRow = CatalogRow(
@@ -685,7 +688,7 @@ class SearchViewModel @Inject constructor(
                             addonBaseUrl = "local://storage",
                             catalogId = "local_nas",
                             catalogName = "Local NAS",
-                            type = ContentType.OTHER,
+                            type = ContentType.UNKNOWN,
                             rawType = "other",
                             items = localMatches.map { it.toMetaPreview() },
                             isLoading = false,

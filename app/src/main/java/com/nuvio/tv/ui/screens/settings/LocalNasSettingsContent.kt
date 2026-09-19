@@ -63,7 +63,7 @@ fun LocalNasSettingsContent(
                             title = "Enable Local & NAS Playback",
                             subtitle = "Discovered movies and TV shows play directly from file with zero buffering and no Debrid required",
                             checked = uiState.isEnabled,
-                            onCheckedChange = { viewModel.toggleEnabled(it) },
+                            onToggle = { viewModel.toggleEnabled(!uiState.isEnabled) },
                             modifier = Modifier.focusRequester(toggleFocusRequester)
                         )
                     }
@@ -83,17 +83,19 @@ fun LocalNasSettingsContent(
                     }
 
                     item(key = "local_nas_summary") {
-                        SettingsInfoRow(
+                        SettingsActionRow(
                             title = "Media Discovered",
-                            subtitle = "${uiState.movieCount} Movies, ${uiState.seriesCount} TV Episodes (${uiState.totalItems} total files)"
+                            subtitle = "${uiState.movieCount} Movies, ${uiState.seriesCount} TV Episodes (${uiState.totalItems} total files)",
+                            onClick = {}
                         )
                     }
 
                     if (uiState.detectedPaths.isNotEmpty()) {
                         item(key = "local_nas_paths_header") {
-                            SettingsInfoRow(
+                            SettingsActionRow(
                                 title = "Detected Storage Paths (${uiState.detectedPaths.size})",
-                                subtitle = uiState.detectedPaths.joinToString(", ")
+                                subtitle = uiState.detectedPaths.joinToString(", "),
+                                onClick = {}
                             )
                         }
                     }

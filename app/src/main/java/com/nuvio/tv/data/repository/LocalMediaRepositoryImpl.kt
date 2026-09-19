@@ -15,6 +15,7 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.toMetaPreview
 import com.nuvio.tv.domain.repository.LocalMediaRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -166,10 +167,6 @@ class LocalMediaRepositoryImpl @Inject constructor(
         val normalizedTarget = normalizeTitle(title)
         if (normalizedTarget.isBlank()) return emptyList()
 
-        val items = _cachedItems.value.ifEmpty {
-            currentSettings.cachedItems
-        }
-
         val normalizedType = type.trim().lowercase(Locale.ROOT)
 
         return when {
@@ -215,11 +212,12 @@ class LocalMediaRepositoryImpl @Inject constructor(
 
         if (movies.isNotEmpty()) {
             rows += CatalogRow(
-                catalogId = "local_nas_movies",
                 addonId = ADDON_ID_LOCAL_NAS,
                 addonName = ADDON_NAME_LOCAL_NAS,
+                addonBaseUrl = "local://storage",
+                catalogId = "local_nas_movies",
                 catalogName = "NAS Movies",
-                type = "movie",
+                type = ContentType.MOVIE,
                 items = movies.map { it.toMetaPreview() }
             )
         }
@@ -240,11 +238,12 @@ class LocalMediaRepositoryImpl @Inject constructor(
 
         if (seriesSummaries.isNotEmpty()) {
             rows += CatalogRow(
-                catalogId = "local_nas_series",
                 addonId = ADDON_ID_LOCAL_NAS,
                 addonName = ADDON_NAME_LOCAL_NAS,
+                addonBaseUrl = "local://storage",
+                catalogId = "local_nas_series",
                 catalogName = "NAS TV Shows",
-                type = "series",
+                type = ContentType.SERIES,
                 items = seriesSummaries.map { it.toMetaPreview() }
             )
         }
@@ -281,8 +280,11 @@ class LocalMediaRepositoryImpl @Inject constructor(
                     Video(
                         id = "${item.id}:${ep.season}:${ep.episode}",
                         title = ep.episodeTitle ?: "Episode ${ep.episode}",
+                        released = null,
+                        thumbnail = null,
                         season = ep.season ?: 1,
-                        episode = ep.episode ?: 1
+                        episode = ep.episode ?: 1,
+                        overview = null
                     )
                 },
                 country = null,

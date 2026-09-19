@@ -34,7 +34,7 @@ class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
     private val addonRepository: AddonRepository,
-    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository
+    private val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null
 ) : MetaRepository {
     companion object {
         private const val TAG = "MetaRepository"
@@ -226,7 +226,7 @@ class MetaRepositoryImpl @Inject constructor(
     ): Flow<NetworkResult<Meta>> = flow {
         if (id.startsWith("local:")) {
             emit(NetworkResult.Loading)
-            val localMeta = localMediaRepository.getLocalMeta(id, type)
+            val localMeta = localMediaRepository?.getLocalMeta(id, type)
             if (localMeta != null) {
                 emit(NetworkResult.Success(localMeta))
             } else {
@@ -494,7 +494,7 @@ class MetaRepositoryImpl @Inject constructor(
     ): Flow<NetworkResult<Meta>> = flow {
         if (id.startsWith("local:")) {
             emit(NetworkResult.Loading)
-            val localMeta = localMediaRepository.getLocalMeta(id, type)
+            val localMeta = localMediaRepository?.getLocalMeta(id, type)
             if (localMeta != null) {
                 emit(NetworkResult.Success(localMeta))
             } else {
