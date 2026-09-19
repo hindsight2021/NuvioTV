@@ -194,7 +194,7 @@ class SkipIntroRepository @Inject constructor(
         }
 
         // Smart fallback for uncatalogued reality TV / network series (e.g. Below Deck)
-        val learned = enhancedIntroDetector.getLearnedIntro(imdbId, season)
+        val learned = enhancedIntroDetector.getLearnedIntro(effectiveImdbId, season)
         val result = if (learned != null) listOf(learned) else emptyList()
         return@coroutineScope result.also { cache[cacheKey] = it }
     }
