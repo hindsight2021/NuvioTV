@@ -916,6 +916,12 @@
     <string name="cache_duration_day_one">%1$d day</string>
     <string name="cache_duration_day_other">%1$d days</string>
     <string name="cache_duration_days_hours">%1$dd %2$dh</string>
+    <string name="autoplay_continue_watching_prescrape">Pre-scrape Continue Watching</string>
+    <string name="autoplay_continue_watching_prescrape_sub">Pre-fetches and resolves streams in the background for your Continue Watching shows for instant launch</string>
+    <string name="autoplay_continue_watching_prescrape_count">Pre-scrape Item Limit</string>
+    <string name="autoplay_continue_watching_prescrape_count_sub">Pre-scrape up to %1$d items</string>
+    <string name="autoplay_continue_watching_prescrape_count_dialog_title">Continue Watching Pre-scrape Limit</string>
+    <string name="prescrape_count_items">%1$d items</string>
     <string name="autoplay_mode_manual">Manual (choose stream)</string>
     <string name="autoplay_mode_first">Auto-play first source</string>
     <string name="autoplay_mode_regex">Auto-play regex match</string>

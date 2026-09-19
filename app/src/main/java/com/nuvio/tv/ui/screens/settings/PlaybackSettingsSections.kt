@@ -128,6 +128,9 @@ internal fun PlaybackSettingsSections(
     onShowStreamRegexDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onShowContinueWatchingPreScrapeCountDialog: () -> Unit = {},
+    onSetContinueWatchingPreScrapeEnabled: (Boolean) -> Unit = {},
+    onSetContinueWatchingPreScrapeCount: (Int) -> Unit = {},
     onSetPostPlayRecommendationsEnabled: (Boolean) -> Unit,
     onSetPostPlayMovieThresholdPercent: (Int) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
@@ -565,6 +568,8 @@ internal fun PlaybackSettingsSections(
                 onSetStillWatchingEpisodeThreshold = onSetStillWatchingEpisodeThreshold,
                 onSetHideUncachedStreams = onSetHideUncachedStreams,
                 onSetEnableEndCreditsNextEpisodePrompt = onSetEnableEndCreditsNextEpisodePrompt,
+                onSetContinueWatchingPreScrapeEnabled = onSetContinueWatchingPreScrapeEnabled,
+                onShowContinueWatchingPreScrapeCountDialog = onShowContinueWatchingPreScrapeCountDialog,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )
 
@@ -1036,6 +1041,9 @@ internal fun PlaybackSettingsDialogsHost(
     showStreamRegexDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
+    showContinueWatchingPreScrapeCountDialog: Boolean = false,
+    onSetContinueWatchingPreScrapeCount: (Int) -> Unit = {},
+    onDismissContinueWatchingPreScrapeCountDialog: () -> Unit = {},
     onSetPlayerPreference: (PlayerPreference) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
     onSetInternalPlayerEngine: (InternalPlayerEngine) -> Unit,
@@ -1169,7 +1177,10 @@ internal fun PlaybackSettingsDialogsHost(
         onDismissAddonSelectionDialog = onDismissStreamAutoPlayAddonSelectionDialog,
         onDismissPluginSelectionDialog = onDismissStreamAutoPlayPluginSelectionDialog,
         onDismissNextEpisodeThresholdModeDialog = onDismissNextEpisodeThresholdModeDialog,
-        onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
+        onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog,
+        showContinueWatchingPreScrapeCountDialog = showContinueWatchingPreScrapeCountDialog,
+        onDismissContinueWatchingPreScrapeCountDialog = onDismissContinueWatchingPreScrapeCountDialog,
+        onSetContinueWatchingPreScrapeCount = onSetContinueWatchingPreScrapeCount
     )
 }
 

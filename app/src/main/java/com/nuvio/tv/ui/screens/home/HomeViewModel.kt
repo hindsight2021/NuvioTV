@@ -83,7 +83,8 @@ class HomeViewModel @Inject constructor(
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     internal val tvRecommendationManager: TvRecommendationManager,
-    internal val aiManager: com.nuvio.tv.core.ai.AiManager? = null
+    internal val aiManager: com.nuvio.tv.core.ai.AiManager? = null,
+    internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -342,6 +343,14 @@ class HomeViewModel @Inject constructor(
 
         observeStartupAuthNotice()
         viewModelScope.launch {
+            uiState
+                .map { it.continueWatchingItems }
+                .distinctUntilChanged()
+                .collect { items ->
+                    continueWatchingPreScrapeCoordinator?.onContinueWatchingItemsUpdated(items)
+                }
+        }
+        viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
             observeLayoutPreferences()
             observeModernHomePresentation()
@@ -370,6 +379,7 @@ class HomeViewModel @Inject constructor(
                     // Cancel old pipeline — prevents racing writes from stale coroutines.
                     cwPipelineJob?.cancel()
                     cwPipelineJob = null
+                    continueWatchingPreScrapeCoordinator?.clear()
                     // Clear all in-memory CW caches so data from the previous
                     // profile doesn't leak into the new one.
                     cwMetaCache.clear()
@@ -1088,6 +1098,7 @@ class HomeViewModel @Inject constructor(
         cancelInFlightCatalogLoads()
         movieWatchedObserverJobs.values.forEach { it.cancel() }
         movieWatchedObserverJobs.clear()
+        continueWatchingPreScrapeCoordinator?.clear()
         super.onCleared()
     }
 }

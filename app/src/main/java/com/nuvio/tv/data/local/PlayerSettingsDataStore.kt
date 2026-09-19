@@ -283,6 +283,8 @@ data class PlayerSettings(
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
     val streamReuseLastLinkEnabled: Boolean = true,
     val streamReuseLastLinkCacheHours: Int = 1,
+    val continueWatchingPreScrapeEnabled: Boolean = true,
+    val continueWatchingPreScrapeCount: Int = DEFAULT_CONTINUE_WATCHING_PRESCRAPE_COUNT,
     val externalPlayerForwardSubtitles: Boolean = false,
     val externalPlayerSendSkipSegments: Boolean = false,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
@@ -368,6 +370,8 @@ data class PlayerSettings(
         const val MAX_PARALLEL_CHUNK_SIZE_KB = 128 * 1024
         const val DEFAULT_ENABLE_HTTP2 = false
         const val DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED = false
+        const val DEFAULT_CONTINUE_WATCHING_PRESCRAPE_COUNT = 5
+        val CONTINUE_WATCHING_PRESCRAPE_COUNT_OPTIONS = listOf(3, 5, 10)
     }
 }
 
@@ -553,6 +557,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val nextEpisodeThresholdMinutesBeforeEndKey = floatPreferencesKey("next_episode_threshold_minutes_before_end_v2")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
+    private val continueWatchingPreScrapeEnabledKey = booleanPreferencesKey("continue_watching_prescrape_enabled")
+    private val continueWatchingPreScrapeCountKey = intPreferencesKey("continue_watching_prescrape_count")
     private val externalPlayerForwardSubtitlesKey = booleanPreferencesKey("external_player_forward_subtitles")
     private val externalPlayerSendSkipSegmentsKey = booleanPreferencesKey("external_player_send_skip_segments")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
@@ -940,6 +946,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
+                continueWatchingPreScrapeEnabled = prefs[continueWatchingPreScrapeEnabledKey] ?: true,
+                continueWatchingPreScrapeCount = (prefs[continueWatchingPreScrapeCountKey] ?: PlayerSettings.DEFAULT_CONTINUE_WATCHING_PRESCRAPE_COUNT).coerceIn(1, 10),
                 externalPlayerForwardSubtitles = prefs[externalPlayerForwardSubtitlesKey] ?: false,
                 externalPlayerSendSkipSegments = prefs[externalPlayerSendSkipSegmentsKey] ?: false,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
@@ -1369,6 +1377,18 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamReuseLastLinkCacheHours(hours: Int) {
         store().edit { prefs ->
             prefs[streamReuseLastLinkCacheHoursKey] = hours.coerceIn(1, 168)
+        }
+    }
+
+    suspend fun setContinueWatchingPreScrapeEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[continueWatchingPreScrapeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setContinueWatchingPreScrapeCount(count: Int) {
+        store().edit { prefs ->
+            prefs[continueWatchingPreScrapeCountKey] = count.coerceIn(1, 10)
         }
     }
 

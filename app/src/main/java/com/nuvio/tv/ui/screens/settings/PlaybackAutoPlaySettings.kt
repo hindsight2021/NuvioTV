@@ -98,6 +98,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetStillWatchingEpisodeThreshold: (Int) -> Unit,
     onSetHideUncachedStreams: (Boolean) -> Unit = {},
     onSetEnableEndCreditsNextEpisodePrompt: (Boolean) -> Unit = {},
+    onSetContinueWatchingPreScrapeEnabled: (Boolean) -> Unit = {},
+    onShowContinueWatchingPreScrapeCountDialog: () -> Unit = {},
     onItemFocused: () -> Unit = {}
 ) {
     val effectiveAutoPlaySource = if (
@@ -127,6 +129,29 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 title = stringResource(R.string.autoplay_last_link_cache),
                 subtitle = formatReuseCacheDuration(playerSettings.streamReuseLastLinkCacheHours),
                 onClick = onShowReuseLastLinkCacheDialog,
+                onFocused = onItemFocused
+            )
+        }
+    }
+
+    item(key = "autoplay_continue_watching_prescrape") {
+        ToggleSettingsItem(
+            icon = Icons.Default.PlayArrow,
+            title = stringResource(R.string.autoplay_continue_watching_prescrape),
+            subtitle = stringResource(R.string.autoplay_continue_watching_prescrape_sub),
+            isChecked = playerSettings.continueWatchingPreScrapeEnabled,
+            onCheckedChange = onSetContinueWatchingPreScrapeEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    if (playerSettings.continueWatchingPreScrapeEnabled) {
+        item(key = "autoplay_continue_watching_prescrape_count") {
+            NavigationSettingsItem(
+                icon = Icons.Default.Tune,
+                title = stringResource(R.string.autoplay_continue_watching_prescrape_count),
+                subtitle = stringResource(R.string.autoplay_continue_watching_prescrape_count_sub, playerSettings.continueWatchingPreScrapeCount),
+                onClick = onShowContinueWatchingPreScrapeCountDialog,
                 onFocused = onItemFocused
             )
         }
@@ -448,7 +473,10 @@ internal fun AutoPlaySettingsDialogs(
     onDismissAddonSelectionDialog: () -> Unit,
     onDismissPluginSelectionDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
-    onDismissReuseLastLinkCacheDialog: () -> Unit
+    onDismissReuseLastLinkCacheDialog: () -> Unit,
+    showContinueWatchingPreScrapeCountDialog: Boolean = false,
+    onDismissContinueWatchingPreScrapeCountDialog: () -> Unit = {},
+    onSetContinueWatchingPreScrapeCount: (Int) -> Unit = {}
 ) {
     if (showModeDialog) {
         StreamAutoPlayModeDialog(
@@ -526,6 +554,38 @@ internal fun AutoPlaySettingsDialogs(
             onDismiss = onDismissReuseLastLinkCacheDialog
         )
     }
+
+    if (showContinueWatchingPreScrapeCountDialog) {
+        ContinueWatchingPreScrapeCountDialog(
+            selectedCount = playerSettings.continueWatchingPreScrapeCount,
+            onCountSelected = {
+                onSetContinueWatchingPreScrapeCount(it)
+                onDismissContinueWatchingPreScrapeCountDialog()
+            },
+            onDismiss = onDismissContinueWatchingPreScrapeCountDialog
+        )
+    }
+}
+
+@Composable
+private fun ContinueWatchingPreScrapeCountDialog(
+    selectedCount: Int,
+    onCountSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = PlayerSettings.CONTINUE_WATCHING_PRESCRAPE_COUNT_OPTIONS
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.autoplay_continue_watching_prescrape_count_dialog_title),
+        options = options.map { count ->
+            SettingsPickerOption(count, stringResource(R.string.prescrape_count_items, count))
+        },
+        selectedValue = selectedCount,
+        onOptionSelected = onCountSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 320.dp
+    )
 }
 
 @Composable

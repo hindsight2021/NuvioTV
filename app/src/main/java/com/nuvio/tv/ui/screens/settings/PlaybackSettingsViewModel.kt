@@ -520,6 +520,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamReuseLastLinkCacheHours(hours)
     }
 
+    suspend fun setContinueWatchingPreScrapeEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setContinueWatchingPreScrapeEnabled(enabled)
+    }
+
+    suspend fun setContinueWatchingPreScrapeCount(count: Int) {
+        playerSettingsDataStore.setContinueWatchingPreScrapeCount(count)
+    }
+
     suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
         playerSettingsDataStore.setVodCacheSizeMode(mode)
     }

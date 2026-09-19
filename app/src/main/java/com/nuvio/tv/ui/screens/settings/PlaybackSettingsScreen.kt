@@ -143,6 +143,7 @@ fun PlaybackSettingsContent(
     var showStreamRegexDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
+    var showContinueWatchingPreScrapeCountDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
     var showInternalPlayerEngineDialog by remember { mutableStateOf(false) }
     var showP2pConsentDialog by remember { mutableStateOf(false) }
@@ -166,6 +167,7 @@ fun PlaybackSettingsContent(
         showStreamRegexDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
+        showContinueWatchingPreScrapeCountDialog = false
         showPlayerPreferenceDialog = false
         showInternalPlayerEngineDialog = false
         showP2pConsentDialog = false
@@ -219,6 +221,9 @@ fun PlaybackSettingsContent(
                 onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
+                onShowContinueWatchingPreScrapeCountDialog = { openDialog { showContinueWatchingPreScrapeCountDialog = true } },
+                onSetContinueWatchingPreScrapeEnabled = { enabled -> coroutineScope.launch { viewModel.setContinueWatchingPreScrapeEnabled(enabled) } },
+                onSetContinueWatchingPreScrapeCount = { count -> coroutineScope.launch { viewModel.setContinueWatchingPreScrapeCount(count) } },
                 onSetPostPlayRecommendationsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setPostPlayRecommendationsEnabled(enabled) }
                 },
@@ -533,6 +538,9 @@ fun PlaybackSettingsContent(
         showStreamRegexDialog = showStreamRegexDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
+        showContinueWatchingPreScrapeCountDialog = showContinueWatchingPreScrapeCountDialog,
+        onSetContinueWatchingPreScrapeCount = { count -> coroutineScope.launch { viewModel.setContinueWatchingPreScrapeCount(count) } },
+        onDismissContinueWatchingPreScrapeCountDialog = ::dismissAllDialogs,
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
