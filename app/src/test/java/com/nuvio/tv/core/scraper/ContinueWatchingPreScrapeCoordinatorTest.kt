@@ -141,7 +141,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         every { playerSettingsDataStore.playerSettings } returns flowOf(
             defaultPlayerSettings(preScrapeEnabled = false)
         )
-        every { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
 
         coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
         advanceTimeBy(3000L)
@@ -150,15 +150,15 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         coVerify(exactly = 0) {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         }
-        verify(exactly = 0) {
-            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        coVerify(exactly = 0) {
+            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
     @Test
     fun `when isPlaybackActive is true, pre-scraping is suppressed`() = runTest(testDispatcher) {
         every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
-        every { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
 
         coordinator.setPlaybackActive(true)
         coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
@@ -173,7 +173,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
     @Test
     fun `when isAmbientActive is true, pre-scraping is suppressed`() = runTest(testDispatcher) {
         every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
-        every { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
 
         coordinator.setAmbientActive(true)
         coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
@@ -188,7 +188,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
     @Test
     fun `when item has valid cached link in StreamLinkCacheDataStore, scraping is skipped`() = runTest(testDispatcher) {
         every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
-        every { streamLinkCacheDataStore.getValid(any(), any()) } returns mockk(relaxed = true)
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns mockk(relaxed = true)
 
         coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
         advanceTimeBy(3000L)
@@ -197,27 +197,27 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         coVerify(exactly = 0) {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         }
-        verify(exactly = 0) {
-            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        coVerify(exactly = 0) {
+            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
     @Test
     fun `when item needs scraping, it queries streamRepository getStreamsFromAllAddons and saves resolved stream to StreamLinkCacheDataStore`() = runTest(testDispatcher) {
         every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
-        every { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
 
         coEvery {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         } returns flowOf(
             NetworkResult.Success(
-                listOf(AddonStreams(addonName = "Torrentio", streams = listOf(testStream)))
+                listOf(AddonStreams(addonName = "Torrentio", addonLogo = null, streams = listOf(testStream)))
             )
         )
 
         val savedUrl = slot<String>()
         val savedContentKey = slot<String>()
-        every {
+        coEvery {
             streamLinkCacheDataStore.save(
                 contentKey = capture(savedContentKey),
                 url = capture(savedUrl),
@@ -246,7 +246,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
             )
         }
 
-        verify(exactly = 1) {
+        coVerify(exactly = 1) {
             streamLinkCacheDataStore.save(
                 contentKey = any(),
                 url = any(),
@@ -268,7 +268,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
     @Test
     fun `clear cancels warmup and resets state`() = runTest(testDispatcher) {
         every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
-        every { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
 
         coordinator.setPlaybackActive(true)
         coordinator.clear()
