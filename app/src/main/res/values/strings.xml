@@ -3308,14 +3308,14 @@
     <string name="assessment_grounds_perf_mode">Keeps remux-sized buffers off the Java heap so garbage collection can\'t stutter frames; memory limits scale to this device\'s %1$s tier (safe %2$d MB / warning %3$d MB) and counts above %4$d connections require it</string>
     <string name="assessment_grounds_perf_mode_unsupported">Requires Android 8.0 or newer</string>
     <string name="assessment_grounds_buffer_master">Off means media3\'s stock load control: a byte-computed target around 13 MB, which holds ≈ 1 s of a remux regardless of its duration values — the values below are sized to this device instead</string>
-    <string name="assessment_grounds_managed_budget">Managed mode pins the target to the safe limit and ignores parallel-connection overhead; the explicit target below accounts for both</string>
+    <string name="assessment_grounds_managed_budget">Managed mode dynamically pins buffer allocations to safe native memory limits, protecting against memory exhaustion and video playback stalls</string>
     <string name="assessment_grounds_target_buffer">Target %1$d + %2$d MB connection overhead = %3$d MB ≤ the %4$d MB safe limit (largest %5$d MB step that fits)</string>
     <string name="assessment_grounds_allow_large_on">Needed so the target slider reaches %1$d MB on this device</string>
     <string name="assessment_grounds_allow_large_off">The recommended target fits the standard slider range</string>
     <string name="assessment_grounds_max_buffer">A %1$d MB target holds ≈%2$d s of this title (%3$s) — seconds beyond that can\'t materialise</string>
     <string name="assessment_grounds_max_buffer_nobitrate">No title bitrate known — the byte ceiling can\'t be computed; leaving the cap at %1$d s</string>
     <string name="assessment_grounds_vod_auto">Auto sizes from free space (20%% of free within limits, 1 GB reserve) — ≈%1$s on this device right now</string>
-    <string name="assessment_grounds_vod_off">Not enough free space for a useful cache (needs ≥ 100 MB after the 1 GB reserve) — the runtime would stream direct anyway</string>
+    <string name="assessment_grounds_vod_off">Disabled to prevent internal flash storage I/O contention and stuttering during high-bitrate 4K streaming</string>
     <string name="assessment_grounds_afr_on">Display reports multiple refresh rates at the current resolution (%1$s)</string>
     <string name="assessment_grounds_afr_already">Already on — Start vs Start &amp; stop is preference: fewer HDMI resyncs vs the UI returning to 60 Hz</string>
     <string name="assessment_grounds_afr_single">Single-rate display at the current resolution — nothing to switch to</string>

@@ -665,16 +665,21 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         return
     }
 
-    val imdbId = effectiveId.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
-    if (season == null || episode == null) return
+    val candidateImdbId = effectiveId.split(":").firstOrNull()?.takeIf { it.startsWith("tt") }
+        ?: id?.takeIf { it.startsWith("tt") }
+        ?: metaImdbId
+        ?: effectiveId.split(":").firstOrNull()
 
-    val key = "$imdbId:$season:$episode"
+    if (season == null || episode == null) return
+    if (candidateImdbId.isNullOrBlank()) return
+
+    val key = "$candidateImdbId:$season:$episode"
     if (skipIntroFetchedKey == key) return
     skipIntroFetchedKey = key
 
     scope.launch {
         skipIntervals = withTimeoutOrNull(15_000L) {
-            skipIntroRepository.getSkipIntervals(imdbId, season, episode)
+            skipIntroRepository.getSkipIntervals(candidateImdbId, season, episode)
         } ?: emptyList()
     }
 }

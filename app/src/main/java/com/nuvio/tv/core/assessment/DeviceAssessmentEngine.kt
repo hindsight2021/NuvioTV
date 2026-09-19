@@ -296,10 +296,10 @@ object DeviceAssessmentEngine {
             key = "managed_budget",
             title = s(R.string.assessment_item_managed_budget),
             currentValue = if (settings.bufferBudgetManaged) on else off,
-            recommendedValue = off,
+            recommendedValue = on,
             grounds = s(R.string.assessment_grounds_managed_budget),
             tier = AssessmentTier.CALCULATED,
-            changeNeeded = settings.bufferBudgetManaged
+            changeNeeded = !settings.bufferBudgetManaged
         )
 
         // Largest 25 MB step where target + overhead stays <= the safe limit.
@@ -430,28 +430,15 @@ object DeviceAssessmentEngine {
             settings.vodCacheSizeMode == VodCacheSizeMode.AUTO -> s(R.string.assessment_value_auto)
             else -> s(R.string.assessment_unit_mb, settings.vodCacheSizeMb)
         }
-        if (autoBytes > 0L) {
-            items += AssessmentItem(
-                key = "vod_cache",
-                title = s(R.string.assessment_item_vod_cache),
-                currentValue = vodCurrent,
-                recommendedValue = s(R.string.assessment_value_on_auto, formatBytes(autoBytes)),
-                grounds = s(R.string.assessment_grounds_vod_auto, formatBytes(autoBytes)),
-                tier = AssessmentTier.CALCULATED,
-                changeNeeded = !settings.vodCacheEnabled ||
-                    settings.vodCacheSizeMode != VodCacheSizeMode.AUTO
-            )
-        } else {
-            items += AssessmentItem(
-                key = "vod_cache",
-                title = s(R.string.assessment_item_vod_cache),
-                currentValue = vodCurrent,
-                recommendedValue = off,
-                grounds = s(R.string.assessment_grounds_vod_off),
-                tier = AssessmentTier.CALCULATED,
-                changeNeeded = settings.vodCacheEnabled
-            )
-        }
+        items += AssessmentItem(
+            key = "vod_cache",
+            title = s(R.string.assessment_item_vod_cache),
+            currentValue = vodCurrent,
+            recommendedValue = off,
+            grounds = s(R.string.assessment_grounds_vod_off),
+            tier = AssessmentTier.CALCULATED,
+            changeNeeded = settings.vodCacheEnabled
+        )
 
         // Force AC-3 transcode vs the actual audio route. The audio-decode
         // scope-out stands (no silent AVR probe exists); the ROUTE TYPE is
@@ -666,7 +653,7 @@ object DeviceAssessmentEngine {
             },
             bufferEngineEnabled = true.takeIf { !settings.bufferEngineEnabled },
             parallelNetworkEnabled = true.takeIf { !settings.parallelNetworkEnabled },
-            bufferBudgetManaged = false.takeIf { settings.bufferBudgetManaged },
+            bufferBudgetManaged = true.takeIf { !settings.bufferBudgetManaged },
             allowLargeTargetBuffer = allowLargeNeeded.takeIf {
                 settings.allowLargeTargetBuffer != allowLargeNeeded
             },
@@ -693,14 +680,8 @@ object DeviceAssessmentEngine {
                 sweep?.errorText == null && settings.parallelChunkSizeKb != it
             },
             enableHttp2 = true.takeIf { !settings.enableHttp2 },
-            vodCacheEnabled = if (autoBytes > 0L) {
-                true.takeIf { !settings.vodCacheEnabled }
-            } else {
-                false.takeIf { settings.vodCacheEnabled }
-            },
-            vodCacheSizeMode = VodCacheSizeMode.AUTO.takeIf {
-                autoBytes > 0L && settings.vodCacheSizeMode != VodCacheSizeMode.AUTO
-            },
+            vodCacheEnabled = false.takeIf { settings.vodCacheEnabled },
+            vodCacheSizeMode = null,
             frameRateMatchingMode = afrPlan,
             // Preference row: never written (see the res_match item above).
             resolutionMatchingEnabled = null,

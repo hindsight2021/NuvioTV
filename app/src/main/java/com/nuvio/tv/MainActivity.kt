@@ -342,6 +342,9 @@ open class MainActivity : ComponentActivity() {
     @Inject
     lateinit var ambientPlayerPool: com.nuvio.tv.ambient.playback.AmbientPlayerPool
 
+    @Inject
+    lateinit var playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge
+
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
 
@@ -393,7 +396,8 @@ open class MainActivity : ComponentActivity() {
         nuvioControlManager.start()
 
         ambientIdleController.setPlaybackActiveProvider {
-            externalPlaybackTracker.pendingMetadata != null ||
+            playerPlaybackBridge.playbackSnapshot.value?.let { it.isPlaying || it.isBuffering } == true ||
+                externalPlaybackTracker.pendingMetadata != null ||
                 trailerPlayerPool.isPlaying
         }
         ambientIdleController.start {

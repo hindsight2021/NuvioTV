@@ -44,7 +44,8 @@ class AmbientCoordinator @Inject constructor(
     private val settingsDataStore: AmbientSettingsDataStore,
     private val historyRepository: AmbientHistoryRepository,
     private val preferencesDataStore: AmbientPreferencesDataStore,
-    private val playerPool: AmbientPlayerPool
+    private val playerPool: AmbientPlayerPool,
+    private val playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge
 ) {
 
     companion object {
@@ -101,6 +102,10 @@ class AmbientCoordinator @Inject constructor(
      */
     fun startAmbient(forcedChannel: AmbientChannel? = null) {
         scope.launch {
+            if (forcedChannel == null && playerPlaybackBridge.playbackSnapshot.value?.let { it.isPlaying || it.isBuffering } == true) {
+                Log.d(TAG, "Suppressed ambient screensaver start because playback is actively playing or buffering.")
+                return@launch
+            }
             mutex.withLock {
                 try {
                     runCatching { playerPool.reclaim() }

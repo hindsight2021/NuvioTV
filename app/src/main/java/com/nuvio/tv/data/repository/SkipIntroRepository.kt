@@ -131,16 +131,29 @@ class SkipIntroRepository @Inject constructor(
         episode: Int,
         durationMs: Long? = null
     ): List<SkipInterval> = coroutineScope {
-        if (imdbId == null) return@coroutineScope emptyList()
-        val cacheKey = "$imdbId:$season:$episode"
+        val resolvedImdbId = when {
+            imdbId.isNullOrBlank() -> null
+            imdbId.startsWith("tt") -> imdbId.substringBefore(':')
+            imdbId.startsWith("tmdb:") -> {
+                val raw = imdbId.substringAfter("tmdb:").substringBefore(':')
+                raw.toIntOrNull()?.let { tmdbService.tmdbToImdb(it, "tv") }
+            }
+            imdbId.toIntOrNull() != null -> {
+                tmdbService.tmdbToImdb(imdbId.toInt(), "tv")
+            }
+            else -> null
+        }
+        val effectiveImdbId = resolvedImdbId ?: imdbId?.takeIf { it.startsWith("tt") }
+        if (effectiveImdbId == null) return@coroutineScope emptyList()
+        val cacheKey = "$effectiveImdbId:$season:$episode"
         cache[cacheKey]?.let { return@coroutineScope it }
 
         val introDbDeferred = async {
-            if (introDbConfigured) fetchFromIntroDb(imdbId, season, episode) else emptyList()
+            if (introDbConfigured) fetchFromIntroDb(effectiveImdbId, season, episode) else emptyList()
         }
         val skipMeDeferred = async {
             fetchFromSkipMe(
-                imdbId = imdbId,
+                imdbId = effectiveImdbId,
                 season = season,
                 episode = episode,
                 isMovie = false,
@@ -148,7 +161,7 @@ class SkipIntroRepository @Inject constructor(
             )
         }
         // Resolve IMDB -> season-specific MAL/AniList via Simkl episode mapping
-        val simklIdsDeferred = async { simklResolver.resolveIdsForImdbEpisode(imdbId, season, episode) }
+        val simklIdsDeferred = async { simklResolver.resolveIdsForImdbEpisode(effectiveImdbId, season, episode) }
         val simklIds = simklIdsDeferred.await()
         val malId = simklIds?.mal
         val anilistId = simklIds?.anilist
