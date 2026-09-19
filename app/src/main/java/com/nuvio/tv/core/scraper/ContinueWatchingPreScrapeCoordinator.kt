@@ -51,8 +51,8 @@ import javax.inject.Singleton
  * in sub-seconds with zero scraping latency.
  */
 @Singleton
-class ContinueWatchingPreScrapeCoordinator @Inject constructor(
-    @ApplicationContext private val context: Context,
+class ContinueWatchingPreScrapeCoordinator(
+    private val context: Context,
     private val streamRepository: StreamRepository,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -60,9 +60,32 @@ class ContinueWatchingPreScrapeCoordinator @Inject constructor(
     private val directDebridResolver: DirectDebridResolver,
     private val addonRepository: AddonRepository,
     private val bingeGroupCacheDataStore: BingeGroupCacheDataStore,
-    private val ambientCoordinatorProvider: javax.inject.Provider<com.nuvio.tv.ambient.coordinator.AmbientCoordinator>? = null,
-    ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO
+    private val ambientCoordinatorProvider: javax.inject.Provider<com.nuvio.tv.ambient.coordinator.AmbientCoordinator>?,
+    ioDispatcher: kotlinx.coroutines.CoroutineDispatcher
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        streamRepository: StreamRepository,
+        streamLinkCacheDataStore: StreamLinkCacheDataStore,
+        playerSettingsDataStore: PlayerSettingsDataStore,
+        debridSettingsDataStore: DebridSettingsDataStore,
+        directDebridResolver: DirectDebridResolver,
+        addonRepository: AddonRepository,
+        bingeGroupCacheDataStore: BingeGroupCacheDataStore,
+        ambientCoordinatorProvider: javax.inject.Provider<com.nuvio.tv.ambient.coordinator.AmbientCoordinator>
+    ) : this(
+        context = context,
+        streamRepository = streamRepository,
+        streamLinkCacheDataStore = streamLinkCacheDataStore,
+        playerSettingsDataStore = playerSettingsDataStore,
+        debridSettingsDataStore = debridSettingsDataStore,
+        directDebridResolver = directDebridResolver,
+        addonRepository = addonRepository,
+        bingeGroupCacheDataStore = bingeGroupCacheDataStore,
+        ambientCoordinatorProvider = ambientCoordinatorProvider,
+        ioDispatcher = Dispatchers.IO
+    )
     companion object {
         private const val TAG = "CWPreScrape"
         private const val DEBOUNCE_MS = 2500L
