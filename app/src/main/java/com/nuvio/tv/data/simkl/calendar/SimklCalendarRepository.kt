@@ -51,7 +51,7 @@ class SimklCalendarRepository @Inject constructor(
         private const val TAG = "SimklCalendarRepo"
 
         private const val FALLBACK_CLIENT_ID =
-            "6103c87d5e788fec2e00a818cb34adfe1fc3b9b76bfe1fcf8597d944e95e67b9"
+            "dc20e0db975583b15096267cee79cd23b1f56d4bd301ce3c51e4a96a49c834a6"
 
         private const val APP_NAME = "NuvioTV"
         private const val APP_VERSION = "1.0"
