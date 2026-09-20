@@ -265,13 +265,30 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
         }
     } else {
         val addonKeyToOwner = buildAddonKeyOwnerMap(addons)
+        val catalogKeyToSignature = buildCatalogKeySignatureMap(addons)
+
         val savedValid = homeCatalogOrderKeys
             .asSequence()
             .filter { it in allAvailable }
             .distinct()
             .toList()
 
-        val savedSet = savedValid.toSet()
+        // Deduplicate savedValid across addons to eliminate duplicate rows (e.g. Popular series from multiple addons)
+        val seenSignatures = mutableSetOf<String>()
+        val dedupedSavedValid = mutableListOf<String>()
+        for (key in savedValid) {
+            if (key.startsWith("collection_")) {
+                dedupedSavedValid.add(key)
+            } else {
+                val sig = catalogKeyToSignature[key]
+                if (sig.isNullOrBlank() || seenSignatures.add(sig)) {
+                    dedupedSavedValid.add(key)
+                }
+            }
+        }
+
+        val sortedSaved = dedupedSavedValid.sortedBy { catalogTier(it, addonKeyToOwner) }
+        val savedSet = sortedSaved.toSet()
         val unsavedCatalogs = defaultOrder.filterNot { it in savedSet }
         val unsavedCollections = collectionKeys.filterNot { it in savedSet }
         val unsavedItems = (unsavedCatalogs + unsavedCollections).sortedWith(
@@ -279,8 +296,8 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
                 .thenBy { it }
         )
 
-        val mergedOrder = if (savedValid.isNotEmpty()) {
-            savedValid + unsavedItems
+        val mergedOrder = if (sortedSaved.isNotEmpty()) {
+            sortedSaved + unsavedItems
         } else {
             val daySeed = java.time.LocalDate.now().dayOfYear
             (defaultOrder + collectionKeys).sortedWith(
@@ -310,6 +327,10 @@ private val TRAKT_SIMKL_KEYWORDS = listOf(
     "trakt", "simkl", "up next", "upnext", "watchlist", "watch list"
 )
 
+private val AI_CURATED_KEYWORDS = listOf(
+    "bingecat", "binge cat", "xperience", "the xperience", "ai curated", "ai picks", "ai recommendation", "ai-curated", "ai_curated"
+)
+
 internal fun catalogTier(key: String, addonKeyToOwner: Map<String, String>): Int {
     val lowerKey = key.lowercase()
     val owner = (addonKeyToOwner[key] ?: "").lowercase()
@@ -318,6 +339,7 @@ internal fun catalogTier(key: String, addonKeyToOwner: Map<String, String>): Int
     return when {
         TRAKT_SIMKL_KEYWORDS.any { combined.contains(it) } -> 100
         key.startsWith("collection_") -> 200
+        AI_CURATED_KEYWORDS.any { combined.contains(it) } -> 250
         STREAMING_KEYWORDS.any { combined.contains(it) } -> 300
         else -> 400
     }
@@ -335,6 +357,9 @@ internal fun isMovieCatalogType(type: String?): Boolean {
 
 private fun HomeViewModel.buildDefaultCatalogOrder(addons: List<Addon>): List<String> {
     val orderedKeys = mutableListOf<String>()
+    val seenCatalogSignatures = mutableSetOf<String>()
+    val signatureMap = buildCatalogKeySignatureMap(addons)
+
     addons.forEach { addon ->
         addon.catalogs
             .filterNot {
@@ -352,8 +377,11 @@ private fun HomeViewModel.buildDefaultCatalogOrder(addons: List<Addon>): List<St
                     type = catalog.apiType,
                     catalogId = catalog.id
                 )
+                val sig = signatureMap[key]
                 if (key !in orderedKeys) {
-                    orderedKeys.add(key)
+                    if (sig == null || seenCatalogSignatures.add(sig)) {
+                        orderedKeys.add(key)
+                    }
                 }
             }
     }
@@ -406,7 +434,29 @@ private fun buildAddonKeyOwnerMap(addons: List<Addon>): Map<String, String> {
     addons.forEach { addon ->
         addon.catalogs.forEach { catalog ->
             val key = "${addon.id}_${catalog.apiType}_${catalog.id}"
-            map[key] = addon.id
+            map[key] = "${addon.id} ${addon.name} ${catalog.name} ${catalog.id}"
+        }
+    }
+    return map
+}
+
+private fun buildCatalogKeySignatureMap(addons: List<Addon>): Map<String, String> {
+    val map = mutableMapOf<String, String>()
+    addons.forEach { addon ->
+        val addonLower = addon.name.lowercase()
+        val isAddonAi = AI_CURATED_KEYWORDS.any { addonLower.contains(it) }
+        addon.catalogs.forEach { catalog ->
+            val key = "${addon.id}_${catalog.apiType}_${catalog.id}"
+            val nameLower = catalog.name.trim().lowercase()
+            val isAiOrTrakt = isAddonAi ||
+                AI_CURATED_KEYWORDS.any { nameLower.contains(it) } ||
+                TRAKT_SIMKL_KEYWORDS.any { nameLower.contains(it) }
+            if (!isAiOrTrakt) {
+                val norm = nameLower.replace(Regex("[^a-z0-9]"), "")
+                if (norm.isNotBlank()) {
+                    map[key] = "${catalog.apiType.lowercase()}_$norm"
+                }
+            }
         }
     }
     return map

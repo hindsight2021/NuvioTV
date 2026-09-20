@@ -58,7 +58,7 @@ class CollectionsDataStore @Inject constructor(
     val collections: Flow<List<Collection>> =
         profileManager.activeProfileId.flatMapLatest { pid ->
             factory.get(pid, FEATURE).data.map { prefs ->
-                parseCollections(prefs[collectionsKey])
+                parseCollections(prefs[collectionsKey], includeDefaults = true)
             }
         }
 
@@ -74,7 +74,7 @@ class CollectionsDataStore @Inject constructor(
 
     suspend fun addCollection(collection: Collection) {
         store().edit { prefs ->
-            val current = parseCollections(prefs[collectionsKey]).toMutableList()
+            val current = parseCollections(prefs[collectionsKey], includeDefaults = true).toMutableList()
             current.add(collection)
             prefs[collectionsKey] = gson.toJson(current.map { it.toSerializable() })
         }
@@ -82,7 +82,7 @@ class CollectionsDataStore @Inject constructor(
 
     suspend fun updateCollection(collection: Collection) {
         store().edit { prefs ->
-            val current = parseCollections(prefs[collectionsKey]).toMutableList()
+            val current = parseCollections(prefs[collectionsKey], includeDefaults = true).toMutableList()
             val index = current.indexOfFirst { it.id == collection.id }
             if (index >= 0) {
                 current[index] = collection
@@ -93,7 +93,7 @@ class CollectionsDataStore @Inject constructor(
 
     suspend fun removeCollection(collectionId: String) {
         store().edit { prefs ->
-            val current = parseCollections(prefs[collectionsKey]).toMutableList()
+            val current = parseCollections(prefs[collectionsKey], includeDefaults = true).toMutableList()
             current.removeAll { it.id == collectionId }
             if (current.isEmpty()) {
                 prefs.remove(collectionsKey)
@@ -110,12 +110,12 @@ class CollectionsDataStore @Inject constructor(
     }
 
     fun importFromJson(json: String): List<Collection> {
-        return parseCollections(json)
+        return parseCollections(json, includeDefaults = false)
     }
 
     suspend fun getCurrentCollections(): List<Collection> {
         val prefs = store().data.first()
-        return parseCollections(prefs[collectionsKey])
+        return parseCollections(prefs[collectionsKey], includeDefaults = true)
     }
 
     suspend fun exportCurrentProfileJson(): String? {
@@ -181,19 +181,243 @@ class CollectionsDataStore @Inject constructor(
         }
     }
 
-    private fun parseCollections(json: String?): List<Collection> {
-        if (json.isNullOrBlank()) return emptyList()
-        return try {
-            val type = object : TypeToken<List<SerializableCollection>>() {}.type
-            val parsed = gson.fromJson<List<SerializableCollection>>(json, type).orEmpty()
-            // Deduplicate by ID at parse level to prevent duplicate LazyColumn keys
-            // even if stored data contains duplicates (e.g. from sync or corrupted state).
-            parsed.map { it.toDomain() }
-                .associateBy { it.id }
-                .values.toList()
-        } catch (_: Exception) {
+    private fun parseCollections(json: String?, includeDefaults: Boolean = false): List<Collection> {
+        val existing = if (json.isNullOrBlank()) {
             emptyList()
+        } else {
+            try {
+                val type = object : TypeToken<List<SerializableCollection>>() {}.type
+                val parsed = gson.fromJson<List<SerializableCollection>>(json, type).orEmpty()
+                // Deduplicate by ID at parse level to prevent duplicate LazyColumn keys
+                // even if stored data contains duplicates (e.g. from sync or corrupted state).
+                parsed.map { it.toDomain() }
+                    .associateBy { it.id }
+                    .values.toList()
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
+
+        return if (includeDefaults && existing.none { it.title.contains("genre", ignoreCase = true) }) {
+            existing + createDefaultGenresCollection()
+        } else {
+            existing
+        }
+    }
+
+    private fun createDefaultGenresCollection(): Collection {
+        val folders = listOf(
+            CollectionFolder(
+                id = "genre_action_adventure",
+                title = "Action & Adventure",
+                coverEmoji = "💥",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "10759")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "28,12")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_animation",
+                title = "Animation",
+                coverEmoji = "🎨",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "16")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "16")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_comedy",
+                title = "Comedy",
+                coverEmoji = "😂",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "35")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "35")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_crime",
+                title = "Crime",
+                coverEmoji = "🔍",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "80")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "80")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_documentary",
+                title = "Documentary",
+                coverEmoji = "🌍",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "99")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "99")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_drama",
+                title = "Drama",
+                coverEmoji = "🎭",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "18")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "18")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_family_kids",
+                title = "Family & Kids",
+                coverEmoji = "👨‍👩‍👧‍👦",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "10751,10762")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "10751")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_mystery",
+                title = "Mystery",
+                coverEmoji = "🕵️",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "9648")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "9648")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_scifi_fantasy",
+                title = "Sci-Fi & Fantasy",
+                coverEmoji = "🚀",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "10765")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "878,14")
+                    )
+                )
+            ),
+            CollectionFolder(
+                id = "genre_western",
+                title = "Western",
+                coverEmoji = "🤠",
+                tileShape = PosterShape.SQUARE,
+                sources = listOf(
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "TV Shows",
+                        mediaType = TmdbCollectionMediaType.TV,
+                        filters = TmdbCollectionFilters(withGenres = "37")
+                    ),
+                    TmdbCollectionSource(
+                        sourceType = TmdbCollectionSourceType.DISCOVER,
+                        title = "Movies",
+                        mediaType = TmdbCollectionMediaType.MOVIE,
+                        filters = TmdbCollectionFilters(withGenres = "37")
+                    )
+                )
+            )
+        )
+
+        return Collection(
+            id = "default_genres_collection",
+            title = "Genres",
+            pinToTop = false,
+            focusGlowEnabled = true,
+            viewMode = FolderViewMode.TABBED_GRID,
+            showAllTab = true,
+            folders = folders
+        )
     }
 
     @androidx.annotation.Keep

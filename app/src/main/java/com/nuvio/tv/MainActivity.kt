@@ -1495,8 +1495,12 @@ open class MainActivity : ComponentActivity() {
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER,
                 KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                    com.nuvio.tv.core.sound.AudioFeedbackManager.playClick(this)
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                KeyEvent.KEYCODE_BUTTON_A,
+                KeyEvent.KEYCODE_BUTTON_SELECT -> {
+                    if (event.repeatCount == 0) {
+                        com.nuvio.tv.core.sound.AudioFeedbackManager.playClick(this)
+                    }
                 }
             }
         }

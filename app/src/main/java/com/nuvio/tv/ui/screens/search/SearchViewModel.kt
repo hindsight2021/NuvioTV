@@ -1217,6 +1217,11 @@ class SearchViewModel @Inject constructor(
         val trimmed = prompt.trim()
         if (trimmed.isBlank()) return
 
+        // Seamless primary search: ensure standard addon search always runs immediately and concurrently
+        if (_uiState.value.submittedQuery.trim() != trimmed) {
+            performSearch(trimmed, rememberToHistory = true)
+        }
+
         if (!aiPreferences.isConfigured()) {
             _uiState.update {
                 it.copy(

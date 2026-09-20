@@ -202,6 +202,11 @@ fun AdvancedSettingsContent(
     var streamParallel8Speed by remember { mutableStateOf<Double?>(null) }
     var streamParallel16Speed by remember { mutableStateOf<Double?>(null) }
     var streamErrorMessage by remember { mutableStateOf<String?>(null) }
+    var showClickSoundProfileDialog by remember { mutableStateOf(false) }
+    var remoteClickEnabled by remember { mutableStateOf(com.nuvio.tv.core.sound.AudioFeedbackManager.isRemoteClickEnabled(context)) }
+    var currentClickSoundProfile by remember { mutableStateOf(com.nuvio.tv.core.sound.AudioFeedbackManager.getClickSoundProfile(context)) }
+    var navigationClickEnabled by remember { mutableStateOf(com.nuvio.tv.core.sound.AudioFeedbackManager.isNavigationClickEnabled(context)) }
+    var playbackSoundsEnabled by remember { mutableStateOf(com.nuvio.tv.core.sound.AudioFeedbackManager.isPlaybackSoundsEnabled(context)) }
 
     val lastStreamUrl = dvDiagnostics.streamUrl
     val lastHeadersJson = dvDiagnostics.headersJson
@@ -512,6 +517,59 @@ fun AdvancedSettingsContent(
                         scope.launch {
                             profileManager.setConfirmExitEnabled(!confirmExitEnabled)
                         }
+                    }
+                )
+            }
+        }
+
+        item(key = "audio_feedback_header") {
+            Text(
+                text = "Remote & Navigation Sounds",
+                style = MaterialTheme.typography.titleSmall,
+                color = NuvioTheme.colors.TextTertiary,
+                modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
+            )
+        }
+
+        item(key = "audio_feedback_group") {
+            SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsToggleRow(
+                    title = "Remote Click Sounds",
+                    subtitle = "Play a tactile audio click when pressing Select, Enter, or action keys.",
+                    checked = remoteClickEnabled,
+                    onToggle = {
+                        val next = !remoteClickEnabled
+                        remoteClickEnabled = next
+                        com.nuvio.tv.core.sound.AudioFeedbackManager.setRemoteClickEnabled(context, next)
+                    }
+                )
+
+                SettingsActionRow(
+                    title = "Click Sound Profile",
+                    subtitle = "Choose the sound effect played on remote select clicks.",
+                    value = currentClickSoundProfile.displayName,
+                    onClick = { showClickSoundProfileDialog = true }
+                )
+
+                SettingsToggleRow(
+                    title = "Directional Navigation Sounds",
+                    subtitle = "Subtle tick sound when navigating across items with the D-pad.",
+                    checked = navigationClickEnabled,
+                    onToggle = {
+                        val next = !navigationClickEnabled
+                        navigationClickEnabled = next
+                        com.nuvio.tv.core.sound.AudioFeedbackManager.setNavigationClickEnabled(context, next)
+                    }
+                )
+
+                SettingsToggleRow(
+                    title = "Playback Action Sounds",
+                    subtitle = "Audio feedback for play, pause, and stop controls.",
+                    checked = playbackSoundsEnabled,
+                    onToggle = {
+                        val next = !playbackSoundsEnabled
+                        playbackSoundsEnabled = next
+                        com.nuvio.tv.core.sound.AudioFeedbackManager.setPlaybackSoundsEnabled(context, next)
                     }
                 )
             }
@@ -881,6 +939,27 @@ fun AdvancedSettingsContent(
                 )
             },
             onDismiss = { showSentryDialog = false }
+        )
+    }
+
+    if (showClickSoundProfileDialog) {
+        val options = com.nuvio.tv.core.sound.ClickSoundProfile.entries.map { profile ->
+            SettingsPickerOption(
+                label = profile.displayName,
+                value = profile
+            )
+        }
+        SettingsSingleChoiceDialog(
+            title = "Click Sound Profile",
+            subtitle = "Select remote click feedback sound",
+            options = options,
+            selectedValue = currentClickSoundProfile,
+            onOptionSelected = { selected ->
+                currentClickSoundProfile = selected
+                com.nuvio.tv.core.sound.AudioFeedbackManager.setClickSoundProfile(context, selected)
+                showClickSoundProfileDialog = false
+            },
+            onDismiss = { showClickSoundProfileDialog = false }
         )
     }
 }

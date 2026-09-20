@@ -61,6 +61,7 @@ fun AiSettingsContent(
     var currentKey by remember { mutableStateOf(prefs.getApiKey(activeProvider)) }
     var currentModel by remember { mutableStateOf(prefs.getModel(activeProvider)) }
     var isTtsEnabled by remember { mutableStateOf(prefs.isTtsEnabled) }
+    var isAiSearchEnabled by remember { mutableStateOf(prefs.isAiSearchEnabled) }
     var currentVoicePersona by remember { mutableStateOf(prefs.ttsVoicePersona) }
     var customPersona by remember { mutableStateOf(prefs.customPersona) }
 
@@ -74,6 +75,7 @@ fun AiSettingsContent(
         currentKey = prefs.getApiKey(activeProvider)
         currentModel = prefs.getModel(activeProvider)
         isTtsEnabled = prefs.isTtsEnabled
+        isAiSearchEnabled = prefs.isAiSearchEnabled
         currentVoicePersona = prefs.ttsVoicePersona
         customPersona = prefs.customPersona
     }
@@ -159,6 +161,19 @@ fun AiSettingsContent(
                             subtitle = currentVoicePersona.description,
                             value = currentVoicePersona.displayName,
                             onClick = { showVoicePersonaDialog = true }
+                        )
+                    }
+
+                    item(key = "ai_search_enabled") {
+                        SettingsToggleRow(
+                            title = "AI in Search",
+                            subtitle = "Show secondary AI recommendations alongside addon search results.",
+                            checked = isAiSearchEnabled,
+                            onToggle = {
+                                val next = !isAiSearchEnabled
+                                isAiSearchEnabled = next
+                                prefs.isAiSearchEnabled = next
+                            }
                         )
                     }
                 }

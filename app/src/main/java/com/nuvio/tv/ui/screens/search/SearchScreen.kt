@@ -178,11 +178,10 @@ fun SearchScreen(
     val onVoiceQueryResultState = rememberUpdatedState<(String) -> Unit> { recognized ->
         if (recognized.isNotBlank()) {
             backToFieldLatched = false
-            if (viewModel.aiPreferences.isConfigured()) {
+            viewModel.onEvent(SearchEvent.QueryChanged(recognized))
+            viewModel.onEvent(SearchEvent.SubmitSearch)
+            if (viewModel.aiPreferences.isConfigured() && viewModel.aiPreferences.isAiSearchEnabled) {
                 viewModel.onEvent(SearchEvent.QueryAi(recognized))
-            } else {
-                viewModel.onEvent(SearchEvent.QueryChanged(recognized))
-                viewModel.onEvent(SearchEvent.SubmitSearch)
             }
             focusResults = false
             pendingFocusMoveToResultsQuery = recognized
@@ -665,7 +664,11 @@ fun SearchScreen(
                     onAiSearch = {
                         val q = uiState.query.trim()
                         if (q.isNotBlank()) {
-                            viewModel.onEvent(SearchEvent.QueryAi(q))
+                            viewModel.onEvent(SearchEvent.QueryChanged(q))
+                            viewModel.onEvent(SearchEvent.SubmitSearch)
+                            if (viewModel.aiPreferences.isConfigured() && viewModel.aiPreferences.isAiSearchEnabled) {
+                                viewModel.onEvent(SearchEvent.QueryAi(q))
+                            }
                         } else {
                             launchVoiceSearch()
                         }
@@ -673,7 +676,8 @@ fun SearchScreen(
                 )
             }
 
-            if (uiState.isAiThinking || uiState.aiResponse != null || uiState.aiError != null) {
+            val showAiAbove = visibleCatalogRows.isEmpty()
+            if (showAiAbove && (uiState.isAiThinking || uiState.aiResponse != null || uiState.aiError != null)) {
                 item(key = "ai_card") {
                     AiConversationalCard(
                         isThinking = uiState.isAiThinking,
@@ -691,7 +695,7 @@ fun SearchScreen(
             }
 
             val aiCatalogRow = uiState.aiCatalogRow
-            if (aiCatalogRow != null && aiCatalogRow.items.isNotEmpty()) {
+            if (showAiAbove && aiCatalogRow != null && aiCatalogRow.items.isNotEmpty()) {
                 item(key = "ai_catalog_row") {
                     val aiCatalogKey = "ai_catalog_row"
                     val aiRowState = searchRowStates.getOrPut(aiCatalogKey) {
@@ -991,6 +995,59 @@ fun SearchScreen(
                                     onItemClick = { _, _, _ -> },
                                     posterCardStyle = posterCardStyle,
                                     showAddonName = uiState.catalogAddonNameEnabled,
+                                    modifier = Modifier.padding(bottom = 24.dp)
+                                )
+                            }
+                        }
+
+                        if (!showAiAbove && (uiState.isAiThinking || uiState.aiResponse != null)) {
+                            item(key = "ai_card_below") {
+                                AiConversationalCard(
+                                    isThinking = uiState.isAiThinking,
+                                    response = uiState.aiResponse,
+                                    error = null,
+                                    providerName = viewModel.aiPreferences.activeProvider.displayName,
+                                    onQuestionClick = { question ->
+                                        viewModel.onEvent(SearchEvent.QueryAi(question))
+                                    },
+                                    onDismiss = {
+                                        viewModel.onEvent(SearchEvent.ClearAiChat)
+                                    }
+                                )
+                            }
+                        }
+
+                        if (!showAiAbove && aiCatalogRow != null && aiCatalogRow.items.isNotEmpty()) {
+                            item(key = "ai_catalog_row_below") {
+                                val aiCatalogKey = "ai_catalog_row_below"
+                                val aiRowState = searchRowStates.getOrPut(aiCatalogKey) {
+                                    LazyListState()
+                                }
+                                val aiRowFocusRequester = searchRowFocusRequesters.getOrPut(aiCatalogKey) { FocusRequester() }
+                                val aiEntryFocusRequester = searchRowEntryFocusRequesters.getOrPut(aiCatalogKey) { FocusRequester() }
+
+                                CatalogRowSection(
+                                    catalogRow = aiCatalogRow,
+                                    posterCardStyle = posterCardStyle,
+                                    showSeeAll = false,
+                                    showPosterLabels = uiState.posterLabelsEnabled,
+                                    showAddonName = true,
+                                    showCatalogTypeSuffix = false,
+                                    enableRowFocusRestorer = true,
+                                    rowFocusRequester = aiRowFocusRequester,
+                                    entryFocusRequester = aiEntryFocusRequester,
+                                    upFocusRequester = null,
+                                    listState = aiRowState,
+                                    isItemWatched = { false },
+                                    onItemClick = { id, type, addonBaseUrl ->
+                                        val clickedItem = aiCatalogRow.items.firstOrNull { it.id == id }
+                                        val backdrop = clickedItem?.background
+                                        HeroBackdropState.update(backdrop)
+                                        onNavigateToDetail(id, type, addonBaseUrl)
+                                    },
+                                    onItemLongPress = { item, addonBaseUrl ->
+                                        viewModel.posterOptions.show(item, addonBaseUrl)
+                                    },
                                     modifier = Modifier.padding(bottom = 24.dp)
                                 )
                             }
