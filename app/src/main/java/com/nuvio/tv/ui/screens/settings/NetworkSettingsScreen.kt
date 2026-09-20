@@ -943,18 +943,9 @@ fun AdvancedSettingsContent(
     }
 
     if (showClickSoundProfileDialog) {
-        val options = com.nuvio.tv.core.sound.ClickSoundProfile.entries.map { profile ->
-            SettingsPickerOption(
-                label = profile.displayName,
-                value = profile
-            )
-        }
-        SettingsSingleChoiceDialog(
-            title = "Click Sound Profile",
-            subtitle = "Select remote click feedback sound",
-            options = options,
-            selectedValue = currentClickSoundProfile,
-            onOptionSelected = { selected ->
+        ClickSoundProfileDialog(
+            selectedProfile = currentClickSoundProfile,
+            onProfileSelected = { selected ->
                 currentClickSoundProfile = selected
                 com.nuvio.tv.core.sound.AudioFeedbackManager.setClickSoundProfile(context, selected)
                 showClickSoundProfileDialog = false
