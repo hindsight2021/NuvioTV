@@ -2155,7 +2155,65 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
         }
         return null
     }
-    val nextVideo = resolveNextUpVideoFromMeta(progress, meta, showUnairedNextUp)
+    var currentMeta = meta
+    var nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp)
+    if (nextVideo == null &&
+        isSeriesTypeCW(progress.contentType) &&
+        currentTmdbSettings.enabled
+    ) {
+        val tmdbId = resolveTmdbIdForNextUp(progress, currentMeta, debug)
+        if (tmdbId != null) {
+            val maxKnownSeason = currentMeta.videos
+                .asSequence()
+                .mapNotNull { it.season?.takeIf { s -> s > 0 } }
+                .maxOrNull() ?: 0
+
+            val targetSeason = maxOf(maxKnownSeason + 1, progress.season ?: 1)
+            val fetchedEpisodes = runCatching {
+                tmdbMetadataService.fetchEpisodeEnrichment(
+                    tmdbId = tmdbId,
+                    seasonNumbers = listOf(targetSeason, targetSeason + 1),
+                    language = currentTmdbSettings.language
+                )
+            }.getOrNull().orEmpty()
+
+            if (fetchedEpisodes.isNotEmpty()) {
+                val existingKeys = currentMeta.videos
+                    .asSequence()
+                    .mapNotNull { video ->
+                        val s = video.season
+                        val e = video.episode
+                        if (s != null && e != null) s to e else null
+                    }
+                    .toHashSet()
+
+                val newVideos = fetchedEpisodes.mapNotNull { (pair, ep) ->
+                    val (s, e) = pair
+                    if (s <= 0 || e <= 0 || !existingKeys.add(s to e)) return@mapNotNull null
+
+                    CwVideoSummary(
+                        id = "${currentMeta.id}:$s:$e",
+                        title = ep.title?.takeIf { it.isNotBlank() } ?: "Episode $e",
+                        released = ep.airDate,
+                        thumbnail = ep.thumbnail,
+                        season = s,
+                        episode = e,
+                        overview = ep.overview ?: "",
+                        available = true
+                    )
+                }
+
+                if (newVideos.isNotEmpty()) {
+                    val updatedMeta = currentMeta.copy(videos = currentMeta.videos + newVideos)
+                    currentMeta = updatedMeta
+                    synchronized(cwMetaCache) {
+                        cwMetaCache["${progress.contentType}:${progress.contentId}"] = updatedMeta
+                    }
+                    nextVideo = resolveNextUpVideoFromMeta(progress, updatedMeta, showUnairedNextUp)
+                }
+            }
+        }
+    }
     if (nextVideo == null) {
         debug?.recordNextUpResult(
             progress = progress,

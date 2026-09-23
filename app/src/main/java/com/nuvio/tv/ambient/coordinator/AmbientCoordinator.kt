@@ -102,8 +102,8 @@ class AmbientCoordinator @Inject constructor(
      */
     fun startAmbient(forcedChannel: AmbientChannel? = null) {
         scope.launch {
-            if (forcedChannel == null && playerPlaybackBridge.playbackSnapshot.value?.let { it.isPlaying || it.isBuffering } == true) {
-                Log.d(TAG, "Suppressed ambient screensaver start because playback is actively playing or buffering.")
+            if (forcedChannel == null && playerPlaybackBridge.playbackSnapshot.value != null) {
+                Log.d(TAG, "Suppressed ambient screensaver start because playback session is active (playing, buffering, or paused).")
                 return@launch
             }
             mutex.withLock {

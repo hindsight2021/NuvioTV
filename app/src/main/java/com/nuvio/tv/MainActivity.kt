@@ -396,7 +396,7 @@ open class MainActivity : ComponentActivity() {
         nuvioControlManager.start()
 
         ambientIdleController.setPlaybackActiveProvider {
-            playerPlaybackBridge.playbackSnapshot.value?.let { it.isPlaying || it.isBuffering } == true ||
+            playerPlaybackBridge.playbackSnapshot.value != null ||
                 externalPlaybackTracker.pendingMetadata != null ||
                 trailerPlayerPool.isPlaying
         }
@@ -1247,7 +1247,8 @@ open class MainActivity : ComponentActivity() {
                         if (selectedHomeTab == "movies") "home_movies" else "home_tv"
                     } else {
                         drawerItems.firstOrNull { item ->
-                            currentRoute == item.route || currentRoute?.startsWith("${item.route}/") == true
+                            currentRoute == item.route || currentRoute?.startsWith("${item.route}/") == true ||
+                                (item.route == Screen.Search.route && currentRoute?.startsWith("search") == true)
                         }?.route
                     }
                     val selectedDrawerItem = drawerItems.firstOrNull { it.route == selectedDrawerRoute } ?: drawerItems.first()
@@ -2562,7 +2563,13 @@ private fun navigateToDrawerRoute(
         return
     }
 
-    if (currentRoute == targetRoute) {
+    val effectiveTargetRoute = if (targetRoute == Screen.Search.route) {
+        Screen.Search.createRoute(null)
+    } else {
+        targetRoute
+    }
+
+    if (currentRoute == targetRoute || (targetRoute == Screen.Search.route && currentRoute?.startsWith("search") == true)) {
         if (targetRoute == Screen.Home.route) {
             // Scroll Home to top by clearing saved focus/scroll state on the ViewModel.
             val homeEntry = try {
@@ -2577,7 +2584,7 @@ private fun navigateToDrawerRoute(
         return
     }
     try {
-        navController.navigate(targetRoute) {
+        navController.navigate(effectiveTargetRoute) {
             popUpTo(navController.graph.startDestinationId) {
                 saveState = true
             }
@@ -2585,7 +2592,7 @@ private fun navigateToDrawerRoute(
             restoreState = true
         }
     } catch (e: IllegalArgumentException) {
-        Log.w("NuvioNavigation", "Route not found in nav graph: $targetRoute", e)
+        Log.w("NuvioNavigation", "Route not found in nav graph: $effectiveTargetRoute", e)
     }
 }
 

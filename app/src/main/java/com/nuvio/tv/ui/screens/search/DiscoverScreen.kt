@@ -39,7 +39,8 @@ import kotlin.math.roundToInt
 fun DiscoverScreen(
     viewModel: SearchViewModel = hiltViewModel(),
     showBuiltInHeader: Boolean = true,
-    onNavigateToDetail: (String, String, String) -> Unit
+    onNavigateToDetail: (String, String, String) -> Unit,
+    onPlaySeriesEpisode: ((itemId: String, itemType: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
@@ -142,6 +143,14 @@ fun DiscoverScreen(
                 val clickedItem = uiState.discoverResults.firstOrNull { it.id == id }
                 HeroBackdropState.update(clickedItem?.backdropUrl)
                 onNavigateToDetail(id, type, addonBaseUrl)
+            },
+            onPlaySeriesEpisode = { id, type, addonBaseUrl, season, episode ->
+                pendingDiscoverRestoreOnResume = true
+                if (onPlaySeriesEpisode != null) {
+                    onPlaySeriesEpisode(id, type, addonBaseUrl.takeIf { it.isNotBlank() }, season, episode)
+                } else {
+                    onNavigateToDetail(id, type, addonBaseUrl)
+                }
             }
         )
     }

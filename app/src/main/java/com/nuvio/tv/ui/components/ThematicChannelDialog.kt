@@ -89,20 +89,22 @@ fun ThematicChannelDialog(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xE608080C))
-                .padding(32.dp),
+                .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .widthIn(min = 580.dp, max = 800.dp)
+                    .fillMaxHeight(0.88f)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF14121E))
                     .border(1.5.dp, Color(0x66AB47BC), RoundedCornerShape(20.dp))
-                    .padding(28.dp)
+                    .padding(20.dp)
             ) {
                 Column(
+                    modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Header Row
                     Row(
@@ -182,11 +184,11 @@ fun ThematicChannelDialog(
                             )
                         }
 
-                        // Tracklist
+                        // Tracklist takes remaining flexible space
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(260.dp),
+                                .weight(1f, fill = false),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(result.tracks) { track ->
@@ -194,7 +196,7 @@ fun ThematicChannelDialog(
                             }
                         }
 
-                        // Buttons
+                        // Buttons pinned at bottom
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -251,8 +253,11 @@ fun ThematicChannelDialog(
                         }
 
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             generator.curatedMoods.chunked(2).forEach { rowMoods ->
                                 Row(

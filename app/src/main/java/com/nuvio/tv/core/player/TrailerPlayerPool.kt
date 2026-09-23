@@ -42,6 +42,7 @@ class TrailerPlayerPool @Inject constructor(
     private var _player: ExoPlayer? = null
     private val yielded = AtomicBoolean(false)
     private val released = AtomicBoolean(false)
+    private val _isPlaying = AtomicBoolean(false)
 
     @Volatile
     private var cachedForceNative: Boolean = false
@@ -76,6 +77,7 @@ class TrailerPlayerPool @Inject constructor(
      * Call this when the trailer is no longer visible (poster lost focus, screen change).
      */
     fun stop() {
+        _isPlaying.set(false)
         _player?.let { player ->
             runCatching {
                 player.playWhenReady = false
@@ -87,9 +89,10 @@ class TrailerPlayerPool @Inject constructor(
 
     /**
      * Returns true if the trailer player is active and currently playing.
+     * Safe to query from any thread without hitting ExoPlayer thread checks.
      */
     val isPlaying: Boolean
-        get() = _player?.isPlaying == true
+        get() = _isPlaying.get()
 
     /**
      * Releases codec resources so the detail-screen player can claim hardware decoders.
@@ -98,6 +101,7 @@ class TrailerPlayerPool @Inject constructor(
     fun yield() {
         if (yielded.compareAndSet(false, true)) {
             Log.d(TAG, "Yielding trailer player for detail playback")
+            _isPlaying.set(false)
             _player?.let { player ->
                 runCatching { player.stop() }
                 runCatching { player.clearMediaItems() }
@@ -123,6 +127,7 @@ class TrailerPlayerPool @Inject constructor(
      */
     fun release() {
         if (released.compareAndSet(false, true)) {
+            _isPlaying.set(false)
             _player?.let { player ->
                 runCatching { player.stop() }
                 runCatching { player.clearMediaItems() }
@@ -173,6 +178,11 @@ class TrailerPlayerPool @Inject constructor(
             .build()
             .apply {
                 repeatMode = Player.REPEAT_MODE_OFF
+                addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        _isPlaying.set(isPlaying)
+                    }
+                })
             }
     }
 }

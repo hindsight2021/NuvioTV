@@ -14,7 +14,8 @@ data class ThematicTrack(
     val season: Int? = null,
     val episode: Int? = null,
     val episodeTitle: String? = null,
-    val reason: String
+    val reason: String,
+    val contentId: String? = null
 )
 
 data class ThematicChannelResult(
@@ -91,6 +92,7 @@ class ThematicChannelGenerator @Inject constructor(
           "tracks": [
             {
               "title": "Show or Movie Title",
+              "imdbId": "tt1234567 (standard IMDb ID if known)",
               "type": "series" or "movie",
               "season": 1 (or null if movie),
               "episode": 3 (or null if movie),
@@ -113,6 +115,8 @@ class ThematicChannelGenerator @Inject constructor(
             val tracks = mutableListOf<ThematicTrack>()
             for (i in 0 until tracksArray.length()) {
                 val item = tracksArray.getJSONObject(i)
+                val rawImdbId = item.optString("imdbId").trim()
+                val contentId = if (rawImdbId.startsWith("tt")) rawImdbId else null
                 tracks.add(
                     ThematicTrack(
                         title = item.optString("title", "Untitled"),
@@ -120,7 +124,8 @@ class ThematicChannelGenerator @Inject constructor(
                         season = if (item.has("season") && !item.isNull("season")) item.getInt("season") else null,
                         episode = if (item.has("episode") && !item.isNull("episode")) item.getInt("episode") else null,
                         episodeTitle = item.optString("episodeTitle").takeIf { it.isNotBlank() },
-                        reason = item.optString("reason", "Curated pick for this channel")
+                        reason = item.optString("reason", "Curated pick for this channel"),
+                        contentId = contentId
                     )
                 )
             }

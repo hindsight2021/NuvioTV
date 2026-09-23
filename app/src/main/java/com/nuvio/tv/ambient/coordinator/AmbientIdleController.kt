@@ -130,7 +130,7 @@ class AmbientIdleController @Inject constructor(
      * configured idle timeout has elapsed.
      */
     private suspend fun runMonitoringLoop(onIdleTimeout: () -> Unit) {
-        while (scope.isActive) {
+        while (kotlin.coroutines.coroutineContext.isActive) {
             try {
                 delay(POLL_INTERVAL_MS)
 
@@ -142,6 +142,8 @@ class AmbientIdleController @Inject constructor(
 
                 val settings = try {
                     settingsDataStore.settings.first()
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    throw ce
                 } catch (t: Throwable) {
                     Log.w(TAG, "Failed to read ambient settings; skipping tick.", t)
                     continue
@@ -162,11 +164,15 @@ class AmbientIdleController @Inject constructor(
                         _isIdle.value = true
                         try {
                             onIdleTimeout()
+                        } catch (ce: kotlinx.coroutines.CancellationException) {
+                            throw ce
                         } catch (t: Throwable) {
                             Log.e(TAG, "onIdleTimeout callback threw an exception.", t)
                         }
                     }
                 }
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                throw ce
             } catch (t: Throwable) {
                 // Defensive: never let an unexpected error kill the monitoring loop.
                 Log.e(TAG, "Unexpected error in idle monitoring loop.", t)

@@ -137,7 +137,8 @@ fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> },
-    onOpenDiscover: () -> Unit = {}
+    onOpenDiscover: () -> Unit = {},
+    onPlaySeriesEpisode: ((itemId: String, itemType: String, addonBaseUrl: String?, season: Int, episode: Int) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
@@ -1072,6 +1073,15 @@ fun SearchScreen(
                 ?: uiState.discoverResults.firstOrNull { it.id == id }
             HeroBackdropState.update(clickedItem?.backdropUrl)
             onNavigateToDetail(id, type, addonBaseUrl)
+        },
+        onPlaySeriesEpisode = { id, type, addonBaseUrl, season, episode ->
+            posterOptionsRowKey?.let(saveSearchFocusForDetail)
+            posterOptionsRowKey = null
+            if (onPlaySeriesEpisode != null) {
+                onPlaySeriesEpisode(id, type, addonBaseUrl.takeIf { it.isNotBlank() }, season, episode)
+            } else {
+                onNavigateToDetail(id, type, addonBaseUrl)
+            }
         }
     )
 }

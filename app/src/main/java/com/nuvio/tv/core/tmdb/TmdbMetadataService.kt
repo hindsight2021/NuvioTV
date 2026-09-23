@@ -485,7 +485,8 @@ class TmdbMetadataService(
                     collectionName = collectionName,
                     originalTitle = originalTitle,
                     alternativeTitles = altTitles,
-                    trailers = trailers
+                    trailers = trailers,
+                    numberOfSeasons = details?.numberOfSeasons
                 )
                 enrichmentCache[cacheKey] = enrichment
                 requestDeferred.complete(enrichment)
@@ -1665,7 +1666,8 @@ data class TmdbEnrichment(
     val collectionName: String?,
     val originalTitle: String? = null,
     val alternativeTitles: List<String> = emptyList(),
-    val trailers: List<MetaTrailer> = emptyList()
+    val trailers: List<MetaTrailer> = emptyList(),
+    val numberOfSeasons: Int? = null
 )
 
 data class TmdbEpisodeEnrichment(

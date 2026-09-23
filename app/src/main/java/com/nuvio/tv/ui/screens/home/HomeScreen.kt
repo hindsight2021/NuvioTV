@@ -794,10 +794,15 @@ fun HomeScreen(
             onStartChannel = { result ->
                 showThematicChannelDialog = false
                 val playlistItems = result.tracks.map { track ->
+                    val resolvedContentId = track.contentId ?: track.title
                     PlaylistItem(
-                        contentId = track.title,
-                        videoId = null,
-                        title = track.title,
+                        contentId = resolvedContentId,
+                        videoId = if (track.type == "series" && track.season != null && track.episode != null) {
+                            "$resolvedContentId:${track.season}:${track.episode}"
+                        } else {
+                            resolvedContentId
+                        },
+                        title = track.episodeTitle ?: track.title,
                         seriesTitle = track.title,
                         season = track.season,
                         episode = track.episode,
@@ -805,6 +810,15 @@ fun HomeScreen(
                     )
                 }
                 PlaylistManager.startThematicChannel(playlistItems)
+                val firstTrack = result.tracks.firstOrNull()
+                if (firstTrack != null) {
+                    val resolvedId = firstTrack.contentId ?: firstTrack.title
+                    if (firstTrack.type == "series" && firstTrack.season != null && firstTrack.episode != null && onPlaySeriesEpisode != null) {
+                        onPlaySeriesEpisode(resolvedId, firstTrack.type, null, firstTrack.season, firstTrack.episode)
+                    } else {
+                        onNavigateToDetail(resolvedId, firstTrack.type, "")
+                    }
+                }
             },
             onDismiss = { showThematicChannelDialog = false }
         )

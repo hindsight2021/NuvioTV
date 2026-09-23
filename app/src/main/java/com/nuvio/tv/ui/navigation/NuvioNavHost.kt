@@ -1149,7 +1149,7 @@ private fun PlaybackNavHost(
                 }
             )
         ) { backStackEntry ->
-            val queryArg = backStackEntry.arguments?.getString("query")?.takeIf { it.isNotBlank() }
+            val queryArg = backStackEntry.arguments?.getString("query")?.takeIf { it.isNotBlank() && it != "{query}" }
             val searchViewModel: com.nuvio.tv.ui.screens.search.SearchViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel(backStackEntry)
             androidx.compose.runtime.LaunchedEffect(queryArg) {
@@ -1168,6 +1168,18 @@ private fun PlaybackNavHost(
                             itemType = itemType,
                             addonBaseUrl = addonBaseUrl,
                             heroBackdropUrl = heroBackdrop
+                        )
+                    )
+                },
+                onPlaySeriesEpisode = { itemId, itemType, addonBaseUrl, season, episode ->
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            returnFocusSeason = season,
+                            returnFocusEpisode = episode,
+                            playOnLoad = true
                         )
                     )
                 },
@@ -1191,6 +1203,18 @@ private fun PlaybackNavHost(
                             itemType = itemType,
                             addonBaseUrl = addonBaseUrl,
                             heroBackdropUrl = heroBackdrop
+                        )
+                    )
+                },
+                onPlaySeriesEpisode = { itemId, itemType, addonBaseUrl, season, episode ->
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            returnFocusSeason = season,
+                            returnFocusEpisode = episode,
+                            playOnLoad = true
                         )
                     )
                 }

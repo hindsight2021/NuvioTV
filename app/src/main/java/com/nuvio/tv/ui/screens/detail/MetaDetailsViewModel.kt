@@ -1484,27 +1484,24 @@ class MetaDetailsViewModel @Inject constructor(
         val isSeries = meta.apiType in listOf("series", "tv")
         val needsEpisodes = (settings.useEpisodes || settings.useReleaseDates) && isSeries
 
-        // Fetch main enrichment and episode enrichment in parallel.
-        val (enrichment, episodeMap) = coroutineScope {
-            val main = async(Dispatchers.IO) {
-                tmdbMetadataService.fetchEnrichment(
-                    tmdbId = tmdbId,
-                    contentType = tmdbContentType,
-                    language = settings.language
-                )
-            }
-            val episodes = if (needsEpisodes) {
-                async(Dispatchers.IO) {
-                    val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
-                    tmdbMetadataService.fetchEpisodeEnrichment(
-                        tmdbId = tmdbId,
-                        seasonNumbers = seasonNumbers,
-                        language = settings.language
-                    )
-                }
-            } else null
-            main.await() to episodes?.await()
-        }
+        // Fetch main enrichment first, so if TMDB has more seasons than the addon metadata
+        // (e.g. newly premiered Season 4), we fetch episode enrichment for all available seasons!
+        val enrichment = tmdbMetadataService.fetchEnrichment(
+            tmdbId = tmdbId,
+            contentType = tmdbContentType,
+            language = settings.language
+        )
+        val episodeMap = if (needsEpisodes) {
+            val existingSeasons = meta.videos.mapNotNull { it.season }.distinct()
+            val tmdbMaxSeason = enrichment?.numberOfSeasons ?: existingSeasons.maxOrNull() ?: 1
+            val maxSeason = maxOf(tmdbMaxSeason, existingSeasons.maxOrNull() ?: 1)
+            val seasonNumbers = if (maxSeason > 0) (1..maxSeason).toList() else existingSeasons
+            tmdbMetadataService.fetchEpisodeEnrichment(
+                tmdbId = tmdbId,
+                seasonNumbers = seasonNumbers,
+                language = settings.language
+            )
+        } else null
 
         var updated = meta
 
@@ -1589,24 +1586,47 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         if (!episodeMap.isNullOrEmpty()) {
-            updated = updated.copy(
-                videos = meta.videos.map { video ->
-                    val key = if (video.season != null && video.episode != null) video.season to video.episode else null
-                    val ep = key?.let { episodeMap[it] }
-                    video.copy(
-                        title = if (settings.useEpisodes) ep?.title ?: video.title else video.title,
-                        overview = if (settings.useEpisodes) ep?.overview ?: video.overview else video.overview,
-                        released = selectEpisodeReleaseValue(
-                            addonReleased = video.released,
-                            tmdbAirDate = ep?.airDate,
-                            useTmdbReleaseDates = settings.useReleaseDates
-                        ),
-                        thumbnail = if (settings.useEpisodes) ep?.thumbnail ?: video.thumbnail else video.thumbnail,
-                        runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime,
-                        rating = video.rating ?: (if (settings.useEpisodes) ep?.rating else null)
-                    )
-                }
-            )
+            val existingVideosBySeasonEp = meta.videos.associateBy { (it.season ?: 0) to (it.episode ?: 0) }
+            val mergedVideos = meta.videos.map { video ->
+                val key = if (video.season != null && video.episode != null) video.season to video.episode else null
+                val ep = key?.let { episodeMap[it] }
+                video.copy(
+                    title = if (settings.useEpisodes) ep?.title ?: video.title else video.title,
+                    overview = if (settings.useEpisodes) ep?.overview ?: video.overview else video.overview,
+                    released = selectEpisodeReleaseValue(
+                        addonReleased = video.released,
+                        tmdbAirDate = ep?.airDate,
+                        useTmdbReleaseDates = settings.useReleaseDates
+                    ),
+                    thumbnail = if (settings.useArtwork) ep?.thumbnail ?: video.thumbnail else video.thumbnail,
+                    runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime,
+                    rating = video.rating ?: (if (settings.useEpisodes) ep?.rating else null)
+                )
+            }.toMutableList()
+
+            // Append any new seasons/episodes discovered via TMDB that were missing from addon metadata
+            val missingFromAddon = episodeMap.filterKeys { it !in existingVideosBySeasonEp && it.first > 0 && it.second > 0 }
+            if (missingFromAddon.isNotEmpty()) {
+                val newVideos = missingFromAddon.entries
+                    .sortedWith(compareBy({ it.key.first }, { it.key.second }))
+                    .map { (key, ep) ->
+                        val (s, e) = key
+                        com.nuvio.tv.domain.model.Video(
+                            id = "${meta.id}:$s:$e",
+                            title = ep.title?.takeIf { it.isNotBlank() } ?: "Episode $e",
+                            released = ep.airDate,
+                            thumbnail = ep.thumbnail,
+                            season = s,
+                            episode = e,
+                            overview = ep.overview ?: "",
+                            runtime = ep.runtimeMinutes,
+                            rating = ep.rating
+                        )
+                    }
+                mergedVideos.addAll(newVideos)
+            }
+
+            updated = updated.copy(videos = mergedVideos)
         }
 
         if (enrichment?.collectionId != null) {
