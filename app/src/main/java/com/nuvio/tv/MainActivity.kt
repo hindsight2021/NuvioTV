@@ -142,6 +142,9 @@ import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.auth.DeviceSessionRegistration
 import com.nuvio.tv.core.deeplink.DeepLinkHandler
 import com.nuvio.tv.core.deeplink.DeepLinkParser
+import android.graphics.drawable.ColorDrawable
+import androidx.tv.material3.contentColorFor
+import com.nuvio.tv.core.player.PlayerWindowBackdrop
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
@@ -384,6 +387,7 @@ open class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         isFirstResumeAfterCreate = true
+        window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         com.nuvio.tv.core.sound.AudioFeedbackManager.init(this)
         if (savedInstanceState == null) {
             com.nuvio.tv.core.sound.StartupSoundPlayer.play(this)
@@ -754,11 +758,17 @@ open class MainActivity : ComponentActivity() {
                     LocalStartupSplashEnabled provides startupSplashEnabled,
                     LocalAppDimPercent provides appDimPercent
                 ) {
+                val transparentPlayerBackdrop = PlayerWindowBackdrop.isTransparentRequested
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape,
                     colors = SurfaceDefaults.colors(
-                        containerColor = NuvioTheme.colors.Background
+                        containerColor = if (transparentPlayerBackdrop) {
+                            Color.Transparent
+                        } else {
+                            NuvioTheme.colors.Background
+                        },
+                        contentColor = contentColorFor(NuvioTheme.colors.Background)
                     )
                 ) {
                     // Wrap everything in a Box. This prevents any black flash between

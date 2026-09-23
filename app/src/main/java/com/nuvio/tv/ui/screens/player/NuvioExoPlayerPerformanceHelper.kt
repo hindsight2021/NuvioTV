@@ -41,7 +41,7 @@ object NuvioExoPlayerPerformanceHelper {
 
     @Volatile
     var sharedConnectionPool: okhttp3.ConnectionPool = okhttp3.ConnectionPool(
-        DEFAULT_NUVIO_CONNECTION_POOL_SIZE,
+        NUVIO_SHARED_POOL_MAX_IDLE,
         3,
         java.util.concurrent.TimeUnit.MINUTES
     )
@@ -49,14 +49,21 @@ object NuvioExoPlayerPerformanceHelper {
 
     // ─── Constants ────────────────────────────────────────────────────────────
     const val DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE = 64 * 1024        // 64 KB
+
+    // Mirrors ARENA_CHUNK_SIZE in the forked DefaultAllocatorNative, whose pool covers 512 of them.
+    const val NATIVE_ARENA_CHUNK_SIZE = 64 * 1024
+    const val NATIVE_ARENA_POOL_BYTES = 512 * NATIVE_ARENA_CHUNK_SIZE
+    const val DEFAULT_NUVIO_TARGET_BUFFER_MB = 250
     const val DEFAULT_NUVIO_TARGET_BUFFER_BYTES = 250 * 1024 * 1024    // 250 MB
-    const val DEFAULT_NUVIO_MIN_BUFFER_MS = 40_000
-    const val DEFAULT_NUVIO_MAX_BUFFER_MS = 120_000
-    const val DEFAULT_NUVIO_BACK_BUFFER_MS = 1_500
+    const val DEFAULT_NUVIO_MIN_BUFFER_MS = 15_000
+    const val DEFAULT_NUVIO_MAX_BUFFER_MS = 45_000
+    const val DEFAULT_NUVIO_BACK_BUFFER_MS = 0
     const val DEFAULT_NUVIO_INITIAL_BITRATE_ESTIMATE = 50_000_000L     // 50 Mbps
-    const val DEFAULT_NUVIO_CONNECTION_POOL_SIZE = 8
-    const val DEFAULT_NUVIO_BUFFER_FOR_PLAYBACK_MS = 1_000
-    const val DEFAULT_NUVIO_BUFFER_FOR_REBUFFER_MS = 2_000
+    // Parallel chunk fetching keeps more sockets alive than the old cap of 8, which was evicting
+    // live chunk connections mid playback and forcing cold reopens.
+    const val NUVIO_SHARED_POOL_MAX_IDLE = 32
+    private const val BACK_BUFFER_TARGET_SHARE_NUM = 1L
+    private const val BACK_BUFFER_TARGET_SHARE_DEN = 2L
 
     // ─── Customization Variables ──────────────────────────────────────────────
     @Volatile
@@ -66,10 +73,10 @@ object NuvioExoPlayerPerformanceHelper {
     var maxBufferMs: Int = DEFAULT_NUVIO_MAX_BUFFER_MS
 
     @Volatile
-    var bufferForPlaybackMs: Int = DEFAULT_NUVIO_BUFFER_FOR_PLAYBACK_MS
+    var bufferForPlaybackMs: Int = 3_000
 
     @Volatile
-    var bufferForPlaybackAfterRebufferMs: Int = DEFAULT_NUVIO_BUFFER_FOR_REBUFFER_MS
+    var bufferForPlaybackAfterRebufferMs: Int = 3_000
 
     @Volatile
     var backBufferMs: Int = DEFAULT_NUVIO_BACK_BUFFER_MS
@@ -77,11 +84,12 @@ object NuvioExoPlayerPerformanceHelper {
     @Volatile
     var targetBufferSizeMb: Int = 250
 
+    // The allocator recycles internally, so only its own counters show what is actually held.
     @Volatile
-    var calculatedMemoryUsageMb: Int = 0
+    var liveAllocator: DefaultAllocator? = null
 
     @Volatile
-    var connectionPoolSize: Int = DEFAULT_NUVIO_CONNECTION_POOL_SIZE
+    var calculatedMemoryUsageMb: Int = 0
 
     @Volatile
     var enableHttp2: Boolean = false
@@ -96,20 +104,8 @@ object NuvioExoPlayerPerformanceHelper {
         
         minBufferMs = if (customBuffers) bufferSettings.minBufferMs else DEFAULT_NUVIO_MIN_BUFFER_MS
         maxBufferMs = if (customBuffers) bufferSettings.maxBufferMs else DEFAULT_NUVIO_MAX_BUFFER_MS
-        bufferForPlaybackMs = if (settings.nuvioPerformanceModeEnabled) {
-            bufferSettings.bufferForPlaybackMs.coerceAtMost(1_500).coerceAtLeast(1_000)
-        } else if (customBuffers) {
-            bufferSettings.bufferForPlaybackMs
-        } else {
-            DEFAULT_NUVIO_BUFFER_FOR_PLAYBACK_MS
-        }
-        bufferForPlaybackAfterRebufferMs = if (settings.nuvioPerformanceModeEnabled) {
-            bufferSettings.bufferForPlaybackAfterRebufferMs.coerceAtMost(2_000).coerceAtLeast(1_000)
-        } else if (customBuffers) {
-            bufferSettings.bufferForPlaybackAfterRebufferMs
-        } else {
-            DEFAULT_NUVIO_BUFFER_FOR_REBUFFER_MS
-        }
+        bufferForPlaybackMs = if (customBuffers) bufferSettings.bufferForPlaybackMs else 3_000
+        bufferForPlaybackAfterRebufferMs = if (customBuffers) bufferSettings.bufferForPlaybackAfterRebufferMs else 3_000
         backBufferMs = if (customBuffers) bufferSettings.backBufferDurationMs else DEFAULT_NUVIO_BACK_BUFFER_MS
 
         val safeLimitMb = getSafeNativeMemoryLimitMb(context)
@@ -144,21 +140,6 @@ object NuvioExoPlayerPerformanceHelper {
             Math.ceil(settings.parallelChunkSizeKb / 1024.0).toInt(),
             settings.useParallelConnections && settings.parallelNetworkEnabled
         )
-
-        val oldPoolSize = connectionPoolSize
-        val customNetwork = settings.parallelNetworkEnabled
-        connectionPoolSize = if (customNetwork && settings.useParallelConnections) {
-            settings.parallelConnectionCount * 2
-        } else {
-            DEFAULT_NUVIO_CONNECTION_POOL_SIZE
-        }
-        if (connectionPoolSize != oldPoolSize) {
-            sharedConnectionPool = okhttp3.ConnectionPool(
-                connectionPoolSize,
-                3,
-                java.util.concurrent.TimeUnit.MINUTES
-            )
-        }
     }
 
     private const val SEEK_BACK_BUFFER_THRESHOLD_MS = 10_000L
@@ -260,10 +241,10 @@ object NuvioExoPlayerPerformanceHelper {
         val totalMem = getDevicePhysicalRamBytes(context)
         val gb = 1024L * 1024L * 1024L
         return when {
-            totalMem <= 0L -> 250 // Safe default
-            totalMem < 1.15 * gb -> 150
+            totalMem <= 0L -> 200 // Safe default
+            totalMem < 1.15 * gb -> 100
             totalMem < 1.45 * gb -> 200
-            totalMem < 2.3 * gb -> 250
+            totalMem < 2.3 * gb -> 200
             totalMem < 3.2 * gb -> 500
             totalMem < 4.8 * gb -> 1000
             totalMem < 6.8 * gb -> 1600
@@ -278,15 +259,22 @@ object NuvioExoPlayerPerformanceHelper {
         val totalMem = getDevicePhysicalRamBytes(context)
         val gb = 1024L * 1024L * 1024L
         return when {
-            totalMem <= 0L -> 325
-            totalMem < 1.15 * gb -> 180
-            totalMem < 1.45 * gb -> 250
-            totalMem < 2.3 * gb -> 325
+            totalMem <= 0L -> 260
+            totalMem < 1.15 * gb -> 130
+            totalMem < 1.45 * gb -> 260
+            totalMem < 2.3 * gb -> 260
             totalMem < 3.2 * gb -> 650
             totalMem < 4.8 * gb -> 1200
             totalMem < 6.8 * gb -> 2000
             else -> 2500
         }
+    }
+
+    // Both buffers hold bitrate times duration, so half of minBufferMs gives the back buffer a third of the target whatever the stream.
+    private fun effectiveBackBufferMs(): Int {
+        if (backBufferMs <= 0) return 0
+        val ceiling = (minBufferMs.toLong() * BACK_BUFFER_TARGET_SHARE_NUM / BACK_BUFFER_TARGET_SHARE_DEN).toInt()
+        return backBufferMs.coerceAtMost(ceiling)
     }
 
     /**
@@ -300,12 +288,23 @@ object NuvioExoPlayerPerformanceHelper {
             val targetBufferBytes = (effectiveTargetBufferMb.toLong() * 1024L * 1024L)
                 .coerceAtMost(Int.MAX_VALUE.toLong())
                 .toInt()
+            // A segment size other than the arena chunk size drops every allocation to a JNI path
+            // with no other symptom, so say so rather than failing playback over it.
+            if (DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE != NATIVE_ARENA_CHUNK_SIZE) {
+                android.util.Log.w(
+                    "NuvioExoPerf",
+                    "Allocator segment $DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE does not match the " +
+                        "native arena chunk $NATIVE_ARENA_CHUNK_SIZE; native pooling is disabled"
+                )
+            }
+            val allocator = DefaultAllocator(true, DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE, 64, enabled)
+            liveAllocator = allocator
             android.util.Log.i(
                 "ExoPerformance",
-                "buildLoadControl: targetBufferSizeMb=$targetBufferSizeMb, chunkOverheadMb=$chunkOverheadMb, effectiveTargetBufferMb=$effectiveTargetBufferMb, targetBytes=$targetBufferBytes"
+                "buildLoadControl: targetBufferSizeMb=$targetBufferSizeMb, chunkOverheadMb=$chunkOverheadMb, effectiveTargetBufferMb=$effectiveTargetBufferMb, targetBytes=$targetBufferBytes, backBufferMs=${effectiveBackBufferMs()} (set=$backBufferMs)"
             )
             DefaultLoadControl.Builder()
-                .setAllocator(DefaultAllocator(true, DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE, 64, enabled))
+                .setAllocator(allocator)
                 .setTargetBufferBytes(targetBufferBytes)
                 .setBufferDurationsMs(
                     minBufferMs,
@@ -313,7 +312,12 @@ object NuvioExoPlayerPerformanceHelper {
                     bufferForPlaybackMs,
                     bufferForPlaybackAfterRebufferMs
                 )
-                .setBackBuffer(backBufferMs, true)
+                // The byte target has to gate everything the allocator holds, or the back buffer
+                // is charged on top of it and the configured size is not a limit at all.
+                .setPrioritizeTimeOverSizeThresholds(false)
+                // Forward buffer protects playback and the back buffer only protects a seek back,
+                // so the back buffer is the side that gives way when both cannot fit the target.
+                .setBackBuffer(effectiveBackBufferMs(), true)
                 .build()
         } else {
             DefaultLoadControl.Builder()
