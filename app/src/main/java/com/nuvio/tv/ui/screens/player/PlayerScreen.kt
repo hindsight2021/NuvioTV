@@ -896,6 +896,7 @@ fun PlayerScreen(
             animationSpec = tween(durationMillis = POST_PLAY_RECOMMENDATION_TRANSITION_MS),
             label = "postPlayRecommendationPlayerBorderAlpha"
         )
+        val playerSurfaceShape = RoundedCornerShape(postPlayRecommendationPlayerCornerRadius)
         val playerSurfaceIsFullscreen = !postPlayRecommendationState.isVisible &&
             postPlayRecommendationPlayerWidth >= 0.999f
         val playerSurfaceModifier = Modifier
