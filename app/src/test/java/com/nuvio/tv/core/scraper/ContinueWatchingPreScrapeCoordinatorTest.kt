@@ -275,4 +275,36 @@ class ContinueWatchingPreScrapeCoordinatorTest {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         }
     }
+
+    @Test
+    fun `setPlaybackActive true cancels in-flight warmup and setPlaybackActive false resumes`() = runTest(testDispatcher) {
+        every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        coEvery { streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any()) } returns flow {
+            kotlinx.coroutines.delay(5000L)
+            emit(NetworkResult.Success(emptyList()))
+        }
+
+        coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
+        advanceTimeBy(1000L) // Pass debounce, start warmup
+
+        // Playback starts mid-scrape
+        coordinator.setPlaybackActive(true)
+        advanceUntilIdle()
+
+        // Verify no stream links were saved because scrape was cancelled
+        coVerify(exactly = 0) {
+            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+
+        // Playback stops
+        coordinator.setPlaybackActive(false)
+        coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
+        advanceTimeBy(3000L)
+        advanceUntilIdle()
+
+        coVerify(atLeast = 1) {
+            streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
+        }
+    }
 }

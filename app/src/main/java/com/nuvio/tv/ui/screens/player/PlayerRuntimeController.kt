@@ -103,7 +103,8 @@ class PlayerRuntimeController(
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope,
     internal val cinemaLightingController: com.nuvio.tv.core.ha.CinemaLightingController = com.nuvio.tv.core.ha.CinemaLightingController(),
-    internal val fourDCinemaAnalyzer: com.nuvio.tv.core.ha.FourDCinemaAnalyzer = com.nuvio.tv.core.ha.FourDCinemaAnalyzer(cinemaLightingController)
+    internal val fourDCinemaAnalyzer: com.nuvio.tv.core.ha.FourDCinemaAnalyzer = com.nuvio.tv.core.ha.FourDCinemaAnalyzer(cinemaLightingController),
+    internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null
 ) {
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
@@ -270,6 +271,7 @@ class PlayerRuntimeController(
                 .distinctUntilChanged()
                 .collect { isPlaying ->
                     com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value = isPlaying
+                    continueWatchingPreScrapeCoordinator?.setPlaybackActive(isPlaying)
                 }
         }
     }

@@ -12,6 +12,7 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     logScrobbleDiagnostic("release_player", "flushPlaybackState=$flushPlaybackState")
     isReleasingPlayer = true
     com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value = false
+    continueWatchingPreScrapeCoordinator?.setPlaybackActive(false)
     cinemaLightingController.onPlaybackStopped()
     com.nuvio.tv.core.sound.AudioFeedbackManager.playPlaybackAction(context, com.nuvio.tv.core.sound.PlaybackSoundAction.STOP)
     if (flushPlaybackState) {

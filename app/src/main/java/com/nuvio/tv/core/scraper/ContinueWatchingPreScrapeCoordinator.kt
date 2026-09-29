@@ -277,9 +277,13 @@ class ContinueWatchingPreScrapeCoordinator(
     }
 
     fun setPlaybackActive(active: Boolean) {
-        isPlaybackActive.set(active)
+        val wasActive = isPlaybackActive.getAndSet(active)
         if (active) {
             warmupJob?.cancel()
+            warmupJob = null
+            Log.d(TAG, "Playback active; cancelled and cleared warmup job, CW pre-scraping suppressed")
+        } else if (wasActive) {
+            Log.d(TAG, "Playback now inactive; CW pre-scraping is unsuppressed")
         }
     }
 

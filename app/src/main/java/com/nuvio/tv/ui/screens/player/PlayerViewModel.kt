@@ -99,6 +99,7 @@ class PlayerViewModel @Inject constructor(
     private val themeDataStore: ThemeDataStore,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     private val playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge,
+    private val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -106,6 +107,11 @@ class PlayerViewModel @Inject constructor(
         // Release trailer player codec resources so the full-screen player can
         // claim hardware decoders without contention (prevents black screen).
         trailerPlayerPool.yield()
+        continueWatchingPreScrapeCoordinator.setPlaybackActive(true)
+        // Release image memory cache to maximize Java heap headroom during video playback
+        try {
+            coil3.SingletonImageLoader.get(context).memoryCache?.clear()
+        } catch (_: Throwable) {}
     }
 
     internal val controller = PlayerRuntimeController(
@@ -145,7 +151,8 @@ class PlayerViewModel @Inject constructor(
         profileId = savedStateHandle.get<String>("profileId")?.toIntOrNull()
             ?: profileManager.activeProfileId.value,
         savedStateHandle = savedStateHandle,
-        scope = viewModelScope
+        scope = viewModelScope,
+        continueWatchingPreScrapeCoordinator = continueWatchingPreScrapeCoordinator
     )
 
     private val postPlayRecommendationController = PostPlayRecommendationController(
@@ -403,5 +410,11 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             themeDataStore.setAppDimPercent(percent)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        continueWatchingPreScrapeCoordinator.setPlaybackActive(false)
+        controller.releasePlayer()
     }
 }

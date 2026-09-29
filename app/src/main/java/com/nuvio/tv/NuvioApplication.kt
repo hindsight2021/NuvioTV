@@ -92,6 +92,25 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         LocaleCache.localeTag = tag ?: ""
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        try {
+            when (level) {
+                android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
+                android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
+                    SingletonImageLoader.get(this).memoryCache?.clear()
+                }
+                android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
+                    SingletonImageLoader.get(this).memoryCache?.let { cache ->
+                        cache.trimToSize(cache.size / 2)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("NuvioApplication", "Failed to trim image memory cache for level $level", e)
+        }
+    }
+
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
@@ -151,9 +170,9 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 // Normal devices (>3GB): use 0.25 for snappy image loading.
                 // - allowHardware(false) keeps bitmaps on heap instead of GPU memory
                 val cachePercent = when {
-                    totalRamMb <= 2048 -> 0.15
-                    totalRamMb <= 3072 -> 0.20
-                    else -> 0.25
+                    totalRamMb <= 2048 -> 0.10
+                    totalRamMb <= 3072 -> 0.12
+                    else -> 0.15
                 }
                 MemoryCache.Builder()
                     .maxSizePercent(context, cachePercent)

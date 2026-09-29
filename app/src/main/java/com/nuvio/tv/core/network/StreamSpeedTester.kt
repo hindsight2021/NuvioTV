@@ -36,12 +36,13 @@ object StreamSpeedTester {
 
             PlayerPlaybackNetworking.playbackHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext 0.0
-                val inputStream = response.body?.byteStream() ?: return@withContext 0.0
-                val buffer = ByteArray(64 * 1024)
-                while (System.currentTimeMillis() < tDeadline) {
-                    val read = inputStream.read(buffer)
-                    if (read == -1) break
-                    totalBytes += read
+                response.body?.byteStream()?.use { inputStream ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (System.currentTimeMillis() < tDeadline) {
+                        val read = inputStream.read(buffer)
+                        if (read == -1) break
+                        totalBytes += read
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -198,15 +199,21 @@ object StreamSpeedTester {
                 }
             }
 
-            // Fallback to GET request if HEAD is not allowed/supported
+            // Fallback to ranged GET (bytes=0-0) to read total length from Content-Range without downloading body
             val getRequest = Request.Builder().url(url).apply {
                 headers.forEach { (k, v) -> header(k, v) }
+                header("Range", "bytes=0-0")
             }.build()
             PlayerPlaybackNetworking.playbackHttpClient.newCall(getRequest).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body
-                    if (body != null) {
-                        return@withContext body.contentLength().coerceAtLeast(0L)
+                if (response.isSuccessful || response.code == 206) {
+                    val contentRange = response.header("Content-Range")
+                    val totalFromRange = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
+                    if (totalFromRange != null && totalFromRange > 0L) {
+                        return@withContext totalFromRange
+                    }
+                    val len = response.header("Content-Length")?.toLongOrNull()
+                    if (len != null && len > 0L) {
+                        return@withContext len
                     }
                 }
             }

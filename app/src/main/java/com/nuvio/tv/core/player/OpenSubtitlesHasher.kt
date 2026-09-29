@@ -112,22 +112,23 @@ object OpenSubtitlesHasher {
         val request = requestBuilder.build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful && response.code != 206) return 0L
-            val stream: InputStream = response.body?.byteStream() ?: return 0L
-            val buf = ByteArray(LONG_SIZE)
-            var sum = 0L
-            var remaining = length
-            while (remaining >= LONG_SIZE) {
-                var read = 0
-                while (read < LONG_SIZE) {
-                    val n = stream.read(buf, read, LONG_SIZE - read)
-                    if (n < 0) break
-                    read += n
+            response.body?.byteStream()?.use { stream ->
+                val buf = ByteArray(LONG_SIZE)
+                var sum = 0L
+                var remaining = length
+                while (remaining >= LONG_SIZE) {
+                    var read = 0
+                    while (read < LONG_SIZE) {
+                        val n = stream.read(buf, read, LONG_SIZE - read)
+                        if (n < 0) break
+                        read += n
+                    }
+                    if (read < LONG_SIZE) break
+                    sum += buf.toLongLE()
+                    remaining -= LONG_SIZE
                 }
-                if (read < LONG_SIZE) break
-                sum += buf.toLongLE()
-                remaining -= LONG_SIZE
-            }
-            return sum
+                sum
+            } ?: 0L
         }
     }
 
