@@ -41,3 +41,16 @@ fun CatalogRow.filterReleasedItems(
  */
 fun MetaPreview.hasNoReleaseInfo(): Boolean =
     released.isNullOrBlank() && releaseInfo.isNullOrBlank()
+
+/**
+ * Returns true if this title's release date falls within [daysWindow] days prior to [today].
+ */
+fun MetaPreview.isRecentlyReleased(
+    today: LocalDate = LocalDate.now(),
+    daysWindow: Long = 14
+): Boolean {
+    val date = parseEpisodeReleaseLocalDate(released)
+        ?: parseEpisodeReleaseLocalDate(releaseInfo)
+        ?: return false
+    return !date.isAfter(today) && !date.isBefore(today.minusDays(daysWindow))
+}

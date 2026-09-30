@@ -400,6 +400,7 @@ internal fun ModernHomeRowsList(
                             onHeroItemClick?.invoke(item)
                         },
                         onItemFocus = { item ->
+                            onActiveRowKeyChange("hero_carousel")
                             onItemFocus(item)
                         },
                         modifier = Modifier.padding(bottom = NuvioTheme.spacing.md)

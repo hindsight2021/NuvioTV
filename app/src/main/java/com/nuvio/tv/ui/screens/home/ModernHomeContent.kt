@@ -1091,7 +1091,16 @@ fun ModernHomeContent(
                     .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
             }
 
-            if (uiState.heroInLandscapeEnabled && effectiveHeroList.isNotEmpty()) {
+            val isCwRowFocused = activeRowKey.value == MODERN_CONTINUE_WATCHING_ROW_KEY ||
+                    activeRowKey.value == "continue_watching" ||
+                    activeRowKey.value == "upcoming_section"
+
+            val showHeroCarouselBackdrop = uiState.heroInLandscapeEnabled &&
+                    effectiveHeroList.isNotEmpty() &&
+                    !isCwRowFocused &&
+                    (activeRowKey.value == null || activeRowKey.value == "hero_carousel")
+
+            if (showHeroCarouselBackdrop) {
                 val activeHero = activeHeroBannerItem ?: effectiveHeroList.firstOrNull()
                 if (activeHero != null) {
                     Box(modifier = Modifier.fillMaxSize()) {

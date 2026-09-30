@@ -1,4 +1,4 @@
-﻿package com.nuvio.tv.core.player
+package com.nuvio.tv.core.player
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -57,8 +57,8 @@ class EnhancedIntroDetector @Inject constructor() {
         showKey: String? = null,
         season: Int? = null
     ): SkipInterval? {
-        // Look within first 360 seconds
-        val introWindowCues = cues.filter { it.startSec in 0.0..360.0 }
+        // Look within first 720 seconds (12 minutes) to catch extended cold opens
+        val introWindowCues = cues.filter { it.startSec in 0.0..720.0 }
         val musicCues = introWindowCues.filter { isThemeMusicCue(it.text) }
 
         if (musicCues.isEmpty()) return null
@@ -74,7 +74,7 @@ class EnhancedIntroDetector @Inject constructor() {
                 blockEnd = maxOf(blockEnd, cue.endSec)
             } else {
                 val duration = blockEnd - blockStart
-                if (duration in 12.0..65.0) {
+                if (duration in 12.0..90.0) {
                     val interval = SkipInterval(blockStart, blockEnd, "intro", "smart_detector")
                     if (showKey != null && season != null) {
                         learnIntro(showKey, season, blockStart, blockEnd)
@@ -87,7 +87,7 @@ class EnhancedIntroDetector @Inject constructor() {
         }
 
         val finalDuration = blockEnd - blockStart
-        if (finalDuration in 12.0..65.0) {
+        if (finalDuration in 12.0..90.0) {
             val interval = SkipInterval(blockStart, blockEnd, "intro", "smart_detector")
             if (showKey != null && season != null) {
                 learnIntro(showKey, season, blockStart, blockEnd)

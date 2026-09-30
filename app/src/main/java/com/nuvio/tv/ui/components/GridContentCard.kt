@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.nuvio.tv.R
+import com.nuvio.tv.core.util.isRecentlyReleased
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -245,6 +246,18 @@ fun GridContentCard(
                             .fillMaxWidth()
                             .heightIn(max = cardHeight * 0.35f)
                             .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
+                    )
+                }
+
+                val isRecentlyReleased = remember(item.released, item.releaseInfo) {
+                    item.isRecentlyReleased()
+                }
+                if (isRecentlyReleased && !isWatched) {
+                    NewBadgeMarker(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
+                            .zIndex(2f)
                     )
                 }
 

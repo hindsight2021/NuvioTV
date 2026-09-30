@@ -34,6 +34,7 @@ import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 import com.nuvio.tv.core.util.filterReleasedItems
+import com.nuvio.tv.core.util.isRecentlyReleased
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
@@ -338,9 +339,27 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         )
 
         val eagerCatalogs = eagerHomeCatalogs + heroOnlyCatalogs
-        pendingCatalogLoads = eagerCatalogs.size
-        eagerCatalogs.forEach { (addon, catalog) ->
-            loadCatalogPipeline(addon, catalog, generation)
+        if (isGridLayout && eagerCatalogs.size > 8) {
+            val initialBatch = eagerCatalogs.take(8)
+            val deferredBatches = eagerCatalogs.drop(8).chunked(4)
+            pendingCatalogLoads = initialBatch.size
+            initialBatch.forEach { (addon, catalog) ->
+                loadCatalogPipeline(addon, catalog, generation)
+            }
+            viewModelScope.launch {
+                for (batch in deferredBatches) {
+                    delay(350L)
+                    if (catalogLoadGeneration != generation) break
+                    batch.forEach { (addon, catalog) ->
+                        loadCatalogPipeline(addon, catalog, generation)
+                    }
+                }
+            }
+        } else {
+            pendingCatalogLoads = eagerCatalogs.size
+            eagerCatalogs.forEach { (addon, catalog) ->
+                loadCatalogPipeline(addon, catalog, generation)
+            }
         }
 
         // Immediately schedule an update so placeholder rows appear in the UI
@@ -586,19 +605,41 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             val custom = titlesSnapshot[key]
             if (!custom.isNullOrBlank()) row.copy(catalogName = custom) else row
         }
+        val today = LocalDate.now()
         val orderedRows = if (hideUnreleased) {
-            val today = LocalDate.now()
             rawRows.map { it.filterReleasedItems(today) }
         } else {
             rawRows
         }
-        val tabFilteredOrderedRows = if (separateMoviesTvEnabled) {
-            when (selectedHomeTab) {
-                HomeTab.TV_SHOWS -> orderedRows.filter { isTvCatalogType(it.apiType) }
-                HomeTab.MOVIES -> orderedRows.filter { isMovieCatalogType(it.apiType) }
-            }
+
+        // Synthesize dynamic "✨ New This Week" freshness discovery row
+        val recentItems = orderedRows.flatMap { it.items }
+            .filter { it.isRecentlyReleased(today, 14) }
+            .distinctBy { it.id }
+            .take(20)
+
+        val rowsWithFreshness = if (recentItems.size >= 3) {
+            val freshRow = CatalogRow(
+                catalogId = "fresh_new_this_week",
+                catalogName = "✨ New This Week",
+                items = recentItems,
+                apiType = "all",
+                addonId = "nuvio_freshness",
+                addonName = "Nuvio+",
+                addonBaseUrl = ""
+            )
+            listOf(freshRow) + orderedRows
         } else {
             orderedRows
+        }
+
+        val tabFilteredOrderedRows = if (separateMoviesTvEnabled) {
+            when (selectedHomeTab) {
+                HomeTab.TV_SHOWS -> rowsWithFreshness.filter { it.catalogId == "fresh_new_this_week" || isTvCatalogType(it.apiType) }
+                HomeTab.MOVIES -> rowsWithFreshness.filter { it.catalogId == "fresh_new_this_week" || isMovieCatalogType(it.apiType) }
+            }
+        } else {
+            rowsWithFreshness
         }
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val orderedKeySet = orderedKeys.toSet()

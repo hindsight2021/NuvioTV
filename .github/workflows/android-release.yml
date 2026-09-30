@@ -118,10 +118,13 @@ jobs:
               echo "### Nuvio+ Release"
               echo ""
               echo "Custom build featuring:"
+              echo "- Continue Watching Banner Restoration: Primary banner displays episode info and progress when CW show is highlighted"
+              echo "- New This Week Discovery Row: Dynamically aggregates recent releases across all catalogs"
+              echo "- 'NEW' Content Badges: Luminous indicator overlay on titles released within the last 14 days"
               echo "- Simkl Trending Hero: Dynamic landscape hero banner powered by Simkl trending with 5s auto-rotation"
+              echo "- Progressive Grid Loading: Windowed catalog loading in Grid mode eliminates memory spikes and network bursts"
+              echo "- Extended Intro Detection: Scans up to 12 minutes (720s) for cold opens in anime and prestige drama"
               echo "- Titanium Lotus Bloom: New modern cyberpunk-nature startup splash screen & branding"
-              echo "- Continue Watching Filtering: Smart exclusion of in-progress titles from hero discovery carousel"
-              echo "- Startup Chime: Ambient modern audio chime on cold launch"
               echo "- Dual Installation: Installs cleanly as com.nuvio.tv.plus alongside official Nuvio"
             } > release-notes.md
             echo "Release notes generated successfully for Nuvio+." > release-note-quality.md

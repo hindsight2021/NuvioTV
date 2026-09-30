@@ -340,6 +340,7 @@ internal fun catalogTier(key: String, addonKeyToOwner: Map<String, String>): Int
     val combined = "$lowerKey $owner"
 
     return when {
+        lowerKey.startsWith("fresh_") -> 50
         TRAKT_SIMKL_KEYWORDS.any { combined.contains(it) } -> 100
         key.startsWith("collection_") -> 200
         AI_CURATED_KEYWORDS.any { combined.contains(it) } -> 250

@@ -78,6 +78,7 @@ import com.nuvio.tv.ui.util.localizedGenreLabel
 import com.nuvio.tv.ui.util.recompositionHighlighter
 import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
 import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
+import com.nuvio.tv.core.util.isRecentlyReleased
 import kotlinx.coroutines.delay
 
 private const val BACKDROP_ASPECT_RATIO = 16f / 9f
@@ -514,6 +515,18 @@ fun ContentCard(
                             )
                         }
                     }
+                }
+
+                val isRecentlyReleased = remember(item.released, item.releaseInfo) {
+                    item.isRecentlyReleased()
+                }
+                if (isRecentlyReleased && !isWatched) {
+                    NewBadgeMarker(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
+                            .zIndex(2f)
+                    )
                 }
 
                 if (isWatched) {
