@@ -275,7 +275,7 @@ class WatchedItemsSyncService @Inject constructor(
         return try {
             val deltaInitialized = watchedItemsPreferences.isDeltaInitialized(profileId)
             val deltaCursor = watchedItemsPreferences.getDeltaCursor(profileId)
-            val localCount = watchedItemsPreferences.getAllItems(profileId).size
+            val localCount = watchedItemsPreferences.getItemCount(profileId)
             Log.d(
                 TAG,
                 "syncDeltaFromRemote: start profile=$profileId localCount=$localCount deltaInitialized=$deltaInitialized cursor=$deltaCursor"
@@ -356,7 +356,7 @@ class WatchedItemsSyncService @Inject constructor(
                 page++
             }
 
-            val finalLocalCount = watchedItemsPreferences.getAllItems(profileId).size
+            val finalLocalCount = watchedItemsPreferences.getItemCount(profileId)
             Log.d(TAG, "syncDeltaFromRemote: finished profile=$profileId appliedUpserts=$totalUpserts appliedDeletes=$totalDeletes cursor=$cursor finalLocalCount=$finalLocalCount")
             Result.success(
                 WatchedItemsRemoteSyncResult(
@@ -389,7 +389,7 @@ class WatchedItemsSyncService @Inject constructor(
         if (resetDeltaState) {
             watchedItemsPreferences.setDeltaState(0L, initialized = false, profileId = profileId)
         }
-        val finalLocalCount = watchedItemsPreferences.getAllItems(profileId).size
+        val finalLocalCount = watchedItemsPreferences.getItemCount(profileId)
         Log.d(TAG, "pullSnapshotFromRemote: applied ${remoteWatchedItems.size} snapshot items for profile $profileId finalLocalCount=$finalLocalCount preservedLocal=$hadUnsyncedItems resetDeltaState=$resetDeltaState")
         return WatchedItemsRemoteSyncResult(
             upsertedItems = remoteWatchedItems.size,

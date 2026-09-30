@@ -175,6 +175,11 @@ class WatchedItemsPreferences @Inject constructor(
         }
     }
 
+    suspend fun getItemCount(profileId: Int = profileManager.activeProfileId.value): Int {
+        val preferences = store(profileId).data.first()
+        return preferences[watchedItemsKey]?.size ?: 0
+    }
+
     suspend fun getAllItems(profileId: Int = profileManager.activeProfileId.value): List<WatchedItem> {
         val preferences = store(profileId).data.first()
         return (preferences[watchedItemsKey] ?: emptySet()).mapNotNull { raw ->
@@ -216,33 +221,44 @@ class WatchedItemsPreferences @Inject constructor(
         store(profileId).edit { preferences ->
             val current = preferences[watchedItemsKey] ?: emptySet()
             beforeCount = current.size
-            val itemsByKey = linkedMapOf<Triple<String, Int?, Int?>, WatchedItem>()
-            current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }.forEach { item ->
-                itemsByKey[Triple(item.contentId, item.season, item.episode)] = item
-            }
+
+            val keysToRemove = HashSet<String>(deletes.size + upserts.size)
+
+            // Remote deletes: skip any key that has a locally pending upsert.
             deletes.forEach { (contentId, season, episode) ->
                 val mutationKey = WatchedMutationKey(contentId, season, episode)
                 if (mutationKey !in pendingUpsertKeys) {
-                    itemsByKey.remove(Triple(contentId, season, episode))
+                    keysToRemove.add(buildWatchedKey(contentId, season, episode))
                 }
             }
+
+            // Remote upserts: skip any key that has a locally pending delete or upsert,
+            // and treat accepted upserts as replacements (remove existing entry with same key).
+            val validUpserts = ArrayList<WatchedItem>(upserts.size)
             upserts.forEach { item ->
                 val mutationKey = item.mutationKey()
+                val key = buildWatchedKey(item.contentId, item.season, item.episode)
                 when {
-                    mutationKey in pendingDeleteKeys -> itemsByKey.remove(
-                        Triple(item.contentId, item.season, item.episode)
-                    )
-                    mutationKey !in pendingUpsertKeys -> itemsByKey[
-                        Triple(item.contentId, item.season, item.episode)
-                    ] = item
+                    mutationKey in pendingDeleteKeys -> keysToRemove.add(key)
+                    mutationKey !in pendingUpsertKeys -> {
+                        keysToRemove.add(key)
+                        validUpserts.add(item)
+                    }
                 }
             }
-            preferences[watchedItemsKey] = itemsByKey.values
-                .map { gson.toJson(it) }
-                .toSet()
-            afterCount = itemsByKey.size
+
+            // Retain entries whose identity key is not scheduled for removal.
+            val remaining = if (keysToRemove.isEmpty()) {
+                current
+            } else {
+                current.filterNot { json -> extractWatchedItemKey(json) in keysToRemove }
+            }
+
+            // Serialize only the newly accepted upserts.
+            val newSerialized = validUpserts.map { gson.toJson(it) }
+            val merged = remaining.toSet() + newSerialized
+            preferences[watchedItemsKey] = merged
+            afterCount = merged.size
         }
         Log.d(TAG, "applyRemoteChanges: profile=$profileId before=$beforeCount after=$afterCount upserts=${upserts.size} deletes=${deletes.size}")
     }

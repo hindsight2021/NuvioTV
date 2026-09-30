@@ -9,12 +9,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import retrofit2.Response
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "TmdbService"
 private val TMDB_API_KEY = BuildConfig.TMDB_API_KEY
+
+private fun Response<*>.closeErrorBodyQuietly() {
+    try {
+        errorBody()?.close()
+    } catch (_: Exception) {
+        // Intentionally ignored: closing is best-effort cleanup.
+    }
+}
 
 /**
  * Service to handle TMDB ID conversions and lookups.
@@ -76,12 +85,14 @@ class TmdbService @Inject constructor(
             
             if (!response.isSuccessful) {
                 Log.e(TAG, "TMDB API error: ${response.code()} - ${response.message()}")
+                response.closeErrorBodyQuietly()
                 requestDeferred.complete(null)
                 return@withContext null
             }
             
             val body = response.body()
             if (body == null) {
+                response.closeErrorBodyQuietly()
                 requestDeferred.complete(null)
                 return@withContext null
             }
@@ -157,12 +168,14 @@ class TmdbService @Inject constructor(
             
             if (!response.isSuccessful) {
                 Log.e(TAG, "TMDB API error: ${response.code()} - ${response.message()}")
+                response.closeErrorBodyQuietly()
                 requestDeferred.complete(null)
                 return@withContext null
             }
             
             val body = response.body()
             if (body == null) {
+                response.closeErrorBodyQuietly()
                 requestDeferred.complete(null)
                 return@withContext null
             }
@@ -298,7 +311,15 @@ class TmdbService @Inject constructor(
                     tmdbApi.getMovieDetails(tmdbId, TMDB_API_KEY)
                 else
                     tmdbApi.getTvDetails(tmdbId, TMDB_API_KEY)
-                val body = response.body() ?: return@runCatching null
+                if (!response.isSuccessful) {
+                    response.closeErrorBodyQuietly()
+                    return@runCatching null
+                }
+                val body = response.body()
+                if (body == null) {
+                    response.closeErrorBodyQuietly()
+                    return@runCatching null
+                }
                 TmdbImages(
                     backdropUrl = body.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" },
                     posterUrl = body.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },

@@ -67,7 +67,9 @@ class StartupSyncService @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
     private val profileManager: ProfileManager,
     private val startupSyncPreferences: StartupSyncPreferences,
-    private val cwEnrichmentCache: com.nuvio.tv.data.local.ContinueWatchingEnrichmentCache
+    private val cwEnrichmentCache: com.nuvio.tv.data.local.ContinueWatchingEnrichmentCache,
+    private val playerPlaybackBridgeProvider: javax.inject.Provider<com.nuvio.tv.core.control.PlayerPlaybackBridge>,
+    private val ambientCoordinatorProvider: javax.inject.Provider<com.nuvio.tv.ambient.coordinator.AmbientCoordinator>
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
@@ -270,11 +272,28 @@ class StartupSyncService @Inject constructor(
         }
     }
 
+    private fun isPlaybackOrAmbientActive(): Boolean {
+        if (com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value) return true
+        val playerActive = runCatching {
+            playerPlaybackBridgeProvider.get().playbackSnapshot.value != null
+        }.getOrNull() == true
+        if (playerActive) return true
+        val ambientActive = runCatching {
+            ambientCoordinatorProvider.get().uiState.value.isAmbientActive
+        }.getOrNull() == true
+        if (ambientActive) return true
+        return false
+    }
+
     private fun scheduleActivityPull(
         reason: String,
         delayMs: Long = 0L,
         minIntervalMs: Long = 0L
     ): Boolean {
+        if (reason == "periodic" && isPlaybackOrAmbientActive()) {
+            Log.d(TAG, "Suppressed periodic activity sync: video playback or ambient screensaver is currently active")
+            return false
+        }
         val state = authManager.authState.value as? AuthState.FullAccount ?: return false
         val key = pullKey(state.userId)
         val now = SystemClock.elapsedRealtime()
