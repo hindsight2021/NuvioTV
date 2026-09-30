@@ -76,7 +76,7 @@ import com.nuvio.tv.ui.util.localizedContentType
 import com.nuvio.tv.ui.util.localizedGenreLabel
 import kotlinx.coroutines.delay
 
-private const val AUTO_ADVANCE_INTERVAL_MS = 10000L
+private const val AUTO_ADVANCE_INTERVAL_MS = 5000L
 private val YEAR_REGEX = Regex("""\b\d{4}\b""")
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -114,15 +114,15 @@ fun HeroCarousel(
         items.getOrNull(activeIndex)?.let { currentOnActiveItemChanged(it) }
     }
 
-    // Auto-advance when not focused — delay first advance to 20s so initial GPU load settles
+    // Auto-advance when not focused — advances every 5 seconds
     LaunchedEffect(isFocused, items.size) {
         if (items.size <= 1) return@LaunchedEffect
-        delay(AUTO_ADVANCE_INTERVAL_MS * 2) // 20s before first advance
+        delay(AUTO_ADVANCE_INTERVAL_MS)
         while (true) {
-            delay(AUTO_ADVANCE_INTERVAL_MS)
             if (!isFocused) {
                 activeIndex = (activeIndex + 1) % items.size
             }
+            delay(AUTO_ADVANCE_INTERVAL_MS)
         }
     }
 

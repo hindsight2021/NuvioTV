@@ -42,6 +42,7 @@ data class HomeUiState(
     val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
     val heroItems: List<MetaPreview> = emptyList(),
+    val trendingHeroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),
     val heroSectionEnabled: Boolean = true,
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
@@ -211,6 +212,28 @@ val HomeUiState.prioritizedHeroItems: List<MetaPreview>
         val remainingHero = heroItems.filterNot { it.id in newEpisodeIds }
         return newEpisodeItems + remainingHero
     }
+
+val HomeUiState.landscapeHeroItems: List<MetaPreview>
+    get() {
+        val continueWatchingIds = displayedContinueWatchingItems.map { it.contentId() }.toSet()
+        val continueWatchingTitles = displayedContinueWatchingItems
+            .mapNotNull { it.title().takeIf { t -> t.isNotBlank() } }
+            .map { normalizeHeroTitle(it) }
+            .filter { it.length >= 3 }
+            .toSet()
+
+        val candidates = if (trendingHeroItems.isNotEmpty()) trendingHeroItems else heroItems
+        val filtered = candidates.filterNot { heroItem ->
+            heroItem.id in continueWatchingIds ||
+                (heroItem.imdbId?.takeIf { it.isNotBlank() }?.let { it in continueWatchingIds } == true) ||
+                (normalizeHeroTitle(heroItem.name).takeIf { it.length >= 3 } in continueWatchingTitles)
+        }
+        return if (filtered.isNotEmpty()) filtered else candidates
+    }
+
+private fun normalizeHeroTitle(title: String): String {
+    return title.lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+}
 
 @Immutable
 data class NextUpInfo(

@@ -84,7 +84,8 @@ class HomeViewModel @Inject constructor(
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     internal val tvRecommendationManager: TvRecommendationManager,
     internal val aiManager: com.nuvio.tv.core.ai.AiManager? = null,
-    internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null
+    internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
+    internal val simklTrendingRepository: com.nuvio.tv.data.simkl.trending.SimklTrendingRepository? = null
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -373,6 +374,7 @@ class HomeViewModel @Inject constructor(
             observeCollections()
             observeInstalledAddons()
             observeManualAddonRefresh()
+            loadSimklTrending()
 
             // Clear CW state when profile changes so items don't leak between profiles.
             var previousProfileId = profileManager.activeProfileId.value
@@ -530,6 +532,7 @@ class HomeViewModel @Inject constructor(
                     _uiState.update { it.copy(separateMoviesTvEnabled = enabled) }
                     scheduleUpdateCatalogRows()
                     cwPipelineRefreshTrigger.value++
+                    loadSimklTrending()
                 }
         }
         viewModelScope.launch {
@@ -541,6 +544,7 @@ class HomeViewModel @Inject constructor(
                         _uiState.update { it.copy(selectedHomeTab = tab) }
                         scheduleUpdateCatalogRows()
                         cwPipelineRefreshTrigger.value++
+                        loadSimklTrending()
                     }
                 }
         }
@@ -690,8 +694,25 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(selectedHomeTab = tab) }
         scheduleUpdateCatalogRows()
         cwPipelineRefreshTrigger.value++
+        loadSimklTrending()
         viewModelScope.launch {
             layoutPreferenceDataStore.setSelectedHomeTab(if (tab == HomeTab.MOVIES) "movies" else "tv")
+        }
+    }
+
+    internal fun loadSimklTrending(forceRefresh: Boolean = false) {
+        val repo = simklTrendingRepository ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val tab = _uiState.value.selectedHomeTab
+                val separate = _uiState.value.separateMoviesTvEnabled
+                val items = repo.getTrending(tab, separate, forceRefresh)
+                if (items.isNotEmpty()) {
+                    _uiState.update { it.copy(trendingHeroItems = items) }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load Simkl trending items", e)
+            }
         }
     }
 

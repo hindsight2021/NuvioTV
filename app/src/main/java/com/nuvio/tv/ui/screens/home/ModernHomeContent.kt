@@ -666,7 +666,11 @@ fun ModernHomeContent(
             val posterCardCornerRadius = remember(uiState.posterCardCornerRadiusDp) { uiState.posterCardCornerRadiusDp.dp }
             val rowHorizontalPadding = 52.dp
 
-            val effectiveHeroList = uiState.prioritizedHeroItems
+            val effectiveHeroList = if (uiState.heroInLandscapeEnabled) {
+                uiState.landscapeHeroItems
+            } else {
+                uiState.prioritizedHeroItems
+            }
             var activeHeroBannerItem by remember(effectiveHeroList.firstOrNull()?.id) {
                 mutableStateOf(effectiveHeroList.firstOrNull())
             }
@@ -719,7 +723,7 @@ fun ModernHomeContent(
                     } else null
 
                     val fallbackLandscapeHero = if (uiState.heroInLandscapeEnabled) {
-                        uiState.prioritizedHeroItems.firstOrNull()?.let { prioritizedItem ->
+                        effectiveHeroList.firstOrNull()?.let { prioritizedItem ->
                             HeroPreview(
                                 title = prioritizedItem.name,
                                 logo = prioritizedItem.logo,
@@ -772,7 +776,7 @@ fun ModernHomeContent(
                         resolvedHero?.imageUrl,
                         resolvedHero?.poster,
                         activeRowFallbackBackdrop,
-                        if (uiState.heroInLandscapeEnabled) uiState.prioritizedHeroItems.firstOrNull()?.backdropUrl else null
+                        if (uiState.heroInLandscapeEnabled) effectiveHeroList.firstOrNull()?.backdropUrl else null
                     )
                     
                     Triple(heroBackdrop, resolvedHero, effectiveEnrichmentActive)

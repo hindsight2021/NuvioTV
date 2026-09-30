@@ -443,18 +443,20 @@ internal fun TrackingSettingsOverview(
                             title = stringResource(R.string.tracking_accounts_title),
                             subtitle = stringResource(R.string.tracking_accounts_subtitle)
                         ) {
-                            SettingsActionRow(
-                                title = stringResource(R.string.trakt_name),
-                                subtitle = traktPresentation.subtitle,
-                                value = traktPresentation.value,
-                                valueColor = traktPresentation.color,
-                                leadingRawIconRes = R.raw.trakt_tv_favicon,
-                                leadingArtworkSize = 40.dp,
-                                onClick = onTraktClick,
-                                modifier = Modifier
-                                    .focusRequester(traktFocusRequester)
-                                    .testTag(TrackingSettingsTestTags.TRAKT_PROVIDER)
-                            )
+                            // TODO(sprint-30): Trakt sync is not yet implemented (core/trakt
+                            //  only has URL/image utils). Re-enable once OAuth + scrobble are wired.
+                            // SettingsActionRow(
+                            //     title = stringResource(R.string.trakt_name),
+                            //     subtitle = traktPresentation.subtitle,
+                            //     value = traktPresentation.value,
+                            //     valueColor = traktPresentation.color,
+                            //     leadingRawIconRes = R.raw.trakt_tv_favicon,
+                            //     leadingArtworkSize = 40.dp,
+                            //     onClick = onTraktClick,
+                            //     modifier = Modifier
+                            //         .focusRequester(traktFocusRequester)
+                            //         .testTag(TrackingSettingsTestTags.TRAKT_PROVIDER)
+                            // )
                             SettingsActionRow(
                                 title = stringResource(R.string.simkl_name),
                                 subtitle = simklPresentation.subtitle,
@@ -496,7 +498,8 @@ internal fun TrackingSettingsOverview(
                             )
                         }
                     }
-                    if (traktConnected) {
+                    // TODO(sprint-30): hidden until Trakt sync backend is implemented
+                    if (false && traktConnected) {
                         item(key = "tracking_trakt_features") {
                             SettingsGroupCard(
                                 title = stringResource(R.string.tracking_trakt_features_title),

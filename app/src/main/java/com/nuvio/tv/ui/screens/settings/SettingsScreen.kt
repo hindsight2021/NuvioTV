@@ -1259,13 +1259,15 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.RemoteControl) }
                                 )
                             }
-                            item(key = "integration_hub_local_nas") {
-                                SettingsActionRow(
-                                    title = "Local & NAS Storage",
-                                    subtitle = "Direct file playback from Shield mounts and network shares",
-                                    onClick = { onSelectSection(IntegrationSettingsSection.LocalNas) }
-                                )
-                            }
+                            // TODO(sprint-30): NAS discovery is stubbed (data class only, no SMB/NFS).
+                            //  Re-enable when JCIFS or SmbJ wiring is complete.
+                            // item(key = "integration_hub_local_nas") {
+                            //     SettingsActionRow(
+                            //         title = "Local & NAS Storage",
+                            //         subtitle = "Direct file playback from Shield mounts and network shares",
+                            //         onClick = { onSelectSection(IntegrationSettingsSection.LocalNas) }
+                            //     )
+                            // }
                             item(key = "integration_hub_ai") {
                                 SettingsActionRow(
                                     title = "AI Assistant (Gemini / OpenAI / Claude / Grok)",
