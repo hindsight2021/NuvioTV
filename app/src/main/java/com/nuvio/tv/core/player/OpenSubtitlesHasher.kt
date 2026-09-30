@@ -110,8 +110,8 @@ object OpenSubtitlesHasher {
         }
 
         val request = requestBuilder.build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 206) return 0L
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful && response.code != 206) return@use 0L
             response.body?.byteStream()?.use { stream ->
                 val buf = ByteArray(LONG_SIZE)
                 var sum = 0L
