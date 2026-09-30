@@ -702,7 +702,7 @@ class HomeViewModel @Inject constructor(
 
     internal fun loadSimklTrending(forceRefresh: Boolean = false) {
         val repo = simklTrendingRepository ?: return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val tab = _uiState.value.selectedHomeTab
                 val separate = _uiState.value.separateMoviesTvEnabled

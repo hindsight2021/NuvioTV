@@ -252,25 +252,24 @@ internal fun EpisodeOptionsOverlay(
                 )
             )
         }
-        // TODO(sprint-30): Playlist queue engine not yet implemented.
-        //  Re-enable these actions once PlaylistManager is wired.
-        // if (isPlayEnabled) {
-        //     onPlayNext?.let {
-        //         add(EpisodeOverlayAction(label = "Play Next", onClick = it))
-        //     }
-        //     onAddToQueue?.let {
-        //         add(EpisodeOverlayAction(label = "Add to Playlist Queue", onClick = it))
-        //     }
-        //     onPlayRandomEpisode?.let {
-        //         add(EpisodeOverlayAction(label = "🎲 Play Random Episode", onClick = it))
-        //     }
-        //     onStartChannelShuffle?.let {
-        //         add(EpisodeOverlayAction(label = "📺 Create Show Channel (Shuffle)", onClick = it))
-        //     }
-        //     onStartChannelOrder?.let {
-        //         add(EpisodeOverlayAction(label = "🎬 Create Show Channel (In Order)", onClick = it))
-        //     }
-        // }
+        if (isPlayEnabled) {
+            // TODO(sprint-30): Playlist queue engine not yet implemented.
+            //  Re-enable these actions once PlaylistManager is wired.
+            // onPlayNext?.let {
+            //     add(EpisodeOverlayAction(label = "Play Next", onClick = it))
+            // }
+            // onAddToQueue?.let {
+            //     add(EpisodeOverlayAction(label = "Add to Playlist Queue", onClick = it))
+            // }
+            // onPlayRandomEpisode?.let {
+            //     add(EpisodeOverlayAction(label = "🎲 Play Random Episode", onClick = it))
+            // }
+            // onStartChannelShuffle?.let {
+            //     add(EpisodeOverlayAction(label = "📺 Create Show Channel (Shuffle)", onClick = it))
+            // }
+            // onStartChannelOrder?.let {
+            //     add(EpisodeOverlayAction(label = "🎬 Create Show Channel (In Order)", onClick = it))
+            // }
             onChicReview?.let {
                 add(EpisodeOverlayAction(label = "🍸 Chic AI Review", onClick = it))
             }

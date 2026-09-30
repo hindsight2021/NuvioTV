@@ -623,7 +623,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 catalogId = "fresh_new_this_week",
                 catalogName = "✨ New This Week",
                 items = recentItems,
-                apiType = "all",
+                type = com.nuvio.tv.domain.model.ContentType.OTHER,
+                rawType = "all",
                 addonId = "nuvio_freshness",
                 addonName = "Nuvio+",
                 addonBaseUrl = ""
