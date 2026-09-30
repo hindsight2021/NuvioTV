@@ -118,12 +118,10 @@ jobs:
               echo "### Nuvio+ Release"
               echo ""
               echo "Custom build featuring:"
-              echo "- Local NAS & Storage: Playback from local folders and mounted SMB/NFS shares"
-              echo "- Smart Channels & Play Random: Long-press any show/episode for random or continuous channels"
-              echo "- Trakt / Simkl Quick Toggle: 1-click add/remove watchlist from context menus"
-              echo "- Custom Playlists: Play Next and queue manager with save/load capability"
-              echo "- Startup Chime: Ambient modern audio chime on cold launch"
+              echo "- Simkl Trending Hero: Dynamic landscape hero banner powered by Simkl trending with 5s auto-rotation"
               echo "- Titanium Lotus Bloom: New modern cyberpunk-nature startup splash screen & branding"
+              echo "- Continue Watching Filtering: Smart exclusion of in-progress titles from hero discovery carousel"
+              echo "- Startup Chime: Ambient modern audio chime on cold launch"
               echo "- Dual Installation: Installs cleanly as com.nuvio.tv.plus alongside official Nuvio"
             } > release-notes.md
             echo "Release notes generated successfully for Nuvio+." > release-note-quality.md
