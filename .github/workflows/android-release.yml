@@ -123,6 +123,7 @@ jobs:
               echo "- Trakt / Simkl Quick Toggle: 1-click add/remove watchlist from context menus"
               echo "- Custom Playlists: Play Next and queue manager with save/load capability"
               echo "- Startup Chime: Ambient modern audio chime on cold launch"
+              echo "- Titanium Lotus Bloom: New modern cyberpunk-nature startup splash screen & branding"
               echo "- Dual Installation: Installs cleanly as com.nuvio.tv.plus alongside official Nuvio"
             } > release-notes.md
             echo "Release notes generated successfully for Nuvio+." > release-note-quality.md

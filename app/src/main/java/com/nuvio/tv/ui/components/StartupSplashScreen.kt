@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,7 +56,7 @@ fun StartupSplashScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "splashKenBurns")
     val bgScale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue = 1.05f,
+        targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 10000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -63,9 +64,11 @@ fun StartupSplashScreen(
         label = "theatreScale"
     )
 
+    val hasProfileBackground = !profileBackgroundUrl.isNullOrBlank()
+
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        if (!profileBackgroundUrl.isNullOrBlank()) {
-            val imageData: Any = if (profileBackgroundUrl.startsWith("file:")) {
+        if (hasProfileBackground) {
+            val imageData: Any = if (profileBackgroundUrl!!.startsWith("file:")) {
                 java.io.File(java.net.URI(profileBackgroundUrl))
             } else {
                 profileBackgroundUrl
@@ -84,25 +87,8 @@ fun StartupSplashScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-        } else if (!skipGradient) {
-            // High quality Home Theatre background with subtle Ken Burns breathing zoom
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = bgScale
-                        scaleY = bgScale
-                    }
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.splash_theatre_bg),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
 
-            // Cinematic multi-layer scrim & vignette
+            // Scrim for custom profile backdrops
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -117,69 +103,97 @@ fun StartupSplashScreen(
                         )
                     )
             )
+
+            // Centered brand mark & spinner for custom profile backgrounds
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(260.dp, 110.dp)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color(0x55AB47BC),
+                                        Color(0x227E57C2),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+
+                    BrandWordmark(
+                        modifier = Modifier.height(52.dp),
+                        contentDescription = stringResource(R.string.cd_nuvio_logo),
+                        drawableOverride = brandWordmarkRes
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "HOME CINEMA EDITION",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 4.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xCCE1BEE7)
+                )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                LoadingIndicator(
+                    modifier = Modifier.size(36.dp),
+                    color = Color(0xFFCE93D8)
+                )
+            }
+        } else if (!skipGradient) {
+            // Default splash: Titanium Lotus Bloom with integrated glowing Nuvio mark & subtle Ken Burns motion
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0.0f to Color(0x99000000),
-                                0.35f to Color(0x1A000000),
-                                0.65f to Color(0x44000000),
-                                1.0f to Color(0xEE06060A)
-                            )
-                        )
-                    )
-            )
-        }
-
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(
-                contentAlignment = Alignment.Center
+                    .graphicsLayer {
+                        scaleX = bgScale
+                        scaleY = bgScale
+                    }
             ) {
-                // Soft ambient backlight behind logo
-                Box(
-                    modifier = Modifier
-                        .size(260.dp, 110.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color(0x55AB47BC),
-                                    Color(0x227E57C2),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-
-                BrandWordmark(
-                    modifier = Modifier.height(52.dp),
-                    contentDescription = stringResource(R.string.cd_nuvio_logo),
-                    drawableOverride = brandWordmarkRes
+                Image(
+                    painter = painterResource(R.drawable.splash_titanium_lotus),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // Elegant bottom-aligned edition and spinner below lotus water reflections
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 36.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Text(
+                    text = "HOME CINEMA EDITION",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 4.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xCCE1BEE7)
+                )
 
-            Text(
-                text = "HOME CINEMA EDITION",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 4.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = Color(0xCCE1BEE7)
-            )
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(28.dp))
-
-            LoadingIndicator(
-                modifier = Modifier.size(36.dp),
-                color = Color(0xFFCE93D8)
-            )
+                LoadingIndicator(
+                    modifier = Modifier.size(36.dp),
+                    color = Color(0xFFCE93D8)
+                )
+            }
         }
     }
 }
