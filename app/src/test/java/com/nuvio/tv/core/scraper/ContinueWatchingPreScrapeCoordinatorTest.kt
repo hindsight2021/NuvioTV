@@ -24,7 +24,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -282,7 +282,7 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
         coEvery { streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any()) } returns flow {
             kotlinx.coroutines.delay(5000L)
-            emit(NetworkResult.Success(emptyList()))
+            emit(NetworkResult.Success(emptyList<AddonStreams>()))
         }
 
         coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
