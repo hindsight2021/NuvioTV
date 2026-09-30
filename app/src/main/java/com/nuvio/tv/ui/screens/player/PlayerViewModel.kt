@@ -279,6 +279,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        continueWatchingPreScrapeCoordinator.setPlaybackActive(false)
         playerPlaybackBridge.unregister(controller)
         postPlayRecommendationController.stop()
         controller.onCleared()
@@ -410,11 +411,5 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             themeDataStore.setAppDimPercent(percent)
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        continueWatchingPreScrapeCoordinator.setPlaybackActive(false)
-        controller.releasePlayer()
     }
 }
