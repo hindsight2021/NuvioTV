@@ -1196,74 +1196,72 @@ fun ContinueWatchingOptionsDialog(
                 }
             }
 
-            // TODO(sprint-30): Playlist queue engine not yet implemented.
-            //  Re-enable once PlaylistManager is wired.
-            // if (isPlayEnabled && onPlayNext != null) {
-            //     Button(
-            //         onClick = onPlayNext,
-            //         colors = ButtonDefaults.colors(
-            //             containerColor = NuvioTheme.colors.BackgroundCard,
-            //             contentColor = NuvioTheme.colors.TextPrimary
-            //         ),
-            //         modifier = Modifier.fillMaxWidth()
-            //     ) {
-            //         Text("Play Next")
-            //     }
-            // }
+            if (isPlayEnabled && onPlayNext != null) {
+                Button(
+                    onClick = onPlayNext,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Play Next")
+                }
+            }
 
-            // if (isPlayEnabled && onAddToQueue != null) {
-            //     Button(
-            //         onClick = onAddToQueue,
-            //         colors = ButtonDefaults.colors(
-            //             containerColor = NuvioTheme.colors.BackgroundCard,
-            //             contentColor = NuvioTheme.colors.TextPrimary
-            //         ),
-            //         modifier = Modifier.fillMaxWidth()
-            //     ) {
-            //         Text("Add to Playlist Queue")
-            //     }
-            // }
+            if (isPlayEnabled && onAddToQueue != null) {
+                Button(
+                    onClick = onAddToQueue,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add to Playlist Queue")
+                }
+            }
 
-            // if (isSeries) {
-            //     if (onPlayRandomEpisode != null) {
-            //         Button(
-            //             onClick = onPlayRandomEpisode,
-            //             colors = ButtonDefaults.colors(
-            //                 containerColor = NuvioTheme.colors.BackgroundCard,
-            //                 contentColor = NuvioTheme.colors.TextPrimary
-            //             ),
-            //             modifier = Modifier.fillMaxWidth()
-            //         ) {
-            //             Text("🎲 Play Random Episode")
-            //         }
-            //     }
+            if (isSeries) {
+                if (onPlayRandomEpisode != null) {
+                    Button(
+                        onClick = onPlayRandomEpisode,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🎲 Play Random Episode")
+                    }
+                }
 
-            //     if (onStartChannelShuffle != null) {
-            //         Button(
-            //             onClick = onStartChannelShuffle,
-            //             colors = ButtonDefaults.colors(
-            //                 containerColor = NuvioTheme.colors.BackgroundCard,
-            //                 contentColor = NuvioTheme.colors.TextPrimary
-            //             ),
-            //             modifier = Modifier.fillMaxWidth()
-            //         ) {
-            //             Text("📺 Create Show Channel (Shuffle)")
-            //         }
-            //     }
+                if (onStartChannelShuffle != null) {
+                    Button(
+                        onClick = onStartChannelShuffle,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("📺 Create Show Channel (Shuffle)")
+                    }
+                }
 
-            //     if (onStartChannelOrder != null) {
-            //         Button(
-            //             onClick = onStartChannelOrder,
-            //             colors = ButtonDefaults.colors(
-            //                 containerColor = NuvioTheme.colors.BackgroundCard,
-            //                 contentColor = NuvioTheme.colors.TextPrimary
-            //             ),
-            //             modifier = Modifier.fillMaxWidth()
-            //         ) {
-            //             Text("🎬 Create Show Channel (In Order)")
-            //         }
-            //     }
-            // }
+                if (onStartChannelOrder != null) {
+                    Button(
+                        onClick = onStartChannelOrder,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🎬 Create Show Channel (In Order)")
+                    }
+                }
+            }
 
             if (onChicReview != null) {
                 Button(
