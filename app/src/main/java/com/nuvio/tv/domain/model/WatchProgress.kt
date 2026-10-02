@@ -42,7 +42,7 @@ data class WatchProgress(
         const val SOURCE_TRAKT_SHOW_PROGRESS = "trakt_show_progress"
         const val SOURCE_SIMKL_PLAYBACK = "simkl_playback"
         const val STARTED_THRESHOLD = 0.02f
-        const val COMPLETED_THRESHOLD = 0.90f
+        const val COMPLETED_THRESHOLD = 0.85f
         const val SIMKL_COMPLETED_THRESHOLD = 0.80f
     }
 

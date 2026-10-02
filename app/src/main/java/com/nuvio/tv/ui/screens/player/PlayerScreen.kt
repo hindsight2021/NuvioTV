@@ -193,11 +193,14 @@ fun PlayerScreen(
         if (exitDispatched) return@exitPlayer
         exitDispatched = true
         val timeline = viewModel.playbackTimeline.value
-        viewModel.stopAndRelease()
         val completed = postPlayRecommendationState.isVisible || uiState.playbackEnded ||
             (!timeline.isLive &&
                 timeline.duration > 0L &&
                 (timeline.currentPosition.toFloat() / timeline.duration.toFloat()) >= WatchProgress.COMPLETED_THRESHOLD)
+        if (completed) {
+            viewModel.markCurrentPlaybackCompleted()
+        }
+        viewModel.stopAndRelease()
         onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, completed)
     }
     val exitPlayerFromError: () -> Unit = exitPlayerFromError@{
@@ -362,6 +365,7 @@ fun PlayerScreen(
                 viewModel.consumePendingExitReason()
             }
             shouldDispatchNatural -> {
+                viewModel.markCurrentPlaybackCompleted()
                 viewModel.stopAndRelease()
                 val next = uiState.nextEpisode?.takeIf { it.hasAired }
                 val cb = currentOnPlaybackEnded

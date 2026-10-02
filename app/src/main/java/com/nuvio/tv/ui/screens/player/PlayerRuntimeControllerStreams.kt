@@ -15,6 +15,7 @@ import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamDebridCacheState
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
@@ -1505,10 +1506,20 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
     stillWatchingPromptJob?.cancel()
     stillWatchingPromptJob = null
     streamRepository.setLocalPluginSearchPaused(true)
-    flushPlaybackSnapshotForSwitchOrExit()
 
     val targetVideo = forcedTargetVideo
         ?: _uiState.value.episodes.firstOrNull { it.id == _uiState.value.episodeStreamsForVideoId }
+    val isSwitchingToDifferentEpisode = targetVideo != null && targetVideo.id != currentVideoId
+    if (isSwitchingToDifferentEpisode) {
+        val nearCompletion = currentPlaybackProgressPercent() >= (WatchProgress.COMPLETED_THRESHOLD * 100f) ||
+            _uiState.value.playbackEnded ||
+            _uiState.value.postPlayMode is PostPlayMode.AutoPlay
+        if (nearCompletion) {
+            markCurrentPlaybackCompleted()
+        }
+    }
+
+    flushPlaybackSnapshotForSwitchOrExit()
 
     resetLoadingOverlayForNewStream()
     releasePlayer(flushPlaybackState = false)

@@ -683,9 +683,51 @@ internal fun PlayerRuntimeController.handleNaturalPlaybackEnded() {
     if (contentType.equals("cloud", ignoreCase = true)) {
         saveCloudLibraryProgress(position, duration, completed = true)
     } else {
-        saveWatchProgress()
+        markCurrentPlaybackCompleted()
     }
     resetPostPlayStateAfterPlaybackEnded()
+}
+
+internal fun PlayerRuntimeController.markCurrentPlaybackCompleted() {
+    if (hasMarkedCurrentEpisodeCompleted) return
+    hasMarkedCurrentEpisodeCompleted = true
+    if (contentType.equals("cloud", ignoreCase = true)) {
+        val duration = maxOf(currentPlaybackDurationMs(), lastKnownDuration)
+        saveCloudLibraryProgress(duration, duration, completed = true)
+        return
+    }
+    val parentContentId = contentId?.takeIf { it.isNotEmpty() } ?: return
+    val parentContentType = contentType?.takeIf { it.isNotEmpty() } ?: return
+    val duration = maxOf(currentPlaybackDurationMs(), lastKnownDuration).takeIf { it > 0L } ?: 1000L
+    val progress = WatchProgress(
+        contentId = parentContentId,
+        contentType = parentContentType,
+        name = contentName ?: title,
+        poster = poster,
+        backdrop = backdrop,
+        logo = logo,
+        videoId = currentVideoId ?: parentContentId,
+        season = currentSeason,
+        episode = currentEpisode,
+        episodeTitle = currentEpisodeTitle,
+        position = duration,
+        duration = duration,
+        lastWatched = System.currentTimeMillis()
+    )
+    scope.launch(kotlinx.coroutines.NonCancellable) {
+        val effectiveContentId = watchProgressRepository.normalizeParentContentId(
+            parentContentId = progress.contentId,
+            videoId = progress.videoId,
+            profileId = profileId
+        )
+        val normalizedProgress = progress.copy(contentId = effectiveContentId)
+        watchProgressRepository.markAsCompleted(
+            normalizedProgress,
+            profileId = profileId,
+            broadcastTrackingHistory = false
+        )
+        runCatching { tvRecommendationManager.onProgressRemoved(normalizedProgress.contentId) }
+    }
 }
 
 /**
@@ -755,6 +797,9 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
             }
             runCatching { tvRecommendationManager.onProgressRemoved(normalizedProgress.contentId) }
         } else {
+            if (hasMarkedCurrentEpisodeCompleted) {
+                return@launch
+            }
             watchProgressRepository.saveProgress(
                 normalizedProgress,
                 profileId = profileId,

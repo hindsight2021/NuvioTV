@@ -207,6 +207,9 @@ class PlayerViewModel @Inject constructor(
         val allocator = controller._loadControl?.allocator as? androidx.media3.exoplayer.upstream.DefaultAllocator ?: return null
         return allocator.totalBytesAllocated.toLong().coerceAtLeast(0L)
     }
+    fun markCurrentPlaybackCompleted() {
+        controller.markCurrentPlaybackCompleted()
+    }
 
     fun stopAndRelease() {
         playerPlaybackBridge.unregister(controller)

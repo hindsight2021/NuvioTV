@@ -924,7 +924,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                             )
                                             val nextContentMs = cwBadgeNextSeasonMs[seed.contentId]
                                             val deadline = nextContentMs
-                                                ?: (System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000)
+                                                ?: (System.currentTimeMillis() + 24L * 60 * 60 * 1000)
                                             fullyWatchedSeriesIds.updateWithValidation(
                                                 fullyWatchedSeriesIds.fullyWatchedSeriesIds.value,
                                                 setOf(seed.contentId),
@@ -1808,6 +1808,18 @@ private suspend fun HomeViewModel.buildNextUpItem(
             "build-start ${progress.toNextUpTraceString()} showUnaired=$showUnairedNextUp"
         )
     }
+    if (!fullyWatchedSeriesIds.isSeriesValidationFresh(progress.contentId)) {
+        synchronized(cwMetaCache) {
+            cwMetaCache.remove("${progress.contentType}:${progress.contentId}")
+            cwMetaCache.remove("series:${progress.contentId}")
+            cwMetaCache.remove("tv:${progress.contentId}")
+        }
+        val seedCacheKey = buildNextUpSeedCacheKey(progress, showUnairedNextUp)
+        synchronized(cwNextUpResolutionCache) {
+            cwNextUpResolutionCache.remove(seedCacheKey)
+            cwNextUpNegativeCacheTimestamps.remove(seedCacheKey)
+        }
+    }
     val nextUp = findNextUpEpisodeFromMetaSeed(
         progress = progress,
         showUnairedNextUp = showUnairedNextUp,
@@ -1843,7 +1855,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
         if (cachedMeta != null) {
             val nextContentMs = cwBadgeNextSeasonMs[progress.contentId]
             val deadline = nextContentMs
-                ?: (System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000)
+                ?: (System.currentTimeMillis() + 24L * 60 * 60 * 1000)
             fullyWatchedSeriesIds.updateWithValidation(
                 fullyWatchedSeriesIds.fullyWatchedSeriesIds.value,
                 setOf(progress.contentId),
@@ -2168,11 +2180,14 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                 .mapNotNull { it.season?.takeIf { s -> s > 0 } }
                 .maxOrNull() ?: 0
 
-            val targetSeason = maxOf(maxKnownSeason + 1, progress.season ?: 1)
+            val currentSeason = progress.season ?: 1
+            val seasonsToFetch = listOf(currentSeason, maxKnownSeason, maxKnownSeason + 1)
+                .filter { it > 0 }
+                .distinct()
             val fetchedEpisodes = runCatching {
                 tmdbMetadataService.fetchEpisodeEnrichment(
                     tmdbId = tmdbId,
-                    seasonNumbers = listOf(targetSeason, targetSeason + 1),
+                    seasonNumbers = seasonsToFetch,
                     language = currentTmdbSettings.language
                 )
             }.getOrNull().orEmpty()

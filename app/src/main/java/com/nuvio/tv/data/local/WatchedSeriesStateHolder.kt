@@ -37,8 +37,8 @@ class WatchedSeriesStateHolder @Inject constructor(
         private val KEY = stringSetPreferencesKey("fully_watched_ids")
         private val REVALIDATE_KEY = stringPreferencesKey("revalidate_after")
         private val VALIDATION_RESET_KEY = intPreferencesKey("validation_reset_version")
-        private const val VALIDATION_RESET_VERSION = 1
-        private const val DEFAULT_TTL_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
+        private const val VALIDATION_RESET_VERSION = 2
+        private const val DEFAULT_TTL_MS = 24L * 60 * 60 * 1000 // 24 hours (1 day)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
