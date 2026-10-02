@@ -1034,6 +1034,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             }
                         }
                     }
+                }
 
                 debug.markPhase("merge-lightweight")
                 // Include previously discovered older next-up items so they survive collectLatest restarts.
