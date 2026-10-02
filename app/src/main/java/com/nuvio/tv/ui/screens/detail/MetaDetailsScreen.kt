@@ -1836,7 +1836,9 @@ private fun MetaDetailsContent(
     val localCtx = LocalContext.current
     val aiManager = remember { com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()) }
     val chicCriticReviewService = remember(aiManager) { com.nuvio.tv.core.ai.ChicCriticReviewService(aiManager) }
-    val moviePreShowService = remember(aiManager) { com.nuvio.tv.core.preshow.MoviePreShowService(aiManager) }
+    val moviePreShowService = remember(aiManager, viewModel.trailerService) {
+        com.nuvio.tv.core.preshow.MoviePreShowService(aiManager, viewModel.trailerService)
+    }
     var showChicReviewDialog by remember { mutableStateOf(false) }
     var chicReview by remember { mutableStateOf<com.nuvio.tv.core.ai.ChicCriticReview?>(null) }
     var isChicReviewLoading by remember { mutableStateOf(false) }
@@ -1845,6 +1847,7 @@ private fun MetaDetailsContent(
 
     var showPreShowDialog by remember { mutableStateOf(false) }
     var movieTrivia by remember { mutableStateOf<List<com.nuvio.tv.core.preshow.MovieTriviaItem>>(emptyList()) }
+    var moviePreShowTrailers by remember { mutableStateOf<List<com.nuvio.tv.core.preshow.PreShowTrailer>>(emptyList()) }
     var isMovieTriviaLoading by remember { mutableStateOf(false) }
 
     val openChicReview: (String, String?, List<String>?, String?, Boolean, String?, Int?, Int?) -> Unit = { rTitle, rOverview, rGenre, rYear, isEp, epTitle, sNum, epNum ->
@@ -1951,27 +1954,41 @@ private fun MetaDetailsContent(
 
     // Pre-compute gradient brushes once
 
+    val startPreShow = remember(meta, localCtx, moviePreShowService) {
+        {
+            showPreShowDialog = true
+            if (movieTrivia.isEmpty()) {
+                isMovieTriviaLoading = true
+                coroutineScope.launch {
+                    try {
+                        val trailerCandidates = (meta.trailerYtIds + meta.trailers.mapNotNull { it.ytId }).distinct()
+                        val pkg = moviePreShowService.loadPreShow(
+                            context = localCtx,
+                            movieTitle = meta.name,
+                            movieYear = meta.releaseInfo,
+                            genre = meta.genres,
+                            trailerYtIds = trailerCandidates
+                        )
+                        movieTrivia = pkg.trivia
+                        moviePreShowTrailers = pkg.trailers
+                    } catch (e: Exception) {
+                        // fallback
+                    } finally {
+                        isMovieTriviaLoading = false
+                    }
+                }
+            }
+        }
+    }
+
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, meta.id, meta.apiType, onEpisodeClick, onPlayClick, isPlayEnabled) {
+    val heroPlayClick = remember(heroVideo, meta.id, meta.apiType, onEpisodeClick, onPlayClick, isPlayEnabled, startPreShow) {
         {
             if (isPlayEnabled) markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
             } else if (meta.apiType.equals("movie", ignoreCase = true)) {
-                showPreShowDialog = true
-                if (movieTrivia.isEmpty()) {
-                    isMovieTriviaLoading = true
-                    coroutineScope.launch {
-                        try {
-                            val pkg = moviePreShowService.loadPreShow(localCtx, meta.name, meta.releaseInfo, meta.genres)
-                            movieTrivia = pkg.trivia
-                        } catch (e: Exception) {
-                            // fallback
-                        } finally {
-                            isMovieTriviaLoading = false
-                        }
-                    }
-                }
+                startPreShow()
             } else {
                 onPlayClick(meta.id)
             }
@@ -2274,7 +2291,8 @@ private fun MetaDetailsContent(
                             clearPendingRestore()
                         },
                         onShowFullDescription = { showSynopsisOverlay = true },
-                        onChicReviewClick = { openChicReview(meta.name, meta.description, meta.genres, meta.releaseInfo, false, null, null, null) }
+                        onChicReviewClick = { openChicReview(meta.name, meta.description, meta.genres, meta.releaseInfo, false, null, null, null) },
+                        onCinemaPreShowClick = if (meta.apiType.equals("movie", ignoreCase = true)) { { startPreShow() } } else null
                     )
                 }
             }
@@ -2807,7 +2825,9 @@ private fun MetaDetailsContent(
         com.nuvio.tv.ui.components.CinemaPreShowDialog(
             visible = showPreShowDialog,
             movieTitle = meta.name,
+            backdropUrl = meta.backdropUrl ?: meta.poster,
             trivia = movieTrivia,
+            trailers = moviePreShowTrailers,
             isLoading = isMovieTriviaLoading,
             onStartMovie = {
                 showPreShowDialog = false

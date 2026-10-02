@@ -112,7 +112,8 @@ fun HeroContentSection(
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
     onShowFullDescription: () -> Unit = {},
-    onChicReviewClick: (() -> Unit)? = null
+    onChicReviewClick: (() -> Unit)? = null,
+    onCinemaPreShowClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -293,6 +294,17 @@ fun HeroContentSection(
                                 contentDescription = stringResource(R.string.hero_play_trailer),
                                 onClick = onTrailerClick,
                                 onFocused = onHeroActionFocused
+                            )
+                        }
+
+                        if (onCinemaPreShowClick != null) {
+                            ActionIconButton(
+                                contentDescription = "🍿 Cinema Pre-Show",
+                                onClick = onCinemaPreShowClick,
+                                onFocused = onHeroActionFocused,
+                                customContent = {
+                                    Text("🍿", fontSize = 18.sp)
+                                }
                             )
                         }
 

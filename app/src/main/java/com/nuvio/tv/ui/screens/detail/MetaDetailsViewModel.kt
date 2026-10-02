@@ -87,7 +87,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val watchedItemsPreferences: WatchedItemsPreferences,
-    private val trailerService: TrailerService,
+    val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktCommentsService: TraktCommentsService,
