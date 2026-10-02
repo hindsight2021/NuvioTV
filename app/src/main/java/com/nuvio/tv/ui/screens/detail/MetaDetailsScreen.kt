@@ -1956,6 +1956,29 @@ private fun MetaDetailsContent(
 
     // Pre-compute gradient brushes once
 
+    // Eagerly prefetch pre-show trivia and trailers in background for movies for 0ms instant launch
+    LaunchedEffect(meta.id, meta.apiType) {
+        if (meta.apiType.equals("movie", ignoreCase = true) && movieTrivia.isEmpty()) {
+            try {
+                val trailerCandidates = (meta.trailerYtIds + meta.trailers.mapNotNull { it.ytId }).distinct()
+                val pkg = moviePreShowService.loadPreShow(
+                    context = localCtx,
+                    movieTitle = meta.name,
+                    movieYear = meta.releaseInfo,
+                    genre = meta.genres,
+                    overview = meta.description,
+                    director = meta.director,
+                    cast = meta.cast.map { it.name },
+                    trailerYtIds = trailerCandidates
+                )
+                movieTrivia = pkg.trivia
+                moviePreShowTrailers = pkg.trailers
+            } catch (_: Exception) {
+                // Background prefetch error ignored
+            }
+        }
+    }
+
     val startPreShow = remember(meta, localCtx, moviePreShowService) {
         {
             showPreShowDialog = true
@@ -1969,6 +1992,9 @@ private fun MetaDetailsContent(
                             movieTitle = meta.name,
                             movieYear = meta.releaseInfo,
                             genre = meta.genres,
+                            overview = meta.description,
+                            director = meta.director,
+                            cast = meta.cast.map { it.name },
                             trailerYtIds = trailerCandidates
                         )
                         movieTrivia = pkg.trivia

@@ -77,7 +77,6 @@ private val CinemaCardBg = Color(0xCC13111A)
 private val CinemaCardFocused = Color(0xE6262238)
 
 enum class PreShowStage {
-    LOADING,
     SHOWTIME_INTRO,
     TRIVIA,
     COMING_ATTRACTIONS,
@@ -103,7 +102,7 @@ fun CinemaPreShowDialog(
     val lightingController = remember { CinemaLightingController() }
     val scope = rememberCoroutineScope()
 
-    var stage by remember { mutableStateOf(if (isLoading) PreShowStage.LOADING else PreShowStage.SHOWTIME_INTRO) }
+    var stage by remember { mutableStateOf(PreShowStage.SHOWTIME_INTRO) }
     var currentTriviaIndex by remember { mutableIntStateOf(0) }
     var currentTrailerIndex by remember { mutableIntStateOf(0) }
     var userSelectedIndex by remember { mutableStateOf<Int?>(null) }
@@ -112,12 +111,6 @@ fun CinemaPreShowDialog(
     DisposableEffect(Unit) {
         onDispose {
             audioPlayer.release()
-        }
-    }
-
-    LaunchedEffect(isLoading) {
-        if (!isLoading && stage == PreShowStage.LOADING) {
-            stage = PreShowStage.SHOWTIME_INTRO
         }
     }
 
@@ -220,6 +213,12 @@ fun CinemaPreShowDialog(
                             ) {
                                 advanceTrivia()
                                 true
+                            } else if (!answerRevealed && (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                                keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ||
+                                keyCode == KeyEvent.KEYCODE_MEDIA_NEXT)
+                            ) {
+                                answerRevealed = true
+                                true
                             } else false
                         }
                         PreShowStage.TRAILER -> {
@@ -283,25 +282,6 @@ fun CinemaPreShowDialog(
             }
 
             when (stage) {
-                PreShowStage.LOADING -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            CircularProgressIndicator(color = CinemaGold, strokeWidth = 3.dp)
-                            Text(
-                                text = "DIMMING LIGHTS & PREPARING CINEMA PRE-SHOW...",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 4.sp
-                                ),
-                                color = CinemaGold
-                            )
-                        }
-                    }
-                }
-
                 PreShowStage.SHOWTIME_INTRO -> {
                     ShowtimeIntroAct(
                         movieTitle = movieTitle,
@@ -312,8 +292,12 @@ fun CinemaPreShowDialog(
                 PreShowStage.TRIVIA -> {
                     val currentItem = trivia.getOrNull(currentTriviaIndex)
                     if (currentItem == null) {
-                        LaunchedEffect(Unit) {
-                            stage = if (trailers.isNotEmpty()) PreShowStage.COMING_ATTRACTIONS else PreShowStage.FEATURE_PRESENTATION
+                        if (isLoading) {
+                            TriviaStandbyAct(movieTitle = movieTitle)
+                        } else {
+                            LaunchedEffect(Unit) {
+                                stage = if (trailers.isNotEmpty()) PreShowStage.COMING_ATTRACTIONS else PreShowStage.FEATURE_PRESENTATION
+                            }
                         }
                     } else {
                         TriviaAct(
@@ -973,3 +957,41 @@ private fun FeaturePresentationAct(
         }
     }
 }
+
+@Composable
+private fun TriviaStandbyAct(movieTitle: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "🍿 CINEMA TRIVIA CHALLENGE",
+                color = CinemaGold,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 6.sp
+                )
+            )
+            Text(
+                text = movieTitle.uppercase(),
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+            )
+            Spacer(Modifier.height(8.dp))
+            CircularProgressIndicator(color = CinemaGold, strokeWidth = 3.dp)
+            Text(
+                text = "PREPARING THEATRICAL QUESTIONS...",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp)
+            )
+        }
+    }
+}
+
