@@ -60,7 +60,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.nuvio.tv.core.ha.CinemaLightingController
 import com.nuvio.tv.core.preshow.MovieTriviaItem
 import com.nuvio.tv.core.preshow.PreShowAudioPlayer

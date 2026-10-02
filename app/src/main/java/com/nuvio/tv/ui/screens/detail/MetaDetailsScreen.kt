@@ -1047,7 +1047,8 @@ fun MetaDetailsScreen(
                     onNavigateToCastDetail = onNavigateToCastDetail,
                     onNavigateToTmdbEntityBrowse = onNavigateToTmdbEntityBrowse,
                     onNavigateToDetail = onNavigateToDetail,
-                    onPosterLongPress = { item -> viewModel.posterOptions.show(item, null) }
+                    onPosterLongPress = { item -> viewModel.posterOptions.show(item, null) },
+                    trailerService = viewModel.trailerService
                 )
             }
         }
@@ -1247,7 +1248,8 @@ private fun MetaDetailsContent(
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
-    onPosterLongPress: (MetaPreview) -> Unit = {}
+    onPosterLongPress: (MetaPreview) -> Unit = {},
+    trailerService: com.nuvio.tv.data.trailer.TrailerService? = null
 ) {
     val playbackAvailability = LocalPlaybackAvailability.current
     val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
@@ -1836,8 +1838,8 @@ private fun MetaDetailsContent(
     val localCtx = LocalContext.current
     val aiManager = remember { com.nuvio.tv.core.ai.AiManager(okhttp3.OkHttpClient()) }
     val chicCriticReviewService = remember(aiManager) { com.nuvio.tv.core.ai.ChicCriticReviewService(aiManager) }
-    val moviePreShowService = remember(aiManager, viewModel.trailerService) {
-        com.nuvio.tv.core.preshow.MoviePreShowService(aiManager, viewModel.trailerService)
+    val moviePreShowService = remember(aiManager, trailerService) {
+        com.nuvio.tv.core.preshow.MoviePreShowService(aiManager, trailerService)
     }
     var showChicReviewDialog by remember { mutableStateOf(false) }
     var chicReview by remember { mutableStateOf<com.nuvio.tv.core.ai.ChicCriticReview?>(null) }
