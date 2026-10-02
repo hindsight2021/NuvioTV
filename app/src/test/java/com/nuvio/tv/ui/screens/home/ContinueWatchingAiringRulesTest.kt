@@ -198,6 +198,107 @@ class ContinueWatchingAiringRulesTest {
         )
     }
 
+    // --- Release alert tests ---
+
+    @Test
+    fun `episode released within window and after last watched returns true`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 10L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 30L * 24 * 60 * 60 * 1000
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `episode released within window and watched on air day returns true`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = releaseMs + 2L * 60 * 60 * 1000 // watched 2 hours after release
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `new season episode released within window returns true even if last watched after release`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 20L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 1L * 24 * 60 * 60 * 1000
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = true,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `episode released more than 60 days ago returns false`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 61L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 90L * 24 * 60 * 60 * 1000
+
+        assertFalse(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `unaired episode returns false for release alert`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 1L * 24 * 60 * 60 * 1000
+
+        assertFalse(
+            computeNextUpReleaseAlert(
+                hasAired = false,
+                releaseTimestamp = releaseMs,
+                lastWatched = nowMs - 10L * 24 * 60 * 60 * 1000,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `null release timestamp returns false for release alert`() {
+        val nowMs = 1759359600000L
+
+        assertFalse(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = null,
+                lastWatched = nowMs - 10L * 24 * 60 * 60 * 1000,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
     private fun episode(season: Int, ep: Int, released: String) = CwVideoSummary(
         id = "tt-test:$season:$ep",
         title = "E$ep",

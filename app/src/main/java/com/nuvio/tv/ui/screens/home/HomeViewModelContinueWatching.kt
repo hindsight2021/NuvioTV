@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val CW_MAX_RECENT_PROGRESS_ITEMS = 300
-private const val CW_MAX_NEXT_UP_LOOKUPS = 32
+private const val CW_MAX_NEXT_UP_LOOKUPS = 64
 private const val CW_MAX_NEXT_UP_CONCURRENCY = 4
 private const val CW_MAX_ENRICHMENT_CONCURRENCY = 4
 private const val CW_PROGRESS_DEBOUNCE_MS = 500L
@@ -779,15 +779,14 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     }
                     val olderSeedContentIds = allSeedContentIds - processedContentIds - cwProcessedOlderSeedContentIds
                     val uncachedOlderSeedIds = olderSeedContentIds.filter { contentId ->
-                        // Skip series validated recently — no new episodes expected within TTL.
+                        // Skip series validated recently — only if confirmed fully watched with fresh TTL.
                         if (fullyWatchedSeriesIds.isSeriesValidationFresh(contentId)) return@filter false
-                        // Allow series in disk cache to be re-resolved when their
-                        // validation TTL has expired — otherwise stale badge flags
-                        // (isNewSeasonRelease, isReleaseAlert) never get refreshed and
-                        // new seasons won't show the correct badge until manual cache clear.
-                        synchronized(cwNextUpResolutionCache) {
-                            cwNextUpResolutionCache.keys.none { it.startsWith("$contentId|") }
+                        // Allow series to be re-resolved unless there is already a positive (non-null) next-up in cache.
+                        // Stale negative hits or missing entries must NOT block re-resolution.
+                        val hasPositiveInCache = synchronized(cwNextUpResolutionCache) {
+                            cwNextUpResolutionCache.entries.any { (k, v) -> k.startsWith("$contentId|") && v != null }
                         }
+                        !hasPositiveInCache
                     }.toSet()
                     if (uncachedOlderSeedIds.isNotEmpty()) {
                         val seedsFromNextUp = nextUpSeeds
@@ -1226,10 +1225,13 @@ private fun HomeViewModel.shouldTreatAsActiveInProgressForNextUpSuppression(
 }
 
 private fun logNextUpDecision(message: String) {
-    Unit
+    Log.d("ContinueWatching", message)
 }
 
-private fun shouldTraceNextUpSeries(progress: WatchProgress): Boolean = false
+private fun shouldTraceNextUpSeries(progress: WatchProgress): Boolean =
+    progress.contentId == "tt0121955" ||
+        progress.contentId.contains("0121955") ||
+        progress.name.contains("South Park", ignoreCase = true)
 
 private fun WatchProgress.toNextUpTraceString(): String {
     return buildString {
@@ -1440,8 +1442,14 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                     cwNextUpResolutionCache[cacheKey]
                 }
                 if (cachedValue != null) return@filter true // positive hit — has next-up
-                // Negative hit (no next-up) — skip if TTL is fresh
-                !fullyWatchedSeriesIds.isSeriesValidationFresh(progress.contentId)
+                // Negative hit (no next-up) — skip only if negative cache TTL is fresh (<5 min)
+                // AND the series is actively validated as fully watched.
+                val negativeCachedAt = synchronized(cwNextUpNegativeCacheTimestamps) {
+                    cwNextUpNegativeCacheTimestamps[cacheKey]
+                }
+                val negativeFresh = negativeCachedAt != null &&
+                    (SystemClock.elapsedRealtime() - negativeCachedAt < CW_META_NEGATIVE_CACHE_TTL_MS)
+                !(negativeFresh && fullyWatchedSeriesIds.isSeriesValidationFresh(progress.contentId))
             }
             .take(CW_MAX_NEXT_UP_LOOKUPS)
 
@@ -1583,15 +1591,14 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
                                 val freshHasAired = hasEpisodeAired(overlay.released, fallback = overlay.hasAired)
                                 if (freshHasAired != overlay.hasAired) {
                                     val releaseTimestamp = parseEpisodeReleaseInstant(overlay.released)?.toEpochMilli()
-                                    val nowMs = System.currentTimeMillis()
-                                    val sixtyDaysMs = 60L * 24 * 60 * 60 * 1000
-                                    val isReleaseAlert = freshHasAired &&
-                                        releaseTimestamp != null &&
-                                        releaseTimestamp > overlay.lastWatched &&
-                                        (nowMs - releaseTimestamp) < sixtyDaysMs
-                                    val isNewSeasonRelease = isReleaseAlert &&
-                                        overlay.seedSeason != null &&
-                                        overlay.season != overlay.seedSeason
+                                    val isNewSeason = overlay.seedSeason != null && overlay.season != overlay.seedSeason
+                                    val isReleaseAlert = computeNextUpReleaseAlert(
+                                        hasAired = freshHasAired,
+                                        releaseTimestamp = releaseTimestamp,
+                                        lastWatched = overlay.lastWatched,
+                                        isNewSeason = isNewSeason
+                                    )
+                                    val isNewSeasonRelease = isReleaseAlert && isNewSeason
                                     val updatedOverlay = overlay.copy(
                                         hasAired = freshHasAired,
                                         airDateLabel = if (freshHasAired) null else overlay.airDateLabel,
@@ -1809,6 +1816,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
         )
     }
     if (!fullyWatchedSeriesIds.isSeriesValidationFresh(progress.contentId)) {
+        metaRepository.clearCacheForId(progress.contentId)
         synchronized(cwMetaCache) {
             cwMetaCache.remove("${progress.contentType}:${progress.contentId}")
             cwMetaCache.remove("series:${progress.contentId}")
@@ -2772,15 +2780,14 @@ private suspend fun HomeViewModel.applyContinueWatchingEnrichmentOverlay(
                     val freshHasAired = hasEpisodeAired(overlay.released, fallback = overlay.hasAired)
                     val effectiveOverlay = if (freshHasAired != overlay.hasAired) {
                         val releaseTimestamp = parseEpisodeReleaseInstant(overlay.released)?.toEpochMilli()
-                        val nowMs = System.currentTimeMillis()
-                        val sixtyDaysMs = 60L * 24 * 60 * 60 * 1000
-                        val isReleaseAlert = freshHasAired &&
-                            releaseTimestamp != null &&
-                            releaseTimestamp > overlay.lastWatched &&
-                            (nowMs - releaseTimestamp) < sixtyDaysMs
-                        val isNewSeasonRelease = isReleaseAlert &&
-                            overlay.seedSeason != null &&
-                            overlay.season != overlay.seedSeason
+                        val isNewSeason = overlay.seedSeason != null && overlay.season != overlay.seedSeason
+                        val isReleaseAlert = computeNextUpReleaseAlert(
+                            hasAired = freshHasAired,
+                            releaseTimestamp = releaseTimestamp,
+                            lastWatched = overlay.lastWatched,
+                            isNewSeason = isNewSeason
+                        )
+                        val isNewSeasonRelease = isReleaseAlert && isNewSeason
                         val updated = overlay.copy(
                             hasAired = freshHasAired,
                             airDateLabel = if (freshHasAired) null else overlay.airDateLabel,
@@ -2865,7 +2872,7 @@ private fun HomeViewModel.clearStaleFullyWatchedForAiredNextUp(
         fullyWatchedSeriesIds.updateWithValidation(
             ids = current - toRemove,
             validatedIds = toRemove,
-            revalidateAt = toRemove.associateWith { Long.MAX_VALUE }
+            revalidateAt = emptyMap()
         )
     }
     synchronized(cwBadgeEpisodeCache) {
@@ -2947,11 +2954,8 @@ private fun HomeViewModel.publishBadgeUpdate(
     val allValidatedIds = expandedFullyWatched + expandedNotFullyWatched
     val revalidateAt = buildMap {
         for (contentId in expandedFullyWatched) {
-            // Prefer next unaired episode air time (mid-season) over default 7-day TTL.
+            // Prefer next unaired episode air time (mid-season) over default TTL.
             cwBadgeNextSeasonMs[contentId]?.let { put(contentId, it) }
-        }
-        for (contentId in expandedNotFullyWatched) {
-            put(contentId, Long.MAX_VALUE)
         }
     }
     fullyWatchedSeriesIds.updateWithValidation(merged, allValidatedIds, revalidateAt)
@@ -3163,20 +3167,19 @@ private fun resolveNextUpReleaseState(
     hasAired: Boolean
 ): NextUpReleaseState {
     val releaseTimestamp = parseEpisodeReleaseInstant(nextReleased)?.toEpochMilli()
-    val nowMs = System.currentTimeMillis()
-    val sixtyDaysMs = 60L * 24 * 60 * 60 * 1000
-    val isReleaseAlert = hasAired &&
-        releaseTimestamp != null &&
-        releaseTimestamp > seedProgress.lastWatched &&
-        // Suppress release alerts for episodes that aired more than 60 days ago —
-        // the user likely abandoned the show.
-        (nowMs - releaseTimestamp) < sixtyDaysMs
+    val isNewSeason = seedProgress.season != null && nextSeason != seedProgress.season
+    val isReleaseAlert = computeNextUpReleaseAlert(
+        hasAired = hasAired,
+        releaseTimestamp = releaseTimestamp,
+        lastWatched = seedProgress.lastWatched,
+        isNewSeason = isNewSeason
+    )
 
     return NextUpReleaseState(
-        sortTimestamp = if (isReleaseAlert) releaseTimestamp!! else seedProgress.lastWatched,
+        sortTimestamp = if (isReleaseAlert && releaseTimestamp != null) releaseTimestamp else seedProgress.lastWatched,
         releaseTimestamp = releaseTimestamp,
         isReleaseAlert = isReleaseAlert,
-        isNewSeasonRelease = isReleaseAlert && seedProgress.season != null && nextSeason != seedProgress.season
+        isNewSeasonRelease = isReleaseAlert && isNewSeason
     )
 }
 
@@ -3196,14 +3199,15 @@ private fun recalculateCachedReleaseBadge(cached: com.nuvio.tv.data.local.Cached
     } else {
         cached.hasAired
     }
-    val sixtyDaysMs = 60L * 24 * 60 * 60 * 1000
-    val isReleaseAlert = hasAired &&
-        releaseTimestamp != null &&
-        releaseTimestamp > cached.lastWatched &&
-        (nowMs - releaseTimestamp) < sixtyDaysMs
-    val isNewSeasonRelease = isReleaseAlert &&
-        cached.seedSeason != null &&
-        cached.season != cached.seedSeason
+    val isNewSeason = cached.seedSeason != null && cached.season != cached.seedSeason
+    val isReleaseAlert = computeNextUpReleaseAlert(
+        hasAired = hasAired,
+        releaseTimestamp = releaseTimestamp,
+        lastWatched = cached.lastWatched,
+        isNewSeason = isNewSeason,
+        nowMs = nowMs
+    )
+    val isNewSeasonRelease = isReleaseAlert && isNewSeason
     return Triple(hasAired, isReleaseAlert, isNewSeasonRelease)
 }
 

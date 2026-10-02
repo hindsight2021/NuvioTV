@@ -37,8 +37,9 @@ class WatchedSeriesStateHolder @Inject constructor(
         private val KEY = stringSetPreferencesKey("fully_watched_ids")
         private val REVALIDATE_KEY = stringPreferencesKey("revalidate_after")
         private val VALIDATION_RESET_KEY = intPreferencesKey("validation_reset_version")
-        private const val VALIDATION_RESET_VERSION = 2
+        private const val VALIDATION_RESET_VERSION = 3
         private const val DEFAULT_TTL_MS = 24L * 60 * 60 * 1000 // 24 hours (1 day)
+        private const val MAX_DEADLINE_THRESHOLD = Long.MAX_VALUE - 1000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -67,6 +68,9 @@ class WatchedSeriesStateHolder @Inject constructor(
             }
         } else {
             revalidateAfterMap = parseTimestamps(prefs[REVALIDATE_KEY])
+                .filter { (id, deadline) ->
+                    id in persisted && deadline < MAX_DEADLINE_THRESHOLD
+                }
         }
         if (_fullyWatchedSeriesIds.value.isEmpty() && persisted.isNotEmpty()) {
             _fullyWatchedSeriesIds.value = persisted
@@ -107,10 +111,18 @@ class WatchedSeriesStateHolder @Inject constructor(
         val updated = revalidateAfterMap.toMutableMap()
         var deadlinesChanged = false
         validatedIds.forEach { id ->
-            val newDeadline = revalidateAt[id] ?: defaultDeadline
-            if (updated[id] != newDeadline) {
-                updated[id] = newDeadline
-                deadlinesChanged = true
+            if (id in ids) {
+                val newDeadline = revalidateAt[id] ?: defaultDeadline
+                if (newDeadline < MAX_DEADLINE_THRESHOLD) {
+                    if (updated[id] != newDeadline) {
+                        updated[id] = newDeadline
+                        deadlinesChanged = true
+                    }
+                }
+            } else {
+                if (updated.remove(id) != null) {
+                    deadlinesChanged = true
+                }
             }
         }
         // Prune entries for series no longer in badge set AND not freshly validated.
@@ -138,7 +150,9 @@ class WatchedSeriesStateHolder @Inject constructor(
      * Returns true if the given series does not yet need re-validation.
      */
     fun isSeriesValidationFresh(contentId: String): Boolean {
+        if (contentId !in _fullyWatchedSeriesIds.value) return false
         val deadline = revalidateAfterMap[contentId] ?: return false
+        if (deadline >= MAX_DEADLINE_THRESHOLD) return false
         return System.currentTimeMillis() < deadline
     }
 

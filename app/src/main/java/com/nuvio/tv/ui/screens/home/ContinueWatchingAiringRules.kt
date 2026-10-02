@@ -78,3 +78,27 @@ fun isFullyWatchedAgainstAiredList(
     if (airedEpisodes.isEmpty()) return false
     return airedEpisodes.all { it in watchedEpisodes }
 }
+
+private const val SIXTY_DAYS_MS: Long = 60L * 24 * 60 * 60 * 1000
+private const val ONE_DAY_MS: Long = 24L * 60 * 60 * 1000
+
+/**
+ * Determines whether a next-up TV episode qualifies as a release alert (new episode / new season).
+ * Ensures episodes that aired recently (within 60 days) are not dropped even if the previous
+ * episode was watched on air day or slightly after release instant.
+ */
+fun computeNextUpReleaseAlert(
+    hasAired: Boolean,
+    releaseTimestamp: Long?,
+    lastWatched: Long,
+    isNewSeason: Boolean,
+    nowMs: Long = System.currentTimeMillis()
+): Boolean {
+    if (!hasAired || releaseTimestamp == null) return false
+    val age = nowMs - releaseTimestamp
+    if (age !in 0..SIXTY_DAYS_MS) return false
+    return releaseTimestamp > lastWatched ||
+        isNewSeason ||
+        lastWatched < releaseTimestamp + ONE_DAY_MS
+}
+

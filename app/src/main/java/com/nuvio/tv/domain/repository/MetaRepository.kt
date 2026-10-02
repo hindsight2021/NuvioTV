@@ -29,4 +29,6 @@ interface MetaRepository {
     fun getCachedMeta(type: String, id: String): Meta?
     
     fun clearCache()
+
+    fun clearCacheForId(id: String)
 }

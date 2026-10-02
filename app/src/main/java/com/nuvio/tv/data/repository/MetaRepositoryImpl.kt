@@ -783,6 +783,14 @@ class MetaRepositoryImpl @Inject constructor(
         inFlightPrimaryMeta.clear()
     }
 
+    override fun clearCacheForId(id: String) {
+        val cleanId = id.trim()
+        if (cleanId.isBlank()) return
+        metaCache.entries.removeIf { it.key.endsWith(":$cleanId") }
+        addonMetaCache.entries.removeIf { it.key.endsWith(":$cleanId") }
+        primaryAddonMetaCache.entries.removeIf { it.key.endsWith(":$cleanId") }
+    }
+
     override fun getCachedMeta(type: String, id: String): Meta? {
         val cacheKey = metaLookupCacheKey(type, id)
         return addonMetaCache[cacheKey]?.takeIf { !it.isExpired() }?.meta
