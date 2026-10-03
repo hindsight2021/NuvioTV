@@ -81,9 +81,15 @@ fun TrailerPlayer(
     // Resolve pool: explicit parameter > CompositionLocal
     val resolvedPool = trailerPlayerPool ?: LocalTrailerPlayerPool.current
 
-    // Use standalone player if provided (e.g. cinema pre-show), otherwise acquire from pool
-    val trailerPlayer = remember(standalonePlayer, resolvedPool) {
-        standalonePlayer ?: resolvedPool?.acquire()
+    // Use standalone player if provided (e.g. cinema pre-show), otherwise acquire from pool when trailerUrl is present
+    val trailerPlayer = remember(trailerUrl, standalonePlayer, resolvedPool) {
+        if (standalonePlayer != null) {
+            standalonePlayer
+        } else if (trailerUrl != null) {
+            resolvedPool?.acquire()
+        } else {
+            null
+        }
     }
 
     // Configure player settings when acquired
@@ -102,15 +108,13 @@ fun TrailerPlayer(
         player.volume = if (muted) 0f else 1f
         if (isPlaying && trailerUrl != null) {
             hasRenderedFirstFrame = false
-            player.stop()
-            player.clearMediaItems()
-            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
             if (!trailerAudioUrl.isNullOrBlank()) {
+                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerAudioUrl))
                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
             } else {
-                player.setMediaSource(videoSource)
+                player.setMediaItem(MediaItem.fromUri(trailerUrl))
             }
             player.prepare()
             player.playWhenReady = !isPaused
@@ -165,19 +169,9 @@ fun TrailerPlayer(
         val player = trailerPlayer ?: return@DisposableEffect onDispose {}
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    hasRenderedFirstFrame = true
-                }
                 if (playbackState == Player.STATE_ENDED) {
-                    if (hasRenderedFirstFrame || (player.currentPosition > 1000L)) {
-                        currentOnEnded()
-                    }
+                    currentOnEnded()
                 }
-            }
-
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                android.util.Log.w("TrailerPlayer", "Trailer playback error: ${error.message}")
-                currentOnEnded()
             }
 
             override fun onRenderedFirstFrame() {
@@ -190,13 +184,13 @@ fun TrailerPlayer(
                 Lifecycle.Event.ON_RESUME -> {
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
                         if (player.currentMediaItem == null) {
-                            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                             if (!currentTrailerAudioUrl.isNullOrBlank()) {
+                                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerAudioUrl!!))
                                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                             } else {
-                                player.setMediaSource(videoSource)
+                                player.setMediaItem(MediaItem.fromUri(currentTrailerUrl!!))
                             }
                             player.prepare()
                         }
