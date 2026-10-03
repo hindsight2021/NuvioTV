@@ -875,6 +875,9 @@ fun MetaDetailsScreen(
                     onEpisodeManualPlayClick = playEpisodeManually,
                     onPlayClick = playTitle,
                     onPlayManuallyClick = playTitleManually,
+                    onPreScrapeStreams = { vId, type, title ->
+                        viewModel.preScrapeStreams(videoId = vId, type = type, title = title)
+                    },
                     onEpisodeStartFromBeginningClick = onEpisodeStartFromBeginningClick@{ video ->
                         if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
                             Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
@@ -1199,6 +1202,7 @@ private fun MetaDetailsContent(
     onPlayClick: (String) -> Unit,
     onPlayManuallyClick: (String) -> Unit,
     onPlayStartFromBeginningClick: (String) -> Unit = {},
+    onPreScrapeStreams: (videoId: String, type: String, title: String?) -> Unit = { _, _, _ -> },
     showManualPlayOption: Boolean,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
@@ -1977,11 +1981,11 @@ private fun MetaDetailsContent(
         }
     }
 
-    val startPreShow = remember(meta, localCtx, moviePreShowService, viewModel) {
+    val startPreShow = remember(meta, localCtx, moviePreShowService, onPreScrapeStreams) {
         {
             showPreShowDialog = true
             // Eagerly pre-scrape streams in the background during pre-show for instant handoff
-            viewModel.preScrapeStreams(videoId = meta.id, type = meta.apiType, title = meta.name)
+            onPreScrapeStreams(meta.id, meta.apiType, meta.name)
             if (movieTrivia.isEmpty()) {
                 isMovieTriviaLoading = true
                 coroutineScope.launch {
