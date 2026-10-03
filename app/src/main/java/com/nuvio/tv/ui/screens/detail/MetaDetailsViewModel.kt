@@ -38,6 +38,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
+import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
@@ -99,6 +100,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val metaDetailsSessionState: MetaDetailsSessionState,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
+    private val streamRepository: StreamRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -107,6 +109,29 @@ class MetaDetailsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MetaDetailsUiState())
     val uiState: StateFlow<MetaDetailsUiState> = _uiState.asStateFlow()
+
+    /**
+     * Eagerly pre-scrapes streams in the background (e.g. during cinema pre-show)
+     * so that streams are already resolved and cached in StreamSearchSessionCache
+     * when the movie starts.
+     */
+    fun preScrapeStreams(videoId: String, type: String = "movie", title: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                Log.d(TAG, "Pre-scraping streams in background for: $videoId ($title)")
+                streamRepository.getStreamsFromAllAddons(
+                    type = type,
+                    videoId = videoId,
+                    season = null,
+                    episode = null,
+                    forceRefresh = false,
+                    title = title
+                ).collect {
+                    // Pre-warms session cache in StreamRepositoryImpl
+                }
+            }
+        }
+    }
 
     private val _posterCardCornerRadiusDp = MutableStateFlow(12)
     val posterCardCornerRadiusDp: StateFlow<Int> = _posterCardCornerRadiusDp.asStateFlow()

@@ -160,6 +160,14 @@ interface TmdbApi {
         @Query("api_key") apiKey: String
     ): Response<TmdbNetworkDetailsResponse>
 
+    @GET("movie/upcoming")
+    suspend fun getUpcomingMovies(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = "en-US",
+        @Query("page") page: Int = 1,
+        @Query("region") region: String? = "US"
+    ): Response<TmdbDiscoverResponse>
+
     @GET("discover/movie")
     suspend fun discoverMovies(
         @Query("api_key") apiKey: String,

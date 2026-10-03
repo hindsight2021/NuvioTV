@@ -107,6 +107,8 @@ fun TrailerPlayer(
         player.volume = if (muted) 0f else 1f
         if (isPlaying && trailerUrl != null) {
             hasRenderedFirstFrame = false
+            player.stop()
+            player.clearMediaItems()
             if (!trailerAudioUrl.isNullOrBlank()) {
                 val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
                 val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
@@ -116,7 +118,7 @@ fun TrailerPlayer(
                 player.setMediaItem(MediaItem.fromUri(trailerUrl))
             }
             player.prepare()
-            player.playWhenReady = true
+            player.playWhenReady = !isPaused
         } else {
             hasRenderedFirstFrame = false
             player.playWhenReady = false
@@ -169,8 +171,15 @@ fun TrailerPlayer(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
-                    currentOnEnded()
+                    if (hasRenderedFirstFrame || (player.currentPosition > 1000L)) {
+                        currentOnEnded()
+                    }
                 }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.w("TrailerPlayer", "Trailer playback error: ${error.message}")
+                currentOnEnded()
             }
 
             override fun onRenderedFirstFrame() {

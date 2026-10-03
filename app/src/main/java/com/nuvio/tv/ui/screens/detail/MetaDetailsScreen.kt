@@ -1960,7 +1960,6 @@ private fun MetaDetailsContent(
     LaunchedEffect(meta.id, meta.apiType) {
         if (meta.apiType.equals("movie", ignoreCase = true) && movieTrivia.isEmpty()) {
             try {
-                val trailerCandidates = (meta.trailerYtIds + meta.trailers.mapNotNull { it.ytId }).distinct()
                 val pkg = moviePreShowService.loadPreShow(
                     context = localCtx,
                     movieTitle = meta.name,
@@ -1968,8 +1967,7 @@ private fun MetaDetailsContent(
                     genre = meta.genres,
                     overview = meta.description,
                     director = meta.director,
-                    cast = meta.cast,
-                    trailerYtIds = trailerCandidates
+                    cast = meta.cast
                 )
                 movieTrivia = pkg.trivia
                 moviePreShowTrailers = pkg.trailers
@@ -1979,14 +1977,15 @@ private fun MetaDetailsContent(
         }
     }
 
-    val startPreShow = remember(meta, localCtx, moviePreShowService) {
+    val startPreShow = remember(meta, localCtx, moviePreShowService, viewModel) {
         {
             showPreShowDialog = true
+            // Eagerly pre-scrape streams in the background during pre-show for instant handoff
+            viewModel.preScrapeStreams(videoId = meta.id, type = meta.apiType, title = meta.name)
             if (movieTrivia.isEmpty()) {
                 isMovieTriviaLoading = true
                 coroutineScope.launch {
                     try {
-                        val trailerCandidates = (meta.trailerYtIds + meta.trailers.mapNotNull { it.ytId }).distinct()
                         val pkg = moviePreShowService.loadPreShow(
                             context = localCtx,
                             movieTitle = meta.name,
@@ -1994,8 +1993,7 @@ private fun MetaDetailsContent(
                             genre = meta.genres,
                             overview = meta.description,
                             director = meta.director,
-                            cast = meta.cast,
-                            trailerYtIds = trailerCandidates
+                            cast = meta.cast
                         )
                         movieTrivia = pkg.trivia
                         moviePreShowTrailers = pkg.trailers

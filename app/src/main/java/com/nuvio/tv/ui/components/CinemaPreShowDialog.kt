@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -329,16 +331,18 @@ fun CinemaPreShowDialog(
                     if (currentTrailer == null) {
                         LaunchedEffect(Unit) { stage = PreShowStage.FEATURE_PRESENTATION }
                     } else {
-                        TrailerAct(
-                            trailer = currentTrailer,
-                            trailerIndex = currentTrailerIndex,
-                            totalTrailers = trailers.size,
-                            onTrailerEnded = { advanceTrailer() },
-                            onSkipTrailer = { advanceTrailer() },
-                            onStartMovieDirectly = {
-                                stage = PreShowStage.FEATURE_PRESENTATION
-                            }
-                        )
+                        key(currentTrailerIndex, currentTrailer.videoUrl) {
+                            TrailerAct(
+                                trailer = currentTrailer,
+                                trailerIndex = currentTrailerIndex,
+                                totalTrailers = trailers.size,
+                                onTrailerEnded = { advanceTrailer() },
+                                onSkipTrailer = { advanceTrailer() },
+                                onStartMovieDirectly = {
+                                    stage = PreShowStage.FEATURE_PRESENTATION
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -902,8 +906,16 @@ private fun TrailerAct(
 private fun FeaturePresentationAct(
     onFinished: () -> Unit
 ) {
+    val contentAlpha = remember { Animatable(0f) }
+    val fadeToBlack = remember { Animatable(0f) }
+
     LaunchedEffect(Unit) {
-        delay(3600)
+        // Smoothly fade in "Show Time!"
+        contentAlpha.animateTo(1f, animationSpec = tween(400))
+        // Display for 2 seconds
+        delay(2000)
+        // Fade smoothly into black / movie handoff
+        fadeToBlack.animateTo(1f, animationSpec = tween(750, easing = LinearEasing))
         onFinished()
     }
 
@@ -921,38 +933,51 @@ private fun FeaturePresentationAct(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            modifier = Modifier.padding(horizontal = 48.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(horizontal = 48.dp)
+                .graphicsLayer {
+                    alpha = contentAlpha.value
+                    scaleX = scale
+                    scaleY = scale
+                }
         ) {
             Text(
-                text = "AND NOW",
-                color = CinemaGold.copy(alpha = 0.9f),
-                style = MaterialTheme.typography.titleLarge.copy(
+                text = "🍿 NUVIO+ CINEMA",
+                color = CinemaGold.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 10.sp
+                    letterSpacing = 6.sp
                 )
             )
 
             Text(
-                text = "OUR FEATURE\nPRESENTATION",
+                text = "Show Time!",
                 color = CinemaGold,
                 style = MaterialTheme.typography.displayLarge.copy(
                     fontWeight = FontWeight.Black,
-                    fontSize = 62.sp,
-                    lineHeight = 72.sp,
-                    letterSpacing = 12.sp
+                    fontSize = 76.sp,
+                    letterSpacing = 10.sp
                 ),
                 textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
 
             Text(
-                text = "SIT BACK, RELAX & ENJOY THE FILM",
-                color = Color.White.copy(alpha = 0.75f),
+                text = "OUR FEATURE PRESENTATION",
+                color = Color.White.copy(alpha = 0.80f),
                 style = MaterialTheme.typography.titleSmall.copy(
-                    letterSpacing = 4.sp
+                    letterSpacing = 5.sp
                 )
+            )
+        }
+
+        if (fadeToBlack.value > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = fadeToBlack.value))
             )
         }
     }

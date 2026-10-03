@@ -120,7 +120,7 @@ class MoviePreShowService @Inject constructor(
             cast = cast
         )
 
-        val trailerList = resolveTrailers(movieTitle, movieYear, trailerYtIds)
+        val trailerList = resolveUpcomingTheatricalTrailers(movieTitle)
 
         val pkg = PreShowPackage(trivia = triviaList, trailers = trailerList)
         cache[cacheKey] = pkg
@@ -482,59 +482,28 @@ class MoviePreShowService @Inject constructor(
     }
 
     // ---------------------------------------------------------------------
-    // Trailer Resolution
+    // Upcoming Theatrical Trailer Resolution (Coming Attractions)
     // ---------------------------------------------------------------------
 
-    private suspend fun resolveTrailers(
-        movieTitle: String,
-        movieYear: String?,
-        trailerYtIds: List<String>
+    private suspend fun resolveUpcomingTheatricalTrailers(
+        movieTitle: String
     ): List<PreShowTrailer> {
         val service = trailerService ?: return emptyList()
-        val results = mutableListOf<PreShowTrailer>()
-
-        // 1. Try provided YouTube trailer IDs (up to 2)
-        val validIds = trailerYtIds.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(2)
-        for (ytId in validIds) {
-            try {
-                val source = service.getTrailerPlaybackSourceFromYouTubeUrl("https://www.youtube.com/watch?v=$ytId")
-                if (source != null && source.videoUrl.isNotBlank()) {
-                    results.add(
-                        PreShowTrailer(
-                            title = "$movieTitle — Official Trailer",
-                            videoUrl = source.videoUrl,
-                            audioUrl = source.audioUrl
-                        )
-                    )
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to resolve trailer for ytId $ytId: ${t.message}")
-            }
-        }
-
-        // 2. If no trailer resolved from IDs, search TMDB by title/year
-        if (results.isEmpty()) {
-            try {
-                val source = service.getTrailerPlaybackSource(
-                    title = movieTitle,
-                    year = movieYear,
-                    tmdbId = null,
-                    type = "movie"
+        return try {
+            val upcoming = service.getUpcomingTheatricalTrailers(
+                excludeTitle = movieTitle,
+                limit = 2
+            )
+            upcoming.map { item ->
+                PreShowTrailer(
+                    title = item.title,
+                    videoUrl = item.videoUrl,
+                    audioUrl = item.audioUrl
                 )
-                if (source != null && source.videoUrl.isNotBlank()) {
-                    results.add(
-                        PreShowTrailer(
-                            title = "$movieTitle — Theatrical Trailer",
-                            videoUrl = source.videoUrl,
-                            audioUrl = source.audioUrl
-                        )
-                    )
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to resolve fallback trailer for $movieTitle: ${t.message}")
             }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to resolve upcoming theatrical trailers: ${t.message}", t)
+            emptyList()
         }
-
-        return results
     }
 }

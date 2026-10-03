@@ -224,6 +224,110 @@ class TrailerService(
     }
 
     /**
+     * Retrieves upcoming theatrical trailers for unreleased or newly upcoming movies,
+     * specifically excluding the movie currently being watched.
+     */
+    suspend fun getUpcomingTheatricalTrailers(
+        excludeTitle: String? = null,
+        excludeTmdbId: Int? = null,
+        limit: Int = 2
+    ): List<UpcomingTheatricalTrailer> = withContext(Dispatchers.IO) {
+        if (limit <= 0) return@withContext emptyList()
+        val collected = mutableListOf<UpcomingTheatricalTrailer>()
+
+        try {
+            val apiKey = tmdbService.apiKey()
+            if (apiKey.isBlank()) return@withContext emptyList()
+
+            // 1. Primary query: upcoming movies for the US theatrical market
+            val upcomingResponse = runCatching {
+                tmdbApi.getUpcomingMovies(apiKey = apiKey, region = "US")
+            }.getOrNull()
+
+            val candidates = if (upcomingResponse?.isSuccessful == true && !upcomingResponse.body()?.results.isNullOrEmpty()) {
+                upcomingResponse.body()?.results.orEmpty()
+            } else {
+                // Fallback query: discover movies released today or in the future, sorted by popularity
+                val todayStr = runCatching { java.time.LocalDate.now(clock).toString() }.getOrDefault("2026-10-01")
+                val discoverResponse = runCatching {
+                    tmdbApi.discoverMovies(
+                        apiKey = apiKey,
+                        releaseDateGte = todayStr,
+                        sortBy = "popularity.desc"
+                    )
+                }.getOrNull()
+                discoverResponse?.body()?.results.orEmpty()
+            }
+
+            if (candidates.isEmpty()) {
+                Log.w(TAG, "No upcoming movie candidates found from TMDB")
+                return@withContext emptyList()
+            }
+
+            // 2. Filter candidates: ensure title exists, exclude the current movie
+            val normExclude = excludeTitle?.trim()?.lowercase()
+            val filtered = candidates.filter { c ->
+                val title = c.title?.trim()
+                if (title.isNullOrBlank() || c.id <= 0) return@filter false
+                if (excludeTmdbId != null && c.id == excludeTmdbId) return@filter false
+                if (!normExclude.isNullOrBlank()) {
+                    val lowTitle = title.lowercase()
+                    val lowOrig = c.originalTitle?.trim()?.lowercase()
+                    if (lowTitle == normExclude || lowTitle.contains(normExclude) || normExclude.contains(lowTitle)) return@filter false
+                    if (lowOrig != null && (lowOrig == normExclude || lowOrig.contains(normExclude) || normExclude.contains(lowOrig))) return@filter false
+                }
+                true
+            }
+
+            val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+
+            // 3. For each candidate in popularity order, find and resolve its YouTube trailer
+            for (candidate in filtered) {
+                if (collected.size >= limit) break
+                val title = candidate.title ?: continue
+
+                val videos = fetchTmdbMovieVideos(candidate.id, tmdbLanguage)
+                val youtubeVideos = videos.filter {
+                    it.site.equals("YouTube", ignoreCase = true) && !it.key.isNullOrBlank()
+                }
+                if (youtubeVideos.isEmpty()) continue
+
+                val trailers = youtubeVideos.filter { it.type.equals("Trailer", ignoreCase = true) }
+                val teasers = youtubeVideos.filter { it.type.equals("Teaser", ignoreCase = true) }
+
+                val bestVideo = trailers.firstOrNull { it.official == true }
+                    ?: trailers.firstOrNull()
+                    ?: teasers.firstOrNull { it.official == true }
+                    ?: teasers.firstOrNull()
+                    ?: continue
+
+                val key = bestVideo.key ?: continue
+                val source = getTrailerPlaybackSourceFromYouTubeUrl(
+                    youtubeUrl = "https://www.youtube.com/watch?v=$key",
+                    title = title
+                )
+
+                if (source != null && source.videoUrl.isNotBlank()) {
+                    Log.d(TAG, "Resolved upcoming theatrical trailer: '$title' (key=${obfuscateYoutubeKey(key)})")
+                    collected.add(
+                        UpcomingTheatricalTrailer(
+                            title = title,
+                            videoUrl = source.videoUrl,
+                            audioUrl = source.audioUrl,
+                            tmdbId = candidate.id,
+                            releaseDate = candidate.releaseDate
+                        )
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Error resolving upcoming theatrical trailers: ${t.message}", t)
+        }
+
+        collected
+    }
+
+    /**
      * Resolve a YouTube trailer URL to a playback source (prefers in-app extraction).
      */
     suspend fun getTrailerPlaybackSourceFromYouTubeUrl(
