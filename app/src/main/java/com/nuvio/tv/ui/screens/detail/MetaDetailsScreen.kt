@@ -1968,7 +1968,7 @@ private fun MetaDetailsContent(
                     genre = meta.genres,
                     overview = meta.description,
                     director = meta.director,
-                    cast = meta.cast.map { it.name },
+                    cast = meta.cast,
                     trailerYtIds = trailerCandidates
                 )
                 movieTrivia = pkg.trivia
@@ -1994,7 +1994,7 @@ private fun MetaDetailsContent(
                             genre = meta.genres,
                             overview = meta.description,
                             director = meta.director,
-                            cast = meta.cast.map { it.name },
+                            cast = meta.cast,
                             trailerYtIds = trailerCandidates
                         )
                         movieTrivia = pkg.trivia
