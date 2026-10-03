@@ -1852,8 +1852,8 @@ private fun MetaDetailsContent(
     var chicReviewTargetTitle by remember { mutableStateOf("") }
 
     var showPreShowDialog by remember { mutableStateOf(false) }
-    var movieTrivia by remember { mutableStateOf<List<com.nuvio.tv.core.preshow.MovieTriviaItem>>(emptyList()) }
-    var moviePreShowTrailers by remember { mutableStateOf<List<com.nuvio.tv.core.preshow.PreShowTrailer>>(emptyList()) }
+    var movieTrivia by remember(meta.id) { mutableStateOf<List<com.nuvio.tv.core.preshow.MovieTriviaItem>>(emptyList()) }
+    var moviePreShowTrailers by remember(meta.id) { mutableStateOf<List<com.nuvio.tv.core.preshow.PreShowTrailer>>(emptyList()) }
     var isMovieTriviaLoading by remember { mutableStateOf(false) }
 
     val openChicReview: (String, String?, List<String>?, String?, Boolean, String?, Int?, Int?) -> Unit = { rTitle, rOverview, rGenre, rYear, isEp, epTitle, sNum, epNum ->
@@ -1962,7 +1962,7 @@ private fun MetaDetailsContent(
 
     // Eagerly prefetch pre-show trivia and trailers in background for movies for 0ms instant launch
     LaunchedEffect(meta.id, meta.apiType) {
-        if (meta.apiType.equals("movie", ignoreCase = true) && movieTrivia.isEmpty()) {
+        if (meta.apiType.equals("movie", ignoreCase = true) && (movieTrivia.isEmpty() || moviePreShowTrailers.isEmpty())) {
             try {
                 val pkg = moviePreShowService.loadPreShow(
                     context = localCtx,

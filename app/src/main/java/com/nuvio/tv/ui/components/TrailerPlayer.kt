@@ -57,7 +57,8 @@ fun TrailerPlayer(
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500)),
-    trailerPlayerPool: TrailerPlayerPool? = null
+    trailerPlayerPool: TrailerPlayerPool? = null,
+    standalonePlayer: ExoPlayer? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -80,11 +81,9 @@ fun TrailerPlayer(
     // Resolve pool: explicit parameter > CompositionLocal
     val resolvedPool = trailerPlayerPool ?: LocalTrailerPlayerPool.current
 
-    // Use the shared pool instance instead of creating a new ExoPlayer per focus.
-    // The pool keeps one ExoPlayer alive across poster focus changes, eliminating
-    // the expensive create/teardown cycle that was the app-launch bottleneck.
-    val trailerPlayer = remember(resolvedPool) {
-        resolvedPool?.acquire()
+    // Use standalone player if provided (e.g. cinema pre-show), otherwise acquire from pool
+    val trailerPlayer = remember(standalonePlayer, resolvedPool) {
+        standalonePlayer ?: resolvedPool?.acquire()
     }
 
     // Configure player settings when acquired
@@ -105,13 +104,13 @@ fun TrailerPlayer(
             hasRenderedFirstFrame = false
             player.stop()
             player.clearMediaItems()
+            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
             if (!trailerAudioUrl.isNullOrBlank()) {
-                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerAudioUrl))
                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
             } else {
-                player.setMediaItem(MediaItem.fromUri(trailerUrl))
+                player.setMediaSource(videoSource)
             }
             player.prepare()
             player.playWhenReady = !isPaused
@@ -166,6 +165,9 @@ fun TrailerPlayer(
         val player = trailerPlayer ?: return@DisposableEffect onDispose {}
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    hasRenderedFirstFrame = true
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     if (hasRenderedFirstFrame || (player.currentPosition > 1000L)) {
                         currentOnEnded()
@@ -188,13 +190,13 @@ fun TrailerPlayer(
                 Lifecycle.Event.ON_RESUME -> {
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
                         if (player.currentMediaItem == null) {
+                            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                             if (!currentTrailerAudioUrl.isNullOrBlank()) {
-                                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerAudioUrl!!))
                                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                             } else {
-                                player.setMediaItem(MediaItem.fromUri(currentTrailerUrl!!))
+                                player.setMediaSource(videoSource)
                             }
                             player.prepare()
                         }
@@ -217,8 +219,10 @@ fun TrailerPlayer(
         onDispose {
             runCatching { activityLifecycleOwner.lifecycle.removeObserver(observer) }
             runCatching { player.removeListener(listener) }
-            // Only stop — never release. The pool manages the ExoPlayer lifecycle.
-            resolvedPool?.stop()
+            if (standalonePlayer == null) {
+                // Only stop — never release. The pool manages the ExoPlayer lifecycle.
+                resolvedPool?.stop()
+            }
         }
     }
 

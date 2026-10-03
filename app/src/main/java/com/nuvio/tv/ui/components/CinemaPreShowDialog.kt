@@ -60,6 +60,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.C
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -110,9 +112,19 @@ fun CinemaPreShowDialog(
     var userSelectedIndex by remember { mutableStateOf<Int?>(null) }
     var answerRevealed by remember { mutableStateOf(false) }
 
+    val preShowTrailerPlayer = remember(context) {
+        ExoPlayer.Builder(context).build().apply {
+            volume = 1f
+            videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             audioPlayer.release()
+            preShowTrailerPlayer.stop()
+            preShowTrailerPlayer.clearMediaItems()
+            preShowTrailerPlayer.release()
         }
     }
 
@@ -211,7 +223,10 @@ fun CinemaPreShowDialog(
                                 true
                             } else if (answerRevealed && (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
                                 keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ||
-                                keyCode == KeyEvent.KEYCODE_MEDIA_NEXT)
+                                keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
+                                keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                                keyCode == KeyEvent.KEYCODE_ENTER ||
+                                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)
                             ) {
                                 advanceTrivia()
                                 true
@@ -335,6 +350,7 @@ fun CinemaPreShowDialog(
                             trailer = currentTrailer,
                             trailerIndex = currentTrailerIndex,
                             totalTrailers = trailers.size,
+                            standalonePlayer = preShowTrailerPlayer,
                             onTrailerEnded = { advanceTrailer() },
                             onSkipTrailer = { advanceTrailer() },
                             onStartMovieDirectly = {
@@ -576,6 +592,7 @@ private fun TriviaAct(
             )
 
             // Multiple choice option cards
+            var focusedOptionIndex by remember(item) { mutableIntStateOf(0) }
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -593,6 +610,7 @@ private fun TriviaAct(
                         isSelected = isUserSelection,
                         enabled = !answerRevealed,
                         focusRequester = if (optIdx == 0) firstOptionFocus else null,
+                        onFocused = { focusedOptionIndex = optIdx },
                         onClick = {
                             if (!answerRevealed) {
                                 onOptionSelected(optIdx)
@@ -645,7 +663,7 @@ private fun TriviaAct(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (answerRevealed) "[ D-PAD RIGHT: NEXT QUESTION ]" else "[ SELECT YOUR GUESS OR WAIT FOR TIMER ]",
+                text = if (answerRevealed) "[ ENTER / D-PAD RIGHT: NEXT QUESTION ]" else "[ ENTER: SELECT ANSWER ]",
                 style = MaterialTheme.typography.labelSmall.copy(
                     letterSpacing = 2.sp
                 ),
@@ -672,10 +690,17 @@ private fun TriviaChoiceCard(
     isSelected: Boolean,
     enabled: Boolean,
     focusRequester: FocusRequester?,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            onFocused()
+        }
+    }
 
     val cardBg = when {
         isCorrect -> Color(0x3D00E676)
@@ -709,7 +734,22 @@ private fun TriviaChoiceCard(
             .border(if (isFocused || isCorrect || isWrong) 1.8.dp else 1.dp, cardBorder, RoundedCornerShape(10.dp))
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusable(enabled = enabled, interactionSource = interactionSource)
-            .clickable(enabled = enabled) { onClick() }
+            .onPreviewKeyEvent { event ->
+                if (!enabled) return@onPreviewKeyEvent false
+                val native = event.nativeKeyEvent
+                if (native.action == KeyEvent.ACTION_DOWN) {
+                    val code = native.keyCode
+                    if (code == KeyEvent.KEYCODE_DPAD_CENTER ||
+                        code == KeyEvent.KEYCODE_ENTER ||
+                        code == KeyEvent.KEYCODE_NUMPAD_ENTER
+                    ) {
+                        onClick()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            }
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = null) { onClick() }
             .padding(horizontal = 18.dp, vertical = 12.dp)
     ) {
         Row(
@@ -817,6 +857,7 @@ private fun TrailerAct(
     trailer: PreShowTrailer,
     trailerIndex: Int,
     totalTrailers: Int,
+    standalonePlayer: ExoPlayer? = null,
     onTrailerEnded: () -> Unit,
     onSkipTrailer: () -> Unit,
     onStartMovieDirectly: () -> Unit
@@ -828,6 +869,7 @@ private fun TrailerAct(
             isPlaying = true,
             isPaused = false,
             muted = false,
+            standalonePlayer = standalonePlayer,
             onEnded = onTrailerEnded,
             modifier = Modifier.fillMaxSize()
         )

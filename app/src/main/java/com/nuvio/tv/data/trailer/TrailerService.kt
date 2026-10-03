@@ -39,10 +39,7 @@ private val CURATED_UPCOMING_TRAILERS: List<CuratedUpcomingTrailer> = listOf(
     CuratedUpcomingTrailer("Tron: Ares", "YShVEXb7-ic", "2025-10-10"),
     CuratedUpcomingTrailer("Mickey 17", "osYpGSz_0i4", "2025-04-18"),
     CuratedUpcomingTrailer("From the World of John Wick: Ballerina", "yNN2PoilSp4", "2025-06-06"),
-    CuratedUpcomingTrailer("How To Train Your Dragon", "5lzoxHSn0C0", "2025-06-13"),
-    CuratedUpcomingTrailer("Gladiator II", "4rgYUipGJNo", "2024-11-22"),
-    CuratedUpcomingTrailer("Paddington in Peru", "UcofvXaXexs", "2024-11-08"),
-    CuratedUpcomingTrailer("Wicked", "hfef-5JTUag", "2024-11-22")
+    CuratedUpcomingTrailer("How To Train Your Dragon", "5lzoxHSn0C0", "2025-06-13")
 )
 
 @Singleton
@@ -255,7 +252,13 @@ class TrailerService(
         if (normExclude.isBlank()) return false
 
         fun clean(str: String): String =
-            str.lowercase().replace(Regex("[^a-z0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim()
+            str.lowercase()
+                .replace(Regex("\\((?:19|20)\\d{2}\\)"), "")
+                .replace(Regex("\\[(?:19|20)\\d{2}\\]"), "")
+                .replace(Regex("\\b(?:19|20)\\d{2}\\b"), "")
+                .replace(Regex("[^a-z0-9\\s]"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
 
         val cleanExclude = clean(normExclude)
         val cleanCandidate = clean(candidateTitle.orEmpty())
@@ -280,8 +283,11 @@ class TrailerService(
             if (coreOriginal.contains(coreExclude) || coreExclude.contains(coreOriginal)) return true
         }
 
-        if (candidateTitle?.contains(normExclude, ignoreCase = true) == true) return true
-        if (normExclude.contains(candidateTitle?.trim()?.lowercase().orEmpty())) return true
+        val rawExcludeClean = normExclude.replace(Regex("\\((?:19|20)\\d{2}\\)"), "").trim()
+        if (rawExcludeClean.isNotBlank()) {
+            if (candidateTitle?.contains(rawExcludeClean, ignoreCase = true) == true) return true
+            if (rawExcludeClean.contains(candidateTitle?.trim()?.lowercase().orEmpty())) return true
+        }
 
         return false
     }
@@ -323,6 +329,8 @@ class TrailerService(
             return true
         }
 
+        val todayStr = runCatching { java.time.LocalDate.now(clock).toString() }.getOrDefault("2025-01-01")
+
         // 1. Try TMDB if API key is present
         try {
             val apiKey = runCatching { tmdbService.apiKey() }.getOrDefault("")
@@ -334,7 +342,6 @@ class TrailerService(
                 val candidates = if (upcomingResponse?.isSuccessful == true && !upcomingResponse.body()?.results.isNullOrEmpty()) {
                     upcomingResponse.body()?.results.orEmpty()
                 } else {
-                    val todayStr = runCatching { java.time.LocalDate.now(clock).toString() }.getOrDefault("2026-10-01")
                     val discoverResponse = runCatching {
                         tmdbApi.discoverMovies(
                             apiKey = apiKey,
@@ -350,6 +357,9 @@ class TrailerService(
                     if (title.isNullOrBlank() || c.id <= 0) return@filter false
                     if (excludeTmdbId != null && c.id == excludeTmdbId) return@filter false
                     if (isExcludedTitle(c.title, c.originalTitle, excludeTitle)) return@filter false
+                    // Ensure unreleased movies: release date must not be in the past
+                    val rDate = c.releaseDate?.trim()
+                    if (!rDate.isNullOrBlank() && rDate < todayStr) return@filter false
                     true
                 }
 

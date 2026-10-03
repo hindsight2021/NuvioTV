@@ -105,7 +105,7 @@ class MoviePreShowService @Inject constructor(
         trailerYtIds: List<String> = emptyList()
     ): PreShowPackage = withContext(Dispatchers.IO) {
         val cacheKey = "$movieTitle|${movieYear.orEmpty()}".lowercase().trim()
-        cache[cacheKey]?.let { cached ->
+        cache[cacheKey]?.takeIf { it.trailers.isNotEmpty() && it.trivia.isNotEmpty() }?.let { cached ->
             Log.d(TAG, "Returning cached pre-show package for: $movieTitle ($movieYear)")
             return@withContext cached
         }
