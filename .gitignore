@@ -38,6 +38,7 @@ docs/tv_qr_login.sql
 docss
 benchmark
 .mcp.json
+release_apks/
 build-artifacts/
 build-artifacts-v2/
 db/

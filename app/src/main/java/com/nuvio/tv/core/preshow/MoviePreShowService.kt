@@ -123,7 +123,9 @@ class MoviePreShowService @Inject constructor(
         val trailerList = resolveUpcomingTheatricalTrailers(movieTitle)
 
         val pkg = PreShowPackage(trivia = triviaList, trailers = trailerList)
-        cache[cacheKey] = pkg
+        if (triviaList.isNotEmpty() && trailerList.isNotEmpty()) {
+            cache[cacheKey] = pkg
+        }
         pkg
     }
 

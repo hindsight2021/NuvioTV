@@ -22,6 +22,29 @@ private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
 private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 
+private data class CuratedUpcomingTrailer(
+    val title: String,
+    val youtubeKey: String,
+    val releaseDate: String? = null,
+    val tmdbId: Int? = null
+)
+
+private val CURATED_UPCOMING_TRAILERS: List<CuratedUpcomingTrailer> = listOf(
+    CuratedUpcomingTrailer("Superman", "uhUht6vAsMY", "2025-07-11"),
+    CuratedUpcomingTrailer("Mission: Impossible – The Final Reckoning", "NOhDyUmT9z0", "2025-05-23"),
+    CuratedUpcomingTrailer("Captain America: Brave New World", "uJYTz1CgN14", "2025-02-14"),
+    CuratedUpcomingTrailer("Thunderbolts*", "v-94Snw-H4o", "2025-05-02"),
+    CuratedUpcomingTrailer("A Minecraft Movie", "bkEl6Ib3DpQ", "2025-04-04"),
+    CuratedUpcomingTrailer("F1", "3qX4xNkEHPU", "2025-06-27"),
+    CuratedUpcomingTrailer("Tron: Ares", "YShVEXb7-ic", "2025-10-10"),
+    CuratedUpcomingTrailer("Mickey 17", "osYpGSz_0i4", "2025-04-18"),
+    CuratedUpcomingTrailer("From the World of John Wick: Ballerina", "yNN2PoilSp4", "2025-06-06"),
+    CuratedUpcomingTrailer("How To Train Your Dragon", "5lzoxHSn0C0", "2025-06-13"),
+    CuratedUpcomingTrailer("Gladiator II", "4rgYUipGJNo", "2024-11-22"),
+    CuratedUpcomingTrailer("Paddington in Peru", "UcofvXaXexs", "2024-11-08"),
+    CuratedUpcomingTrailer("Wicked", "hfef-5JTUag", "2024-11-22")
+)
+
 @Singleton
 class TrailerService(
     private val trailerApi: TrailerApi,
@@ -224,8 +247,51 @@ class TrailerService(
     }
 
     /**
+     * Strictly verifies whether a candidate title matches the movie currently being watched.
+     * Prevents ever playing a trailer for the current movie during pre-show.
+     */
+    private fun isExcludedTitle(candidateTitle: String?, originalTitle: String? = null, excludeTitle: String?): Boolean {
+        val normExclude = excludeTitle?.trim()?.lowercase() ?: return false
+        if (normExclude.isBlank()) return false
+
+        fun clean(str: String): String =
+            str.lowercase().replace(Regex("[^a-z0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim()
+
+        val cleanExclude = clean(normExclude)
+        val cleanCandidate = clean(candidateTitle.orEmpty())
+        val cleanOriginal = clean(originalTitle.orEmpty())
+
+        if (cleanCandidate.isBlank()) return true
+        if (cleanExclude.isBlank()) return false
+
+        if (cleanCandidate == cleanExclude || cleanOriginal == cleanExclude) return true
+
+        fun stripArticles(s: String): String = s.removePrefix("the ").removePrefix("a ").removePrefix("an ").trim()
+        val coreExclude = stripArticles(cleanExclude)
+        val coreCandidate = stripArticles(cleanCandidate)
+        val coreOriginal = stripArticles(cleanOriginal)
+
+        if (coreCandidate.isNotEmpty() && coreExclude.isNotEmpty()) {
+            if (coreCandidate == coreExclude) return true
+            if (coreCandidate.contains(coreExclude) || coreExclude.contains(coreCandidate)) return true
+        }
+        if (coreOriginal.isNotEmpty() && coreExclude.isNotEmpty()) {
+            if (coreOriginal == coreExclude) return true
+            if (coreOriginal.contains(coreExclude) || coreExclude.contains(coreOriginal)) return true
+        }
+
+        if (candidateTitle?.contains(normExclude, ignoreCase = true) == true) return true
+        if (normExclude.contains(candidateTitle?.trim()?.lowercase().orEmpty())) return true
+
+        return false
+    }
+
+    /**
      * Retrieves upcoming theatrical trailers for unreleased or newly upcoming movies,
      * specifically excluding the movie currently being watched.
+     *
+     * Falls back to the curated upcoming theatrical catalog if TMDB is unavailable,
+     * returns 401, or provides fewer than [limit] trailers.
      */
     suspend fun getUpcomingTheatricalTrailers(
         excludeTitle: String? = null,
@@ -234,94 +300,113 @@ class TrailerService(
     ): List<UpcomingTheatricalTrailer> = withContext(Dispatchers.IO) {
         if (limit <= 0) return@withContext emptyList()
         val collected = mutableListOf<UpcomingTheatricalTrailer>()
+        val seenTitles = mutableSetOf<String>()
+        val seenKeys = mutableSetOf<String>()
 
-        try {
-            val apiKey = tmdbService.apiKey()
-            if (apiKey.isBlank()) return@withContext emptyList()
-
-            // 1. Primary query: upcoming movies for the US theatrical market
-            val upcomingResponse = runCatching {
-                tmdbApi.getUpcomingMovies(apiKey = apiKey, region = "US")
-            }.getOrNull()
-
-            val candidates = if (upcomingResponse?.isSuccessful == true && !upcomingResponse.body()?.results.isNullOrEmpty()) {
-                upcomingResponse.body()?.results.orEmpty()
-            } else {
-                // Fallback query: discover movies released today or in the future, sorted by popularity
-                val todayStr = runCatching { java.time.LocalDate.now(clock).toString() }.getOrDefault("2026-10-01")
-                val discoverResponse = runCatching {
-                    tmdbApi.discoverMovies(
-                        apiKey = apiKey,
-                        releaseDateGte = todayStr,
-                        sortBy = "popularity.desc"
-                    )
-                }.getOrNull()
-                discoverResponse?.body()?.results.orEmpty()
-            }
-
-            if (candidates.isEmpty()) {
-                Log.w(TAG, "No upcoming movie candidates found from TMDB")
-                return@withContext emptyList()
-            }
-
-            // 2. Filter candidates: ensure title exists, exclude the current movie
-            val normExclude = excludeTitle?.trim()?.lowercase()
-            val filtered = candidates.filter { c ->
-                val title = c.title?.trim()
-                if (title.isNullOrBlank() || c.id <= 0) return@filter false
-                if (excludeTmdbId != null && c.id == excludeTmdbId) return@filter false
-                if (!normExclude.isNullOrBlank()) {
-                    val lowTitle = title.lowercase()
-                    val lowOrig = c.originalTitle?.trim()?.lowercase()
-                    if (lowTitle == normExclude || lowTitle.contains(normExclude) || normExclude.contains(lowTitle)) return@filter false
-                    if (lowOrig != null && (lowOrig == normExclude || lowOrig.contains(normExclude) || normExclude.contains(lowOrig))) return@filter false
-                }
-                true
-            }
-
-            val tmdbLanguage = getPreferredTmdbTrailerLanguage()
-
-            // 3. For each candidate in popularity order, find and resolve its YouTube trailer
-            for (candidate in filtered) {
-                if (collected.size >= limit) break
-                val title = candidate.title ?: continue
-
-                val videos = fetchTmdbMovieVideos(candidate.id, tmdbLanguage)
-                val youtubeVideos = videos.filter {
-                    it.site.equals("YouTube", ignoreCase = true) && !it.key.isNullOrBlank()
-                }
-                if (youtubeVideos.isEmpty()) continue
-
-                val trailers = youtubeVideos.filter { it.type.equals("Trailer", ignoreCase = true) }
-                val teasers = youtubeVideos.filter { it.type.equals("Teaser", ignoreCase = true) }
-
-                val bestVideo = trailers.firstOrNull { it.official == true }
-                    ?: trailers.firstOrNull()
-                    ?: teasers.firstOrNull { it.official == true }
-                    ?: teasers.firstOrNull()
-                    ?: continue
-
-                val key = bestVideo.key ?: continue
-                val source = getTrailerPlaybackSourceFromYouTubeUrl(
-                    youtubeUrl = "https://www.youtube.com/watch?v=$key",
-                    title = title
+        fun addTrailer(title: String, source: TrailerPlaybackSource, key: String, tmdbId: Int?, releaseDate: String?): Boolean {
+            if (collected.size >= limit) return false
+            if (source.videoUrl.isBlank()) return false
+            if (isExcludedTitle(title, null, excludeTitle)) return false
+            val cleanT = title.trim().lowercase()
+            if (cleanT in seenTitles || key in seenKeys) return false
+            seenTitles.add(cleanT)
+            seenKeys.add(key)
+            collected.add(
+                UpcomingTheatricalTrailer(
+                    title = title,
+                    videoUrl = source.videoUrl,
+                    audioUrl = source.audioUrl,
+                    tmdbId = tmdbId,
+                    releaseDate = releaseDate
                 )
+            )
+            return true
+        }
 
-                if (source != null && source.videoUrl.isNotBlank()) {
-                    Log.d(TAG, "Resolved upcoming theatrical trailer: '$title' (key=${obfuscateYoutubeKey(key)})")
-                    collected.add(
-                        UpcomingTheatricalTrailer(
-                            title = title,
-                            videoUrl = source.videoUrl,
-                            audioUrl = source.audioUrl,
-                            tmdbId = candidate.id,
-                            releaseDate = candidate.releaseDate
+        // 1. Try TMDB if API key is present
+        try {
+            val apiKey = runCatching { tmdbService.apiKey() }.getOrDefault("")
+            if (apiKey.isNotBlank()) {
+                val upcomingResponse = runCatching {
+                    tmdbApi.getUpcomingMovies(apiKey = apiKey, region = "US")
+                }.getOrNull()
+
+                val candidates = if (upcomingResponse?.isSuccessful == true && !upcomingResponse.body()?.results.isNullOrEmpty()) {
+                    upcomingResponse.body()?.results.orEmpty()
+                } else {
+                    val todayStr = runCatching { java.time.LocalDate.now(clock).toString() }.getOrDefault("2026-10-01")
+                    val discoverResponse = runCatching {
+                        tmdbApi.discoverMovies(
+                            apiKey = apiKey,
+                            releaseDateGte = todayStr,
+                            sortBy = "popularity.desc"
                         )
+                    }.getOrNull()
+                    discoverResponse?.body()?.results.orEmpty()
+                }
+
+                val filtered = candidates.filter { c ->
+                    val title = c.title?.trim()
+                    if (title.isNullOrBlank() || c.id <= 0) return@filter false
+                    if (excludeTmdbId != null && c.id == excludeTmdbId) return@filter false
+                    if (isExcludedTitle(c.title, c.originalTitle, excludeTitle)) return@filter false
+                    true
+                }
+
+                val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+
+                for (candidate in filtered) {
+                    if (collected.size >= limit) break
+                    val title = candidate.title ?: continue
+
+                    val videos = fetchTmdbMovieVideos(candidate.id, tmdbLanguage)
+                    val youtubeVideos = videos.filter {
+                        it.site.equals("YouTube", ignoreCase = true) && !it.key.isNullOrBlank()
+                    }
+                    if (youtubeVideos.isEmpty()) continue
+
+                    val trailers = youtubeVideos.filter { it.type.equals("Trailer", ignoreCase = true) }
+                    val teasers = youtubeVideos.filter { it.type.equals("Teaser", ignoreCase = true) }
+
+                    val bestVideo = trailers.firstOrNull { it.official == true }
+                        ?: trailers.firstOrNull()
+                        ?: teasers.firstOrNull { it.official == true }
+                        ?: teasers.firstOrNull()
+                        ?: continue
+
+                    val key = bestVideo.key ?: continue
+                    val source = getTrailerPlaybackSourceFromYouTubeUrl(
+                        youtubeUrl = "https://www.youtube.com/watch?v=$key",
+                        title = title
                     )
+
+                    if (source != null && source.videoUrl.isNotBlank()) {
+                        Log.d(TAG, "Resolved upcoming theatrical trailer from TMDB: '$title' (key=${obfuscateYoutubeKey(key)})")
+                        addTrailer(title, source, key, candidate.id, candidate.releaseDate)
+                    }
                 }
             }
         } catch (t: Throwable) {
-            Log.w(TAG, "Error resolving upcoming theatrical trailers: ${t.message}", t)
+            Log.w(TAG, "Error resolving upcoming theatrical trailers from TMDB: ${t.message}", t)
+        }
+
+        // 2. Fallback / Backfill from Curated Catalog to ensure `limit` trailers are ALWAYS returned
+        if (collected.size < limit) {
+            val curatedFiltered = CURATED_UPCOMING_TRAILERS
+                .filter { !isExcludedTitle(it.title, null, excludeTitle) }
+                .shuffled()
+
+            for (curated in curatedFiltered) {
+                if (collected.size >= limit) break
+                val source = getTrailerPlaybackSourceFromYouTubeUrl(
+                    youtubeUrl = "https://www.youtube.com/watch?v=${curated.youtubeKey}",
+                    title = curated.title
+                )
+                if (source != null && source.videoUrl.isNotBlank()) {
+                    Log.d(TAG, "Resolved upcoming theatrical trailer from curated catalog: '${curated.title}' (key=${obfuscateYoutubeKey(curated.youtubeKey)})")
+                    addTrailer(curated.title, source, curated.youtubeKey, curated.tmdbId, curated.releaseDate)
+                }
+            }
         }
 
         collected

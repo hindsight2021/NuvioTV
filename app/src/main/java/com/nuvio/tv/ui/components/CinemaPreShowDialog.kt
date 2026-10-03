@@ -331,18 +331,16 @@ fun CinemaPreShowDialog(
                     if (currentTrailer == null) {
                         LaunchedEffect(Unit) { stage = PreShowStage.FEATURE_PRESENTATION }
                     } else {
-                        key(currentTrailerIndex, currentTrailer.videoUrl) {
-                            TrailerAct(
-                                trailer = currentTrailer,
-                                trailerIndex = currentTrailerIndex,
-                                totalTrailers = trailers.size,
-                                onTrailerEnded = { advanceTrailer() },
-                                onSkipTrailer = { advanceTrailer() },
-                                onStartMovieDirectly = {
-                                    stage = PreShowStage.FEATURE_PRESENTATION
-                                }
-                            )
-                        }
+                        TrailerAct(
+                            trailer = currentTrailer,
+                            trailerIndex = currentTrailerIndex,
+                            totalTrailers = trailers.size,
+                            onTrailerEnded = { advanceTrailer() },
+                            onSkipTrailer = { advanceTrailer() },
+                            onStartMovieDirectly = {
+                                stage = PreShowStage.FEATURE_PRESENTATION
+                            }
+                        )
                     }
                 }
 

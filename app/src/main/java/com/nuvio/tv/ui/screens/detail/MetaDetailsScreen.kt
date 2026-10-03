@@ -1986,7 +1986,7 @@ private fun MetaDetailsContent(
             showPreShowDialog = true
             // Eagerly pre-scrape streams in the background during pre-show for instant handoff
             onPreScrapeStreams(meta.id, meta.apiType, meta.name)
-            if (movieTrivia.isEmpty()) {
+            if (movieTrivia.isEmpty() || moviePreShowTrailers.isEmpty()) {
                 isMovieTriviaLoading = true
                 coroutineScope.launch {
                     try {
