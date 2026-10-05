@@ -2443,6 +2443,37 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
             }
         }
     }
+
+    if (nextVideo == null) {
+        val s = progress.season
+        val e = progress.episode
+        if (s != null && e != null && currentMeta.releaseInfo?.endsWith("-") == true) {
+            val episodes = currentMeta.videos
+                .filter { it.season != null && it.episode != null && it.season != 0 }
+                .sortedWith(compareBy<CwVideoSummary>({ it.season ?: Int.MAX_VALUE }, { it.episode ?: Int.MAX_VALUE }))
+            
+            val watchedIndex = episodes.indexOfFirst { it.season == s && it.episode == e }
+            if (watchedIndex >= 0 && watchedIndex == episodes.size - 1) {
+                val watchedEpisodeSeason = episodes[watchedIndex].season ?: s
+                val nextSeason = watchedEpisodeSeason + 1
+                val nextEpisode = 1
+                nextVideo = CwVideoSummary(
+                    id = "${currentMeta.id}:$nextSeason:$nextEpisode",
+                    title = "Season $nextSeason, Episode $nextEpisode",
+                    released = null,
+                    thumbnail = null,
+                    season = nextSeason,
+                    episode = nextEpisode,
+                    overview = null,
+                    available = true
+                )
+                if (shouldTraceNextUpSeries(progress)) {
+                    logNextUpDecision("synthesized-next-season contentId=${progress.contentId} name=${progress.name} seed=${s}x${e} synthesized=${nextSeason}x$nextEpisode")
+                }
+            }
+        }
+    }
+
     if (nextVideo == null) {
         debug?.recordNextUpResult(
             progress = progress,

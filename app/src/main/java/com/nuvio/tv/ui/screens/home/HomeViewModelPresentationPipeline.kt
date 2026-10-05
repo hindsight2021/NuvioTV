@@ -1036,7 +1036,8 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                                 name = enrichment.localizedTitle ?: enriched.name,
                                 description = enrichment.description ?: enriched.description,
                                 genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
-                                imdbRating = mdbImdbRating?.toFloat() ?: enriched.imdbRating
+                                imdbRating = mdbImdbRating?.toFloat() ?: enriched.imdbRating,
+                                tmdbRating = enrichment.rating?.toFloat() ?: enriched.tmdbRating
                             )
                         }
 

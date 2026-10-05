@@ -69,9 +69,11 @@ internal fun PlayerRuntimeController.applyMetaDetails(meta: Meta) {
 
     recomputeNextEpisode(resetVisibility = false)
     _uiState.update { state ->
+        val hasRichCast = state.castMembers.any { it.photo != null }
+        val newCast = if (!hasRichCast && meta.castMembers.isNotEmpty()) meta.castMembers else state.castMembers
         state.copy(
             description = description ?: state.description,
-            castMembers = if (meta.castMembers.isNotEmpty()) meta.castMembers else state.castMembers,
+            castMembers = newCast,
             isNextEpisodeMetadataResolved = true
         )
     }
