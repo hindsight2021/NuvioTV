@@ -237,6 +237,9 @@ class PlayerRuntimeController(
         releasePlayer()
     }
 
+    val isRandomEpisodePlayback: Boolean
+        get() = navigationArgs.isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
+
     internal var currentVideoId: String? = videoId
     internal var currentSeason: Int? = initialSeason
     internal var currentEpisode: Int? = initialEpisode

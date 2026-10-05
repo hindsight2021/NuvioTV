@@ -485,7 +485,8 @@ fun HomeViewModel.playRandomEpisode(
                 seriesTitle = title,
                 episodes = validEpisodes,
                 startEpisode = randomEp,
-                shuffle = true
+                shuffle = true,
+                isRandomEpisode = true
             )
             onLaunchEpisode(contentId, contentType, addonBaseUrl, randomEp.season!!, randomEp.episode!!)
         }

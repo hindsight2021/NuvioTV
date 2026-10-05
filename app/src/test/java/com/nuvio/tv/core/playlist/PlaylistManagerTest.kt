@@ -112,6 +112,34 @@ class PlaylistManagerTest {
         assertEquals(3, PlaylistManager.queue.value.size)
     }
 
+    @Test
+    fun `startChannel with isRandomEpisode sets flag and clear resets it`() {
+        PlaylistManager.startChannel(
+            contentId = contentId,
+            seriesTitle = seriesTitle,
+            episodes = episodes,
+            shuffle = true,
+            isRandomEpisode = true
+        )
+
+        assertTrue(PlaylistManager.isRandomEpisode)
+
+        PlaylistManager.clear()
+
+        assertFalse(PlaylistManager.isRandomEpisode)
+    }
+
+    @Test
+    fun `startChannel without isRandomEpisode defaults to false`() {
+        PlaylistManager.startChannel(
+            contentId = contentId,
+            seriesTitle = seriesTitle,
+            episodes = episodes
+        )
+
+        assertFalse(PlaylistManager.isRandomEpisode)
+    }
+
     private fun video(id: String, season: Int, episode: Int): Video = Video(
         id = id,
         title = "Episode $episode",

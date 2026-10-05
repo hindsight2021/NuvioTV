@@ -554,7 +554,8 @@ class PosterOptionsController @Inject constructor(
                     seriesTitle = item.name,
                     episodes = validEpisodes,
                     startEpisode = randomEp,
-                    shuffle = true
+                    shuffle = true,
+                    isRandomEpisode = true
                 )
                 onLaunchEpisode(item.id, item.apiType, state.addonBaseUrl, randomEp.season!!, randomEp.episode!!)
             }

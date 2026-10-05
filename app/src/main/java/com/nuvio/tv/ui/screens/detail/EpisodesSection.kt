@@ -275,6 +275,7 @@ fun EpisodesRow(
     episodeOptionsOverlayStyle: EpisodeOptionsOverlayStyle = EpisodeOptionsOverlayStyle.ARTWORK,
     posterCardCornerRadiusDp: Int = 12,
     onEpisodeClick: (Video) -> Unit,
+    onPlayRandomEpisode: ((Video) -> Unit)? = null,
     canPlayEpisode: (Video) -> Boolean = { true },
     onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = onEpisodeClick,
@@ -529,13 +530,14 @@ fun EpisodesRow(
                     seriesTitle = seriesTitle,
                     episodes = playable.ifEmpty { pool },
                     startEpisode = randomEp,
-                    shuffle = true
+                    shuffle = true,
+                    isRandomEpisode = true
                 )
                 val targetEp = playable.firstOrNull {
                     (first?.videoId != null && it.id == first.videoId) ||
                     (it.season == first?.season && it.episode == first?.episode)
                 } ?: randomEp
-                onEpisodeClick(targetEp)
+                onPlayRandomEpisode?.invoke(targetEp) ?: onEpisodeClick(targetEp)
                 optionsEpisode = null
             },
             onStartChannelShuffle = {

@@ -140,6 +140,9 @@ class StreamScreenViewModel @Inject constructor(
     private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
         ?.toBooleanStrictOrNull()
         ?: false
+    private val isRandomEpisode: Boolean = savedStateHandle.get<String>("isRandomEpisode")
+        ?.toBooleanStrictOrNull()
+        ?: false
     private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
 
     private val _uiState = MutableStateFlow(
@@ -486,7 +489,8 @@ class StreamScreenViewModel @Inject constructor(
                                 videoSize = cached.videoSize,
                                 fileIdx = cached.fileIdx,
                                 sources = cached.sources,
-                                contentLanguage = cached.contentLanguage ?: contentLanguage
+                                contentLanguage = cached.contentLanguage ?: contentLanguage,
+                                isRandomEpisode = isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                             ),
                             showDirectAutoPlayOverlay = showOverlay || it.showDirectAutoPlayOverlay,
                             isDirectAutoPlayFlow = showOverlay || it.isDirectAutoPlayFlow
@@ -1435,7 +1439,8 @@ class StreamScreenViewModel @Inject constructor(
             streamDescription = stream.description,
             fileIdx = stream.getEffectiveFileIdx(),
             sources = stream.sources,
-            contentLanguage = contentLanguage
+            contentLanguage = contentLanguage,
+            isRandomEpisode = isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
         )
         StreamSidecarSubtitles.set(playbackUrlFor(playbackInfo), stream.subtitles)
 
@@ -1486,6 +1491,7 @@ class StreamScreenViewModel @Inject constructor(
      * Returns 0 if no progress is saved.
      */
     suspend fun getResumePositionMs(playbackInfo: StreamPlaybackInfo): Long {
+        if (playbackInfo.isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode) return 0L
         val contentId = playbackInfo.contentId ?: return 0L
         val progress = if (playbackInfo.season != null && playbackInfo.episode != null) {
             watchProgressRepository.getEpisodeProgress(
@@ -1854,6 +1860,11 @@ class StreamScreenViewModel @Inject constructor(
         val videoId = playbackInfo.videoId ?: contentId
         val effectiveDuration = durationMs ?: 0L
 
+        if (playbackInfo.isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode) {
+            Log.d(TAG, "Skipping external player progress save for random episode playback")
+            return
+        }
+
         viewModelScope.launch {
             val progress = WatchProgress(
                 contentId = contentId,
@@ -1973,7 +1984,8 @@ data class StreamPlaybackInfo(
     val streamDescription: String? = null,
     val fileIdx: Int? = null,
     val sources: List<String>? = null,
-    val contentLanguage: String? = null
+    val contentLanguage: String? = null,
+    val isRandomEpisode: Boolean = false
 )
 
 private fun playbackUrlFor(playbackInfo: StreamPlaybackInfo): String? =

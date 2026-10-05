@@ -234,7 +234,8 @@ private fun PlaybackNavHost(
                             returnFocusSeason = season,
                             returnFocusEpisode = episode,
                             heroBackdropUrl = heroBackdrop,
-                            playOnLoad = true
+                            playOnLoad = true,
+                            isRandomEpisode = com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 },
@@ -314,6 +315,11 @@ private fun PlaybackNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = "false"
+                },
+                navArgument("isRandomEpisode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
         ) { backStackEntry ->
@@ -334,6 +340,8 @@ private fun PlaybackNavHost(
             val heroBackdropUrl = detailArgs?.getString("heroBackdropUrl")?.takeIf { it.isNotBlank() }
             val playOnLoad = detailArgs?.getString("playOnLoad")?.toBooleanStrictOrNull() == true
             val manualSelection = detailArgs?.getString("manualSelection")?.toBooleanStrictOrNull() == true
+            val isRandomEpisode = detailArgs?.getString("isRandomEpisode")?.toBooleanStrictOrNull() == true ||
+                com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
             MetaDetailsScreen(
                 returnFocusSeason = returnFocusSeason,
                 returnFocusEpisode = returnFocusEpisode,
@@ -341,6 +349,7 @@ private fun PlaybackNavHost(
                 heroBackdropUrl = heroBackdropUrl,
                 playOnLoad = playOnLoad,
                 playOnLoadManually = manualSelection,
+                playOnLoadIsRandomEpisode = isRandomEpisode,
                 onReturnFocusConsumed = {
                     savedState["returnFocusSeason"] = null
                     savedState["returnFocusEpisode"] = null
@@ -373,7 +382,7 @@ private fun PlaybackNavHost(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
-                onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
+                onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage, isRandom ->
                     com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
                     navController.navigate(
                         Screen.Stream.createRoute(
@@ -392,11 +401,12 @@ private fun PlaybackNavHost(
                             contentName = title,
                             runtime = runtime,
                             returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
-                            contentLanguage = contentLanguage
+                            contentLanguage = contentLanguage,
+                            isRandomEpisode = isRandom || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 },
-                onPlayManuallyClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
+                onPlayManuallyClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage, isRandom ->
                     com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
                     navController.navigate(
                         Screen.Stream.createRoute(
@@ -416,11 +426,12 @@ private fun PlaybackNavHost(
                             runtime = runtime,
                             manualSelection = true,
                             returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
-                            contentLanguage = contentLanguage
+                            contentLanguage = contentLanguage,
+                            isRandomEpisode = isRandom || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 },
-                onPlayStartFromBeginningClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
+                onPlayStartFromBeginningClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage, isRandom ->
                     com.nuvio.tv.core.playlist.PlaylistManager.clearIfNotInChannel(contentId, videoId)
                     navController.navigate(
                         Screen.Stream.createRoute(
@@ -440,7 +451,8 @@ private fun PlaybackNavHost(
                             runtime = runtime,
                             startFromBeginning = true,
                             returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
-                            contentLanguage = contentLanguage
+                            contentLanguage = contentLanguage,
+                            isRandomEpisode = isRandom || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 }
@@ -537,6 +549,11 @@ private fun PlaybackNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("isRandomEpisode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
         ) { backStackEntry ->
@@ -554,6 +571,10 @@ private fun PlaybackNavHost(
             val startFromBeginning = streamArgs
                 ?.getString("startFromBeginning")
                 ?.toBooleanStrictOrNull() == true
+            val isRandomEpisode = streamArgs
+                ?.getString("isRandomEpisode")
+                ?.toBooleanStrictOrNull() == true ||
+                com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
             StreamScreen(
                 startFromBeginning = startFromBeginning,
                 restoreSourceSelection = restoreSourceSelection,
@@ -627,7 +648,8 @@ private fun PlaybackNavHost(
                                 fileIdx = playbackInfo.fileIdx,
                                 sources = playbackInfo.sources,
                                 contentLanguage = playbackInfo.contentLanguage,
-                                profileId = playbackInfo.profileId
+                                profileId = playbackInfo.profileId,
+                                isRandomEpisode = playbackInfo.isRandomEpisode || isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                             )
                         )
                     }
@@ -668,7 +690,8 @@ private fun PlaybackNavHost(
                                 fileIdx = playbackInfo.fileIdx,
                                 sources = playbackInfo.sources,
                                 contentLanguage = playbackInfo.contentLanguage,
-                                profileId = playbackInfo.profileId
+                                profileId = playbackInfo.profileId,
+                                isRandomEpisode = playbackInfo.isRandomEpisode || isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -822,6 +845,11 @@ private fun PlaybackNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("isRandomEpisode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
         ) { backStackEntry ->
@@ -1176,7 +1204,8 @@ private fun PlaybackNavHost(
                             addonBaseUrl = addonBaseUrl,
                             returnFocusSeason = season,
                             returnFocusEpisode = episode,
-                            playOnLoad = true
+                            playOnLoad = true,
+                            isRandomEpisode = com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 },
@@ -1211,7 +1240,8 @@ private fun PlaybackNavHost(
                             addonBaseUrl = addonBaseUrl,
                             returnFocusSeason = season,
                             returnFocusEpisode = episode,
-                            playOnLoad = true
+                            playOnLoad = true,
+                            isRandomEpisode = com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 }
@@ -1232,7 +1262,8 @@ private fun PlaybackNavHost(
                             addonBaseUrl = addonBaseUrl,
                             returnFocusSeason = season,
                             returnFocusEpisode = episode,
-                            playOnLoad = true
+                            playOnLoad = true,
+                            isRandomEpisode = com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                         )
                     )
                 },

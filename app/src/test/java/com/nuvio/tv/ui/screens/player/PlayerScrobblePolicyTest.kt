@@ -58,4 +58,72 @@ class PlayerScrobblePolicyTest {
         assertFalse(shouldSendStopScrobble(hasActiveScrobble = false, progressPercent = 79.99f))
         assertTrue(shouldSendStopScrobble(hasActiveScrobble = false, progressPercent = 80f))
     }
+
+    @Test
+    fun `shouldTrackOrScrobble is false for random episode and true for regular playback`() {
+        assertFalse(shouldTrackOrScrobble(isRandomEpisode = true))
+        assertTrue(shouldTrackOrScrobble(isRandomEpisode = false))
+    }
+
+    @Test
+    fun `shouldTrackProgress is false for random episode regardless of shuffle or setting`() {
+        assertFalse(
+            shouldTrackProgress(
+                isRandomEpisode = true,
+                isChannelShuffle = true,
+                trackChannelShuffleInCw = true
+            )
+        )
+        assertFalse(
+            shouldTrackProgress(
+                isRandomEpisode = true,
+                isChannelShuffle = false,
+                trackChannelShuffleInCw = true
+            )
+        )
+        assertFalse(
+            shouldTrackProgress(
+                isRandomEpisode = true,
+                isChannelShuffle = true,
+                trackChannelShuffleInCw = false
+            )
+        )
+    }
+
+    @Test
+    fun `shouldTrackProgress respects trackChannelShuffleInCw for channel shuffle`() {
+        assertTrue(
+            shouldTrackProgress(
+                isRandomEpisode = false,
+                isChannelShuffle = true,
+                trackChannelShuffleInCw = true
+            )
+        )
+        assertFalse(
+            shouldTrackProgress(
+                isRandomEpisode = false,
+                isChannelShuffle = true,
+                trackChannelShuffleInCw = false
+            )
+        )
+    }
+
+    @Test
+    fun `shouldTrackProgress is true for normal playback`() {
+        assertTrue(
+            shouldTrackProgress(
+                isRandomEpisode = false,
+                isChannelShuffle = false,
+                trackChannelShuffleInCw = true
+            )
+        )
+        assertTrue(
+            shouldTrackProgress(
+                isRandomEpisode = false,
+                isChannelShuffle = false,
+                trackChannelShuffleInCw = false
+            )
+        )
+    }
 }
+

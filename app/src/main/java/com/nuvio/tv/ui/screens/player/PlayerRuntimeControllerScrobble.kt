@@ -103,7 +103,7 @@ internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
         // callback fired before the DB read completed, causing the resume
         // seek to be silently skipped — the player would start from 0:00
         // or hang in buffering after a late seek.
-        if (loadSavedProgress) {
+        if (loadSavedProgress && !isRandomEpisodePlayback) {
             recordLoadingDiagnosticEvent(
                 phase = "loading_saved_progress",
                 message = context.getString(com.nuvio.tv.R.string.player_loading_preparing)

@@ -1384,6 +1384,7 @@ class ExternalPlaybackTracker @Inject constructor(
     }
 
     private suspend fun getResumePosition(metadata: ExternalPlaybackMetadata): Long {
+        if (com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode) return 0L
         if (metadata.contentType.equals("cloud", ignoreCase = true)) {
             val sessionToken = pendingCloudSessionToken ?: loadPersistedCloudSessionToken()
             val playbackContext = cloudPlaybackSessionStore.load(sessionToken) ?: return 0L
@@ -1417,6 +1418,10 @@ class ExternalPlaybackTracker @Inject constructor(
         durationMs: Long?,
         explicitPercent: Float? = null
     ) {
+        if (com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode) {
+            Log.d(TAG, "Skipping external player progress save for random episode playback")
+            return
+        }
         // The synthetic sequence values are only for Cloud Library auto-next. Do not create
         // Continue Watching or tracking entries for files that did not have them before.
         if (metadata.contentType.equals("cloud", ignoreCase = true)) return

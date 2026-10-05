@@ -42,6 +42,8 @@ object PlaylistManager {
     private val _channelMode = MutableStateFlow<ChannelMode>(ChannelMode.NONE)
     val channelMode: StateFlow<ChannelMode> = _channelMode.asStateFlow()
 
+    @Volatile var isRandomEpisode: Boolean = false
+
     fun currentItem(): PlaylistItem? {
         val idx = _currentIndex.value
         val items = _queue.value
@@ -68,7 +70,8 @@ object PlaylistManager {
         seriesTitle: String,
         episodes: List<Video>,
         startEpisode: Video? = null,
-        shuffle: Boolean = false
+        shuffle: Boolean = false,
+        isRandomEpisode: Boolean = false
     ): PlaylistItem? {
         val validEpisodes = episodes.filter { it.season != null && it.episode != null }
         if (validEpisodes.isEmpty()) return null
@@ -117,15 +120,17 @@ object PlaylistManager {
             }
         }
 
+        this.isRandomEpisode = isRandomEpisode
         _channelMode.value = if (shuffle) ChannelMode.RANDOM_SHUFFLE else ChannelMode.BINGE_ORDER
         _queue.value = finalQueue
         _currentIndex.value = 0
-        Log.d(TAG, "Started channel mode ${_channelMode.value} with ${finalQueue.size} episodes")
+        Log.d(TAG, "Started channel mode ${_channelMode.value} with ${finalQueue.size} episodes (isRandomEpisode=$isRandomEpisode)")
         return finalQueue.firstOrNull()
     }
 
     fun startThematicChannel(items: List<PlaylistItem>): PlaylistItem? {
         if (items.isEmpty()) return null
+        isRandomEpisode = false
         _channelMode.value = ChannelMode.BINGE_ORDER
         _queue.value = items
         _currentIndex.value = 0
@@ -181,6 +186,7 @@ object PlaylistManager {
         _queue.value = emptyList()
         _currentIndex.value = -1
         _channelMode.value = ChannelMode.NONE
+        isRandomEpisode = false
     }
 
     /**
@@ -242,6 +248,7 @@ object PlaylistManager {
             _queue.value = items
             _currentIndex.value = 0
             _channelMode.value = ChannelMode.NONE
+            isRandomEpisode = false
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load playlist", e)

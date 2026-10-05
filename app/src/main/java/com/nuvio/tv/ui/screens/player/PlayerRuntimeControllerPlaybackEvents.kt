@@ -689,6 +689,10 @@ internal fun PlayerRuntimeController.handleNaturalPlaybackEnded() {
 }
 
 internal fun PlayerRuntimeController.markCurrentPlaybackCompleted() {
+    if (isRandomEpisodePlayback) {
+        logScrobbleDiagnostic("mark_completed_skipped", "reason=random_episode")
+        return
+    }
     if (hasMarkedCurrentEpisodeCompleted) return
     hasMarkedCurrentEpisodeCompleted = true
     if (contentType.equals("cloud", ignoreCase = true)) {
@@ -743,6 +747,10 @@ internal fun PlayerRuntimeController.cancelNextEpisodeAutoPlayOnFatalError() {
 }
 
 internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, duration: Long, syncRemote: Boolean = true) {
+    if (isRandomEpisodePlayback) {
+        logScrobbleDiagnostic("save_progress_skipped", "reason=random_episode")
+        return
+    }
     if (contentType.equals("cloud", ignoreCase = true)) {
         saveCloudLibraryProgress(position, duration, completed = false)
         return
@@ -774,11 +782,9 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
     scope.launch(kotlinx.coroutines.NonCancellable) {
         val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(progress.contentId, progress.videoId) &&
             com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
-        if (isChannelShuffle) {
-            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
-            if (!trackInCw) {
-                return@launch
-            }
+        val trackInCw = if (isChannelShuffle) layoutPreferenceDataStore.trackChannelShuffleInCw.first() else true
+        if (!shouldTrackProgress(isRandomEpisode = isRandomEpisodePlayback, isChannelShuffle = isChannelShuffle, trackChannelShuffleInCw = trackInCw)) {
+            return@launch
         }
         val effectiveContentId = watchProgressRepository.normalizeParentContentId(
             parentContentId = progress.contentId,
@@ -866,6 +872,10 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingMediaReference
 
 internal fun PlayerRuntimeController.emitScrobbleStart() {
     logScrobbleDiagnostic("start_evaluated")
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) {
+        logScrobbleDiagnostic("start_skipped", "reason=random_episode")
+        return
+    }
     if (isShortPlaceholderStream()) {
         logScrobbleDiagnostic("start_skipped", "reason=short_placeholder")
         return
@@ -891,9 +901,9 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     scope.launch {
         val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId) &&
             com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
-        if (isChannelShuffle) {
-            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
-            if (!trackInCw) return@launch
+        val trackInCw = if (isChannelShuffle) layoutPreferenceDataStore.trackChannelShuffleInCw.first() else true
+        if (!shouldTrackProgress(isRandomEpisode = isRandomEpisodePlayback, isChannelShuffle = isChannelShuffle, trackChannelShuffleInCw = trackInCw)) {
+            return@launch
         }
         // Wait for the episode mapping to finish (with its own timeout) so that
         // the scrobble start is sent with the correct season/episode number.
@@ -929,6 +939,10 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
 
 internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = null) {
     logScrobbleDiagnostic("stop_evaluated", "providedProgress=${progressPercent ?: "none"}")
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) {
+        logScrobbleDiagnostic("stop_skipped", "reason=random_episode")
+        return
+    }
     if (isShortPlaceholderStream()) {
         logScrobbleDiagnostic("stop_skipped", "reason=short_placeholder")
         return
@@ -950,9 +964,9 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
     scope.launch(kotlinx.coroutines.NonCancellable) {
         val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId) &&
             com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
-        if (isChannelShuffle) {
-            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
-            if (!trackInCw) return@launch
+        val trackInCw = if (isChannelShuffle) layoutPreferenceDataStore.trackChannelShuffleInCw.first() else true
+        if (!shouldTrackProgress(isRandomEpisode = isRandomEpisodePlayback, isChannelShuffle = isChannelShuffle, trackChannelShuffleInCw = trackInCw)) {
+            return@launch
         }
         logScrobbleDiagnostic("stop_dispatching", "progress=$percent")
         val failures = trackingScrobbleCoordinator.scrobble(
@@ -969,6 +983,10 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
 
 internal fun PlayerRuntimeController.emitScrobblePause(progressPercent: Float? = null) {
     logScrobbleDiagnostic("pause_evaluated", "providedProgress=${progressPercent ?: "none"}")
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) {
+        logScrobbleDiagnostic("pause_skipped", "reason=random_episode")
+        return
+    }
     if (isShortPlaceholderStream()) {
         logScrobbleDiagnostic("pause_skipped", "reason=short_placeholder")
         return
@@ -991,9 +1009,9 @@ internal fun PlayerRuntimeController.emitScrobblePause(progressPercent: Float? =
     scope.launch(kotlinx.coroutines.NonCancellable) {
         val isChannelShuffle = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(contentId, currentVideoId) &&
             com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
-        if (isChannelShuffle) {
-            val trackInCw = layoutPreferenceDataStore.trackChannelShuffleInCw.first()
-            if (!trackInCw) return@launch
+        val trackInCw = if (isChannelShuffle) layoutPreferenceDataStore.trackChannelShuffleInCw.first() else true
+        if (!shouldTrackProgress(isRandomEpisode = isRandomEpisodePlayback, isChannelShuffle = isChannelShuffle, trackChannelShuffleInCw = trackInCw)) {
+            return@launch
         }
         logScrobbleDiagnostic("pause_dispatching", "progress=$percent")
         val failures = trackingScrobbleCoordinator.scrobble(
@@ -1009,12 +1027,14 @@ internal fun PlayerRuntimeController.emitScrobblePause(progressPercent: Float? =
 }
 
 internal fun PlayerRuntimeController.emitCompletionScrobbleStop(progressPercent: Float) {
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) return
     if (progressPercent < 80f || hasSentCompletionScrobbleForCurrentItem) return
     hasSentCompletionScrobbleForCurrentItem = true
     emitScrobbleStop(progressPercent = progressPercent)
 }
 
 internal fun PlayerRuntimeController.emitStopScrobbleForCurrentProgress() {
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) return
     val progressPercent = currentPlaybackProgressPercent()
     if (!shouldSendStopScrobble(hasRequestedScrobbleStartForCurrentItem, progressPercent)) {
         logScrobbleDiagnostic(
@@ -1031,10 +1051,15 @@ internal fun PlayerRuntimeController.emitStopScrobbleForCurrentProgress() {
 }
 
 internal fun PlayerRuntimeController.emitPauseScrobbleForCurrentProgress() {
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) return
     emitScrobblePause(progressPercent = currentPlaybackProgressPercent())
 }
 
 internal fun PlayerRuntimeController.emitSeekScrobbleRestart(progressPercent: Float) {
+    if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) {
+        logScrobbleDiagnostic("seek_scrobble_skipped", "reason=random_episode")
+        return
+    }
     if (progressPercent < 1f || progressPercent >= 80f) return
     if (isShortPlaceholderStream()) return
     val item = currentScrobbleItem ?: return

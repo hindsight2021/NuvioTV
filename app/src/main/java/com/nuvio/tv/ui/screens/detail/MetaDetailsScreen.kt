@@ -371,6 +371,7 @@ fun MetaDetailsScreen(
     heroBackdropUrl: String? = null,
     playOnLoad: Boolean = false,
     playOnLoadManually: Boolean = false,
+    playOnLoadIsRandomEpisode: Boolean = false,
     onBackPress: () -> Unit,
     onReturnFocusConsumed: () -> Unit = {},
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
@@ -390,8 +391,9 @@ fun MetaDetailsScreen(
         genres: String?,
         year: String?,
         runtime: Int?,
-        contentLanguage: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+        contentLanguage: String?,
+        isRandomEpisode: Boolean
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onPlayManuallyClick: (
         videoId: String,
         contentType: String,
@@ -406,8 +408,9 @@ fun MetaDetailsScreen(
         genres: String?,
         year: String?,
         runtime: Int?,
-        contentLanguage: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+        contentLanguage: String?,
+        isRandomEpisode: Boolean
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onPlayStartFromBeginningClick: (
         videoId: String,
         contentType: String,
@@ -422,8 +425,9 @@ fun MetaDetailsScreen(
         genres: String?,
         year: String?,
         runtime: Int?,
-        contentLanguage: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
+        contentLanguage: String?,
+        isRandomEpisode: Boolean
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val playbackAvailability = LocalPlaybackAvailability.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -654,7 +658,7 @@ fun MetaDetailsScreen(
                 val yearString = remember(meta.releaseInfo) {
                     formatDetailYearRange(meta.releaseInfo)
                 }
-                val playEpisode: (Video) -> Unit = playEpisode@{ video ->
+                val playEpisode: (Video, Boolean) -> Unit = playEpisode@{ video, isRandom ->
                     if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@playEpisode
@@ -673,10 +677,11 @@ fun MetaDetailsScreen(
                         null,
                         null,
                         video.runtime,
-                        meta.resolveContentLanguage()
+                        meta.resolveContentLanguage(),
+                        isRandom
                     )
                 }
-                val playEpisodeManually: (Video) -> Unit = playEpisodeManually@{ video ->
+                val playEpisodeManually: (Video, Boolean) -> Unit = playEpisodeManually@{ video, isRandom ->
                     if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@playEpisodeManually
@@ -695,10 +700,11 @@ fun MetaDetailsScreen(
                         null,
                         null,
                         video.runtime,
-                        meta.resolveContentLanguage()
+                        meta.resolveContentLanguage(),
+                        isRandom
                     )
                 }
-                val playTitle: (String) -> Unit = playTitle@{ videoId ->
+                val playTitle: (String, Boolean) -> Unit = playTitle@{ videoId, isRandom ->
                     if (!playbackAvailability.canStream(meta.apiType, videoId, meta.id)) {
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@playTitle
@@ -717,10 +723,11 @@ fun MetaDetailsScreen(
                         genresString,
                         yearString,
                         null,
-                        meta.resolveContentLanguage()
+                        meta.resolveContentLanguage(),
+                        isRandom
                     )
                 }
-                val playTitleManually: (String) -> Unit = playTitleManually@{ videoId ->
+                val playTitleManually: (String, Boolean) -> Unit = playTitleManually@{ videoId, isRandom ->
                     if (!playbackAvailability.canStream(meta.apiType, videoId, meta.id)) {
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@playTitleManually
@@ -739,7 +746,8 @@ fun MetaDetailsScreen(
                         genresString,
                         yearString,
                         null,
-                        meta.resolveContentLanguage()
+                        meta.resolveContentLanguage(),
+                        isRandom
                     )
                 }
                 val isSeries = remember(meta.type, meta.videos) {
@@ -769,6 +777,7 @@ fun MetaDetailsScreen(
                 LaunchedEffect(
                     playOnLoad,
                     playOnLoadManually,
+                    playOnLoadIsRandomEpisode,
                     playOnLoadConsumed.value,
                     isSeries,
                     uiState.nextToWatch,
@@ -800,14 +809,14 @@ fun MetaDetailsScreen(
                     playOnLoadHandoffDispatched.value = true
                     if (playOnLoadVideo != null) {
                         if (playOnLoadManually) {
-                            playEpisodeManually(playOnLoadVideo)
+                            playEpisodeManually(playOnLoadVideo, playOnLoadIsRandomEpisode)
                         } else {
-                            playEpisode(playOnLoadVideo)
+                            playEpisode(playOnLoadVideo, playOnLoadIsRandomEpisode)
                         }
                     } else if (playOnLoadManually) {
-                        playTitleManually(meta.id)
+                        playTitleManually(meta.id, playOnLoadIsRandomEpisode)
                     } else {
-                        playTitle(meta.id)
+                        playTitle(meta.id, playOnLoadIsRandomEpisode)
                     }
                 }
 
@@ -871,10 +880,11 @@ fun MetaDetailsScreen(
                     commentsEpisodeTarget = uiState.commentsEpisodeTarget,
                     selectedComment = uiState.selectedComment,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
-                    onEpisodeClick = playEpisode,
-                    onEpisodeManualPlayClick = playEpisodeManually,
-                    onPlayClick = playTitle,
-                    onPlayManuallyClick = playTitleManually,
+                    onEpisodeClick = { v -> playEpisode(v, false) },
+                    onEpisodeManualPlayClick = { v -> playEpisodeManually(v, false) },
+                    onPlayRandomEpisode = { v -> playEpisode(v, true) },
+                    onPlayClick = { vId -> playTitle(vId, false) },
+                    onPlayManuallyClick = { vId -> playTitleManually(vId, false) },
                     onPreScrapeStreams = { vId, type, title ->
                         viewModel.preScrapeStreams(videoId = vId, type = type, title = title)
                     },
@@ -897,7 +907,8 @@ fun MetaDetailsScreen(
                             null,
                             null,
                             video.runtime,
-                            meta.resolveContentLanguage()
+                            meta.resolveContentLanguage(),
+                            false
                         )
                     },
                     onPlayStartFromBeginningClick = onPlayStartFromBeginningClick@{ videoId ->
@@ -919,7 +930,8 @@ fun MetaDetailsScreen(
                             genresString,
                             yearString,
                             null,
-                            meta.resolveContentLanguage()
+                            meta.resolveContentLanguage(),
+                            false
                         )
                     },
                     showManualPlayOption = effectiveAutoplayEnabled,
@@ -1198,6 +1210,7 @@ private fun MetaDetailsContent(
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onEpisodeManualPlayClick: (Video) -> Unit,
+    onPlayRandomEpisode: (Video) -> Unit = {},
     onEpisodeStartFromBeginningClick: (Video) -> Unit = {},
     onPlayClick: (String) -> Unit,
     onPlayManuallyClick: (String) -> Unit,
@@ -2056,6 +2069,12 @@ private fun MetaDetailsContent(
             onEpisodeManualPlayClick(video)
         }
     }
+    val episodeRandomClick = remember(onPlayRandomEpisode, canPlayEpisode) {
+        { video: Video ->
+            if (canPlayEpisode(video)) markEpisodeRestore(video.id)
+            onPlayRandomEpisode(video)
+        }
+    }
     val episodeCommentsClick = remember(
         onCommentsEpisodeSelected,
         shouldShowCommentsSection
@@ -2385,6 +2404,7 @@ private fun MetaDetailsContent(
                                 )
                             },
                             onEpisodeClick = episodeClick,
+                            onPlayRandomEpisode = episodeRandomClick,
                             canPlayEpisode = canPlayEpisode,
                             onEpisodeManualPlayClick = episodeManualClick,
                             onEpisodeStartFromBeginningClick = { video ->
