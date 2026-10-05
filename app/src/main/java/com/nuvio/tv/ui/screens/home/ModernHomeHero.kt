@@ -506,7 +506,7 @@ private fun HeroTitleContent(
             val yearText = preview.yearText
             val hasTrailingMeta = !runtimeText.isNullOrBlank() ||
                 !yearText.isNullOrBlank() ||
-                reserveImdbInPrimaryWithHighlight
+                reserveRatingsInPrimaryWithHighlight
 
             if (hasLeadingMeta) {
                 Text(
@@ -740,11 +740,11 @@ private fun HeroTmdbMeta(
     ) {
         val context = androidx.compose.ui.platform.LocalContext.current
         val tmdbModel = androidx.compose.runtime.remember(context) {
-            coil.request.ImageRequest.Builder(context)
+            ImageRequest.Builder(context)
                 .data(R.raw.mdblist_tmdb)
                 .build()
         }
-        coil.compose.AsyncImage(
+        AsyncImage(
             model = tmdbModel,
             contentDescription = null,
             modifier = Modifier.size(logoSize),
