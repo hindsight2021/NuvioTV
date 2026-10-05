@@ -840,6 +840,9 @@ fun MetaDetailsScreen(
                     onDetailReturnEpisodeFocusConsumed = onReturnFocusConsumed,
                     lastFocusedEpisodeIdBySeason = viewModel.lastFocusedEpisodeIdBySeason,
                     heroRestoreToken = heroRestoreToken,
+                    availableMetaSources = uiState.availableMetaSources,
+                    selectedMetaSourceId = uiState.selectedMetaSourceId,
+                    onMetaSourceSelected = { viewModel.onEvent(MetaDetailsEvent.OnMetaSourceSelected(it)) },
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
                     episodesForSeason = uiState.episodesForSeason,
@@ -1168,6 +1171,9 @@ private fun MetaDetailsContent(
     onDetailReturnEpisodeFocusConsumed: () -> Unit,
     lastFocusedEpisodeIdBySeason: MutableMap<Int, String>,
     heroRestoreToken: Int = 0,
+    availableMetaSources: List<com.nuvio.tv.domain.model.MetaSource> = emptyList(),
+    selectedMetaSourceId: String = "merged",
+    onMetaSourceSelected: (String) -> Unit = {},
     seasons: List<Int>,
     selectedSeason: Int,
     episodesForSeason: List<Video>,
@@ -2342,6 +2348,17 @@ private fun MetaDetailsContent(
                         onShowFullDescription = { showSynopsisOverlay = true },
                         onChicReviewClick = { openChicReview(meta.name, meta.description, meta.genres, meta.releaseInfo, false, null, null, null) },
                         onCinemaPreShowClick = if (meta.apiType.equals("movie", ignoreCase = true)) { { startPreShow() } } else null
+                    )
+                }
+            }
+
+            // Metadata Source Selector if multiple sources available
+            if (isSeries && availableMetaSources.size > 1) {
+                item(key = "meta_sources", contentType = "meta_sources") {
+                    MetaSourceSelector(
+                        sources = availableMetaSources,
+                        selectedSourceId = selectedMetaSourceId,
+                        onSourceSelected = onMetaSourceSelected
                     )
                 }
             }

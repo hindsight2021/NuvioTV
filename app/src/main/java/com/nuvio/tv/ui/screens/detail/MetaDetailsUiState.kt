@@ -89,10 +89,13 @@ data class MetaDetailsUiState(
     val commentsEpisodeTarget: Video? = null,
     val selectedComment: TraktCommentReview? = null,
     val userMessage: String? = null,
-    val userMessageIsError: Boolean = false
+    val userMessageIsError: Boolean = false,
+    val availableMetaSources: List<com.nuvio.tv.domain.model.MetaSource> = emptyList(),
+    val selectedMetaSourceId: String = "merged"
 )
 
 sealed class MetaDetailsEvent {
+    data class OnMetaSourceSelected(val sourceId: String) : MetaDetailsEvent()
     data class OnSeasonSelected(val season: Int) : MetaDetailsEvent()
     data class OnEpisodeClick(val video: Video) : MetaDetailsEvent()
     data class OnCommentsModeSelected(val mode: CommentsMode) : MetaDetailsEvent()

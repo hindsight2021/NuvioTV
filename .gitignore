@@ -67,3 +67,6 @@ AGENTS.md
 docs/
 status-page/
 *.jks
+
+tmp_apk/
+

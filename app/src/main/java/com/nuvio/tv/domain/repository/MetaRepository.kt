@@ -22,6 +22,11 @@ interface MetaRepository {
         id: String
     ): Flow<NetworkResult<Meta>>
 
+    fun getCandidateMetaAddons(
+        type: String,
+        id: String
+    ): List<Pair<com.nuvio.tv.domain.model.Addon, String>> = emptyList()
+
     /**
      * Returns cached meta if available (no network call). Useful for
      * reading backdrop URLs synchronously before navigation.

@@ -219,6 +219,52 @@ class MetaRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getCandidateMetaAddons(
+        type: String,
+        id: String
+    ): List<Pair<Addon, String>> {
+        val addons = installedAddonsOrEmpty()
+        val requestedType = type.trim()
+        val inferredType = inferCanonicalType(requestedType, id)
+        val metaResourceAddons = addons.filter { addon ->
+            addon.resources.any { it.name == "meta" }
+        }
+
+        val prioritizedCandidates = linkedSetOf<Pair<Addon, String>>()
+        // First pass: addons that explicitly match type AND id prefix
+        addons.forEach { addon ->
+            if (addon.supportsMetaType(requestedType) && addon.supportsMetaId(id)) {
+                prioritizedCandidates.add(addon to requestedType)
+            }
+        }
+        if (!inferredType.equals(requestedType, ignoreCase = true)) {
+            addons.forEach { addon ->
+                if (addon.supportsMetaType(inferredType) && addon.supportsMetaId(id)) {
+                    prioritizedCandidates.add(addon to inferredType)
+                }
+            }
+        }
+        metaResourceAddons.firstOrNull { it.supportsMetaId(id) }?.let { topMetaAddon ->
+            topMetaAddon.supportedCandidateType(requestedType, inferredType)?.let { fallbackType ->
+                prioritizedCandidates.add(topMetaAddon to fallbackType)
+            }
+        }
+        // Fallback: if no ID-matching addons found, include addons without idPrefixes
+        if (prioritizedCandidates.isEmpty()) {
+            addons.forEach { addon ->
+                if (addon.supportsMetaType(requestedType) && addon.idPrefixes.isEmpty()) {
+                    prioritizedCandidates.add(addon to requestedType)
+                }
+            }
+            metaResourceAddons.firstOrNull { it.idPrefixes.isEmpty() }?.let { topMetaAddon ->
+                topMetaAddon.supportedCandidateType(requestedType, inferredType)?.let { fallbackType ->
+                    prioritizedCandidates.add(topMetaAddon to fallbackType)
+                }
+            }
+        }
+        return prioritizedCandidates.toList()
+    }
+
     override fun getMetaFromAllAddons(
         type: String,
         id: String,
@@ -268,47 +314,7 @@ class MetaRepositoryImpl @Inject constructor(
         val inferredType = inferCanonicalType(requestedType, id)
         val attemptedFailures = mutableListOf<MetaAttemptFailure>()
         val attemptedAddonNames = linkedSetOf<String>()
-        val metaResourceAddons = addons.filter { addon ->
-            addon.resources.any { it.name == "meta" }
-        }
-
-        // Priority order:
-        // 1) addons that explicitly support requested type AND support the ID prefix
-        // 2) addons that support inferred canonical type AND support the ID prefix
-        // 3) addons that support the type but have no idPrefixes (accept all IDs)
-        // 4) top addon in installed order that exposes meta resource
-        val prioritizedCandidates = linkedSetOf<Pair<Addon, String>>()
-        // First pass: addons that explicitly match type AND id prefix
-        addons.forEach { addon ->
-            if (addon.supportsMetaType(requestedType) && addon.supportsMetaId(id)) {
-                prioritizedCandidates.add(addon to requestedType)
-            }
-        }
-        if (!inferredType.equals(requestedType, ignoreCase = true)) {
-            addons.forEach { addon ->
-                if (addon.supportsMetaType(inferredType) && addon.supportsMetaId(id)) {
-                    prioritizedCandidates.add(addon to inferredType)
-                }
-            }
-        }
-        metaResourceAddons.firstOrNull { it.supportsMetaId(id) }?.let { topMetaAddon ->
-            topMetaAddon.supportedCandidateType(requestedType, inferredType)?.let { fallbackType ->
-                prioritizedCandidates.add(topMetaAddon to fallbackType)
-            }
-        }
-        // Fallback: if no ID-matching addons found, include addons without idPrefixes
-        if (prioritizedCandidates.isEmpty()) {
-            addons.forEach { addon ->
-                if (addon.supportsMetaType(requestedType) && addon.idPrefixes.isEmpty()) {
-                    prioritizedCandidates.add(addon to requestedType)
-                }
-            }
-            metaResourceAddons.firstOrNull { it.idPrefixes.isEmpty() }?.let { topMetaAddon ->
-                topMetaAddon.supportedCandidateType(requestedType, inferredType)?.let { fallbackType ->
-                    prioritizedCandidates.add(topMetaAddon to fallbackType)
-                }
-            }
-        }
+        val prioritizedCandidates = getCandidateMetaAddons(type, id)
 
         if (prioritizedCandidates.isEmpty()) {
             // Last resort: try addons that declare the raw type (legacy behavior).
