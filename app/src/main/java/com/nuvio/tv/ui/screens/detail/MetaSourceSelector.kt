@@ -101,13 +101,13 @@ private fun MetaSourcePill(
     val shape = remember { RoundedCornerShape(12.dp) }
 
     val containerColor = when {
-        isSelected -> NuvioTheme.extendedColors.surfaceContainerHigh
-        isFocused -> NuvioTheme.extendedColors.surfaceContainerHighest
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        isSelected -> MaterialTheme.colorScheme.primaryContainer
+        isFocused -> NuvioTheme.extendedColors.focusBackground
+        else -> NuvioTheme.extendedColors.backgroundCard
     }
 
     val contentColor = when {
-        isSelected -> MaterialTheme.colorScheme.primary
+        isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
         isFocused -> MaterialTheme.colorScheme.onSurface
         else -> NuvioTheme.extendedColors.textSecondary
     }
@@ -131,7 +131,7 @@ private fun MetaSourcePill(
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = containerColor,
-            focusedContainerColor = NuvioTheme.extendedColors.surfaceContainerHighest
+            focusedContainerColor = NuvioTheme.extendedColors.focusBackground
         ),
         border = border,
         scale = CardDefaults.scale(focusedScale = 1.05f),

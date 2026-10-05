@@ -219,7 +219,7 @@ class MetaRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getCandidateMetaAddons(
+    override suspend fun getCandidateMetaAddons(
         type: String,
         id: String
     ): List<Pair<Addon, String>> {

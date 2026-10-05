@@ -22,7 +22,7 @@ interface MetaRepository {
         id: String
     ): Flow<NetworkResult<Meta>>
 
-    fun getCandidateMetaAddons(
+    suspend fun getCandidateMetaAddons(
         type: String,
         id: String
     ): List<Pair<com.nuvio.tv.domain.model.Addon, String>> = emptyList()

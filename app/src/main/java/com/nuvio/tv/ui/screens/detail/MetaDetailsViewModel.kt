@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -1045,21 +1046,27 @@ class MetaDetailsViewModel @Inject constructor(
     private fun fetchSecondaryMetaSources(metaLookupId: String, primaryMeta: Meta) {
         rawPrimaryMeta = primaryMeta
         val primarySourceId = preferredAddonBaseUrl ?: "primary"
-        val primaryDisplayName = preferredAddonBaseUrl?.let { resolveAddonDisplayName(it) }
-            ?: context.getString(R.string.detail_meta_source_primary_fallback)
-        loadedMetaSources[primarySourceId] = Pair(primaryDisplayName, primaryMeta)
+        loadedMetaSources[primarySourceId] = Pair(
+            context.getString(R.string.detail_meta_source_primary_fallback),
+            primaryMeta
+        )
 
         val isSeries = primaryMeta.type == ContentType.SERIES ||
             primaryMeta.apiType.equals("series", ignoreCase = true) ||
             primaryMeta.apiType.equals("tv", ignoreCase = true)
 
-        if (!isSeries) {
-            updateMetaSourcesUi()
-            return
-        }
-
         secondaryMetaJob?.cancel()
         secondaryMetaJob = viewModelScope.launch(Dispatchers.IO) {
+            if (preferredAddonBaseUrl != null) {
+                val resolvedName = resolveAddonDisplayName(preferredAddonBaseUrl)
+                loadedMetaSources[preferredAddonBaseUrl] = Pair(resolvedName, primaryMeta)
+            }
+
+            if (!isSeries) {
+                updateMetaSourcesUi()
+                return@launch
+            }
+
             val candidates = metaRepository.getCandidateMetaAddons(type = itemType, id = metaLookupId)
             if (candidates.isEmpty()) {
                 updateMetaSourcesUi()
@@ -1078,7 +1085,7 @@ class MetaDetailsViewModel @Inject constructor(
                                 id = metaLookupId
                             ).firstOrNull { it !is NetworkResult.Loading }
 
-                            if (result is NetworkResult.Success && result.data != null) {
+                            if (result is NetworkResult.Success) {
                                 loadedMetaSources[addon.baseUrl] = Pair(addon.displayName, result.data)
                                 recalculateMetaSourcesAndMerge(primaryMeta)
                             }
@@ -1177,9 +1184,9 @@ class MetaDetailsViewModel @Inject constructor(
         _uiState.update { it.copy(availableMetaSources = sourcesList) }
     }
 
-    private fun resolveAddonDisplayName(baseUrl: String): String {
+    private suspend fun resolveAddonDisplayName(baseUrl: String): String {
         return runCatching {
-            val addons = addonRepository.getInstalledAddons().value.enabledAddons()
+            val addons = addonRepository.getInstalledAddons().first().enabledAddons()
             addons.firstOrNull { it.baseUrl == baseUrl }?.displayName
         }.getOrNull() ?: "Addon"
     }
