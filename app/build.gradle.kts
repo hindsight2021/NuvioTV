@@ -91,9 +91,9 @@ val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
 val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
     ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuvioplus")
 val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "nuvio2026plus")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "nuvio2026plus")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD")
 
 android {
     namespace = "com.nuvio.tv"
@@ -104,8 +104,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1104
-        versionName = "0.9.4-plus.46"
+        versionCode = 1108
+        versionName = "0.9.4-plus.50"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "https://api.introdb.app/")}\"")

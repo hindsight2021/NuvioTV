@@ -4,17 +4,10 @@ on:
   schedule:
     - cron: '0 4 * * *' # Daily at 4:00 AM UTC
   workflow_dispatch:
-    inputs:
-      trigger_release:
-        description: 'Trigger release build if changes synced'
-        required: false
-        type: boolean
-        default: true
 
 permissions:
   contents: write
-  actions: write
-  issues: write
+  pull-requests: write
 
 jobs:
   sync:
@@ -35,7 +28,7 @@ jobs:
       - name: Check Upstream Changes
         id: upstream
         run: |
-          git remote add upstream https://github.com/NuvioMedia/NuvioTV.git || true
+          git remote add upstream https://github.com/NuvioMedia/NuvioTV.git
           git fetch upstream dev --tags
 
           UPSTREAM_HEAD=$(git rev-parse upstream/dev)
@@ -52,30 +45,32 @@ jobs:
             echo "Already up-to-date with upstream/dev."
           fi
 
-      - name: Merge Upstream Changes
+      - name: Create sync branch and pull request
         if: steps.upstream.outputs.has_changes == 'true'
-        id: merge
-        run: |
-          if git merge upstream/dev -m "chore(sync): merge upstream/dev into plus-dev" --no-edit; then
-            echo "merged=true" >> "$GITHUB_OUTPUT"
-            git push origin plus-dev
-          else
-            echo "merged=false" >> "$GITHUB_OUTPUT"
-            echo "Merge conflict detected!"
-            git merge --abort
-            gh issue create \
-              --title "⚠️ Upstream Sync Conflict detected" \
-              --body "Automatic merge of upstream/dev into plus-dev failed due to conflicts. Please resolve manually." \
-              --label "bug" || true
-            exit 1
-          fi
         env:
           GH_TOKEN: ${{ github.token }}
+          UPSTREAM_HEAD: ${{ steps.upstream.outputs.upstream_head }}
+        run: |
+          sha12="${UPSTREAM_HEAD:0:12}"
+          branch="sync/upstream-${sha12}"
 
-      - name: Trigger Android TV Release Build
-        if: (steps.upstream.outputs.has_changes == 'true' && steps.merge.outputs.merged == 'true') || inputs.trigger_release == true
-        run: |
-          echo "Triggering Android TV release build workflow..."
-          gh workflow run android-release.yml --ref plus-dev -f mode=publish
-        env:
-          GH_TOKEN: ${{ github.token }}
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "Branch ${branch} already exists on origin."
+          else
+            git branch -f "${branch}" upstream/dev
+            git push origin "${branch}"
+          fi
+
+          existing_pr=$(gh pr list --head "${branch}" --base plus-dev --state open --json number --jq '.[0].number')
+          if [[ -n "${existing_pr}" ]]; then
+            echo "Pull request for ${branch} already exists (#${existing_pr})."
+            exit 0
+          fi
+
+          gh pr create \
+            --base plus-dev \
+            --head "${branch}" \
+            --title "chore(sync): upstream/dev (${sha12})" \
+            --body "Automated upstream sync from NuvioMedia/NuvioTV@dev (${UPSTREAM_HEAD}).
+
+          This PR exposes any merge conflicts for review. It does not merge or push to plus-dev automatically."

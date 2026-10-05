@@ -10,6 +10,7 @@ on:
         options:
           - dry-run
           - draft
+          - candidate
           - publish
         default: dry-run
       exclude_commits:
@@ -96,38 +97,25 @@ jobs:
       - name: Generate release notes
         env:
           PREVIOUS_BUMP: ${{ steps.release.outputs.previous_bump }}
-          CURRENT_BUMP: ${{ steps.release.outputs.current_bump }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
           EXCLUDE_COMMITS: ${{ inputs.exclude_commits }}
           RELEASE_MODE: ${{ inputs.mode }}
         run: |
           release_note_args=(
             --from "${PREVIOUS_BUMP}"
-            --to "${CURRENT_BUMP}"
+            --to "${RELEASE_COMMIT}"
             --repository "${GITHUB_REPOSITORY}"
             --exclude "${EXCLUDE_COMMITS}"
             --quality-report release-note-quality.md
           )
 
-          generation_status=0
           ./scripts/generate-release-notes.sh "${release_note_args[@]}" \
-            > release-notes.md 2>&1 || generation_status=$?
+            > release-notes.md 2>&1
 
-          if [[ ! -s release-notes.md ]] || grep -q "Traceback" release-notes.md || (( generation_status != 0 )); then
-            echo "Generating release notes for Nuvio+..."
-            {
-              echo "### Nuvio+ Release"
-              echo ""
-              echo "Custom build featuring:"
-              echo "- Continue Watching Banner Restoration: Primary banner displays episode info and progress when CW show is highlighted"
-              echo "- New This Week Discovery Row: Dynamically aggregates recent releases across all catalogs"
-              echo "- 'NEW' Content Badges: Luminous indicator overlay on titles released within the last 14 days"
-              echo "- Simkl Trending Hero: Dynamic landscape hero banner powered by Simkl trending with 5s auto-rotation"
-              echo "- Progressive Grid Loading: Windowed catalog loading in Grid mode eliminates memory spikes and network bursts"
-              echo "- Extended Intro Detection: Scans up to 12 minutes (720s) for cold opens in anime and prestige drama"
-              echo "- Titanium Lotus Bloom: New modern cyberpunk-nature startup splash screen & branding"
-              echo "- Dual Installation: Installs cleanly as com.nuvio.tv.plus alongside official Nuvio"
-            } > release-notes.md
-            echo "Release notes generated successfully for Nuvio+." > release-note-quality.md
+          if [[ ! -s release-notes.md ]] || grep -q "Traceback" release-notes.md; then
+            echo "Release notes generation failed or produced invalid output." >&2
+            cat release-notes.md >&2 || true
+            exit 1
           fi
 
           {
@@ -205,25 +193,70 @@ jobs:
             fi
           done
 
-      - name: Test updater and build full release APKs
+      - name: Run full unit tests and build full release APKs
         if: inputs.mode != 'dry-run'
-        run: ./gradlew :app:testFullReleaseUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullRelease --stacktrace
+        run: ./gradlew :app:testFullReleaseUnitTest :app:assembleFullRelease --stacktrace
+
+      - name: Upload unit test reports
+        if: always() && inputs.mode != 'dry-run'
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuviotv-${{ steps.release.outputs.version }}-${{ inputs.mode }}-unit-test-reports
+          path: |
+            app/build/reports/tests/**
+            app/build/test-results/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Generate checksums and build SHA manifest
+        if: inputs.mode != 'dry-run'
+        run: |
+          apk_dir="app/build/outputs/apk/full/release"
+          mapfile -t release_apks < <(find "${apk_dir}" -maxdepth 1 -type f -name '*.apk' -print | sort)
+          if (( ${#release_apks[@]} == 0 )); then
+            echo "No release APKs were produced." >&2
+            exit 1
+          fi
+
+          : > checksums.txt
+          for apk in "${release_apks[@]}"; do
+            (cd "${apk_dir}" && sha256sum "$(basename "${apk}")") >> checksums.txt
+          done
+
+          {
+            echo "release_commit=${{ steps.release.outputs.release_commit }}"
+            echo "current_bump=${{ steps.release.outputs.current_bump }}"
+            echo "version=${{ steps.release.outputs.version }}"
+            echo "version_code=${{ steps.release.outputs.version_code }}"
+            echo "tag=${{ steps.release.outputs.tag }}"
+            echo "mode=${{ inputs.mode }}"
+            echo "github_sha=${GITHUB_SHA}"
+            echo "github_ref=${GITHUB_REF}"
+            echo "github_run_id=${GITHUB_RUN_ID}"
+            echo "github_run_number=${GITHUB_RUN_NUMBER}"
+          } > build-sha-manifest.txt
+
+          cat checksums.txt
+          cat build-sha-manifest.txt
 
       - name: Upload build artifacts
         if: inputs.mode != 'dry-run'
         uses: actions/upload-artifact@v6
         with:
           name: nuviotv-${{ steps.release.outputs.version }}-full-release
-          path: app/build/outputs/apk/full/release/*.apk
+          path: |
+            app/build/outputs/apk/full/release/*.apk
+            checksums.txt
+            build-sha-manifest.txt
           if-no-files-found: error
 
       - name: Create GitHub release
-        if: inputs.mode != 'dry-run'
+        if: inputs.mode == 'draft' || inputs.mode == 'publish'
         env:
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_TITLE: ${{ steps.release.outputs.title }}
-          RELEASE_TARGET: ${{ steps.release.outputs.current_bump }}
+          RELEASE_TARGET: ${{ steps.release.outputs.release_commit }}
           RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           mapfile -t release_apks < <(find app/build/outputs/apk/full/release -maxdepth 1 -type f -name '*.apk' -print | sort)
@@ -246,4 +279,4 @@ jobs:
           if [[ "${RELEASE_MODE}" == "draft" ]]; then
             release_args+=(--draft)
           fi
-          gh release create "${release_args[@]}" "${release_apks[@]}" || echo "Release creation from GITHUB_TOKEN skipped; will be published via CLI"
+          gh release create "${release_args[@]}" "${release_apks[@]}" checksums.txt build-sha-manifest.txt

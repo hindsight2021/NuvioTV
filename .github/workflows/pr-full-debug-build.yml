@@ -3,7 +3,7 @@ name: PR Full Debug Build
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [dev]
+    branches: [dev, plus-dev]
   workflow_dispatch:
 
 permissions:
@@ -66,8 +66,19 @@ jobs:
             echo "NUVIO_RELEASE_STORE_PASSWORD=android"
           } >> "$GITHUB_ENV"
 
-      - name: Test updater and build fullDebug APK
-        run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullDebug --stacktrace
+      - name: Run full unit tests and build fullDebug APK
+        run: ./gradlew :app:testFullDebugUnitTest :app:assembleFullDebug --stacktrace
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-full-debug-pr-${{ github.event.pull_request.number || github.run_number }}-unit-test-reports
+          path: |
+            app/build/reports/tests/**
+            app/build/test-results/**
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload fullDebug APK
         uses: actions/upload-artifact@v4
