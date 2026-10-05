@@ -30,6 +30,7 @@ class YoutubeChunkedDataSourceFactory(
 
     override fun createDataSource(): DataSource {
         val upstream = DefaultHttpDataSource.Factory()
+            .setUserAgent("com.google.android.youtube/20.10.35 (Linux; U; Android 14; en_US)")
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)

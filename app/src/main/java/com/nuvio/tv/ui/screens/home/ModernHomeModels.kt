@@ -51,6 +51,7 @@ data class HeroPreview(
     val runtimeText: String? = null,
     val secondaryHighlightText: String? = null,
     val imdbText: String?,
+    val tmdbText: String? = null,
     val ageRatingText: String? = null,
     val statusText: String? = null,
     val countryText: String? = null,
@@ -346,6 +347,7 @@ internal fun buildContinueWatchingItem(
                 secondaryHighlightText = secondaryHighlightText,
                 imdbText = item.episodeImdbRating
                     ?.let { String.format("%.1f", it) },
+                tmdbText = item.episodeTmdbRating?.let { (it * 10).toInt().toString() },
                 genres = item.genres.asStable(),
                 poster = item.progress.poster,
                 backdrop = item.progress.backdrop,
@@ -383,6 +385,7 @@ internal fun buildContinueWatchingItem(
                 secondaryHighlightText = secondaryHighlightText,
                 imdbText = item.info.imdbRating
                     ?.let { String.format("%.1f", it) },
+                tmdbText = item.info.tmdbRating?.let { (it * 10).toInt().toString() },
                 genres = item.info.genres.asStable(),
                 poster = item.info.poster,
                 backdrop = item.info.backdrop,
@@ -496,6 +499,7 @@ internal fun buildCatalogItem(
         runtimeText = formatHeroRuntime(item.runtime),
         imdbText = item.imdbRating
             ?.let { String.format("%.1f", it) },
+        tmdbText = item.tmdbRating?.let { (it * 10).toInt().toString() },
         ageRatingText = item.ageRating,
         statusText = item.status,
         countryText = item.country,

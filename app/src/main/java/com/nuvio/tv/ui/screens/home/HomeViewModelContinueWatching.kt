@@ -2395,7 +2395,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                 .maxOrNull() ?: 0
 
             val currentSeason = progress.season ?: 1
-            val seasonsToFetch = listOf(currentSeason, maxKnownSeason, maxKnownSeason + 1)
+            val seasonsToFetch = listOf(currentSeason, currentSeason + 1, maxKnownSeason, maxKnownSeason + 1)
                 .filter { it > 0 }
                 .distinct()
             val fetchedEpisodes = runCatching {

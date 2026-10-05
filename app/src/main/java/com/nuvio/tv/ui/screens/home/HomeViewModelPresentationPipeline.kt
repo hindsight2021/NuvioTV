@@ -847,7 +847,8 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
             merged = merged.copy(
                 name = if (isModernLayout) enrichment.localizedTitle ?: merged.name else merged.name,
                 description = enrichment.description ?: merged.description,
-                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres,
+                tmdbRating = enrichment.rating?.toFloat() ?: merged.tmdbRating
             )
         }
         if (currentTmdbSettings.useArtwork) {

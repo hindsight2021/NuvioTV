@@ -477,13 +477,13 @@ private fun HeroTitleContent(
         val statusBadge = secondaryMeta.status
         val secondaryDetails = secondaryMeta.details
         val hasSecondaryBadge = ageRatingBadge != null || statusBadge != null
-        val hasImdbRatingForLayout = !preview.imdbText.isNullOrBlank()
-        val reserveImdbInPrimary = !preview.isSeries && !hasSecondaryBadge && hasImdbRatingForLayout
-        val reserveImdbInPrimaryWithHighlight = reserveImdbInPrimary && secondaryHighlightText == null
-        val reserveImdbInSecondary = hasImdbRatingForLayout &&
+        val hasRatingsForLayout = !preview.imdbText.isNullOrBlank() || !preview.tmdbText.isNullOrBlank()
+        val reserveRatingsInPrimary = !preview.isSeries && !hasSecondaryBadge && hasRatingsForLayout
+        val reserveRatingsInPrimaryWithHighlight = reserveRatingsInPrimary && secondaryHighlightText == null
+        val reserveRatingsInSecondary = hasRatingsForLayout &&
             (preview.isSeries || hasSecondaryBadge || secondaryHighlightText != null)
-        val showImdbInPrimaryWithHighlight = showImdbRatings && reserveImdbInPrimaryWithHighlight
-        val showImdbInSecondary = showImdbRatings && reserveImdbInSecondary
+        val showRatingsInPrimaryWithHighlight = showImdbRatings && reserveRatingsInPrimaryWithHighlight
+        val showRatingsInSecondary = showImdbRatings && reserveRatingsInSecondary
 
         Row(
             modifier = Modifier
@@ -550,21 +550,36 @@ private fun HeroTitleContent(
                             maxLines = 1
                         )
                     }
-                    if (reserveImdbInPrimaryWithHighlight) {
-                        HeroImdbMeta(
-                            imdbText = preview.imdbText.orEmpty(),
-                            textStyle = labelMedium,
-                            textColor = NuvioTheme.colors.TextSecondary,
-                            logoSize = 30.dp * metaScale,
-                            spacing = imdbMetaSpacing,
-                            visible = showImdbInPrimaryWithHighlight
-                        )
+                    if (reserveRatingsInPrimaryWithHighlight) {
+                        if (!preview.imdbText.isNullOrBlank()) {
+                            HeroImdbMeta(
+                                imdbText = preview.imdbText,
+                                textStyle = labelMedium,
+                                textColor = NuvioTheme.colors.TextSecondary,
+                                logoSize = 30.dp * metaScale,
+                                spacing = imdbMetaSpacing,
+                                visible = showRatingsInPrimaryWithHighlight
+                            )
+                        }
+                        if (!preview.imdbText.isNullOrBlank() && !preview.tmdbText.isNullOrBlank()) {
+                            HeroMetaDivider(scale = metaScale, visible = showRatingsInPrimaryWithHighlight)
+                        }
+                        if (!preview.tmdbText.isNullOrBlank()) {
+                            HeroTmdbMeta(
+                                tmdbText = preview.tmdbText,
+                                textStyle = labelMedium,
+                                textColor = NuvioTheme.colors.TextSecondary,
+                                logoSize = 30.dp * metaScale,
+                                spacing = imdbMetaSpacing,
+                                visible = showRatingsInPrimaryWithHighlight
+                            )
+                        }
                     }
                 }
             }
         }
 
-        if (secondaryHighlightText != null || ageRatingBadge != null || reserveImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
+        if (secondaryHighlightText != null || ageRatingBadge != null || reserveRatingsInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -582,10 +597,10 @@ private fun HeroTitleContent(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (secondaryHighlightText != null && (hasSecondaryBadge || reserveImdbInSecondary || secondaryDetails.isNotEmpty())) {
+                if (secondaryHighlightText != null && (hasSecondaryBadge || reserveRatingsInSecondary || secondaryDetails.isNotEmpty())) {
                     HeroMetaDivider(
                         scale = metaScale,
-                        visible = hasSecondaryBadge || showImdbInSecondary || secondaryDetails.isNotEmpty()
+                        visible = hasSecondaryBadge || showRatingsInSecondary || secondaryDetails.isNotEmpty()
                     )
                 }
                 if (ageRatingBadge != null && statusBadge != null) {
@@ -611,26 +626,41 @@ private fun HeroTitleContent(
                         )
                     }
                 }
-                if ((ageRatingBadge != null || statusBadge != null) && (reserveImdbInSecondary || secondaryDetails.isNotEmpty())) {
+                if ((ageRatingBadge != null || statusBadge != null) && (reserveRatingsInSecondary || secondaryDetails.isNotEmpty())) {
                     HeroMetaDivider(
                         scale = metaScale,
-                        visible = showImdbInSecondary || secondaryDetails.isNotEmpty()
+                        visible = showRatingsInSecondary || secondaryDetails.isNotEmpty()
                     )
                 }
-                if (reserveImdbInSecondary) {
-                    HeroImdbMeta(
-                        imdbText = preview.imdbText.orEmpty(),
-                        textStyle = labelMedium,
-                        textColor = NuvioTheme.colors.TextSecondary,
-                        logoSize = 30.dp * metaScale,
-                        spacing = imdbMetaSpacing,
-                        visible = showImdbInSecondary
-                    )
+                if (reserveRatingsInSecondary) {
+                    if (!preview.imdbText.isNullOrBlank()) {
+                        HeroImdbMeta(
+                            imdbText = preview.imdbText,
+                            textStyle = labelMedium,
+                            textColor = NuvioTheme.colors.TextSecondary,
+                            logoSize = 30.dp * metaScale,
+                            spacing = imdbMetaSpacing,
+                            visible = showRatingsInSecondary
+                        )
+                    }
+                    if (!preview.imdbText.isNullOrBlank() && !preview.tmdbText.isNullOrBlank()) {
+                        HeroMetaDivider(scale = metaScale, visible = showRatingsInSecondary)
+                    }
+                    if (!preview.tmdbText.isNullOrBlank()) {
+                        HeroTmdbMeta(
+                            tmdbText = preview.tmdbText,
+                            textStyle = labelMedium,
+                            textColor = NuvioTheme.colors.TextSecondary,
+                            logoSize = 30.dp * metaScale,
+                            spacing = imdbMetaSpacing,
+                            visible = showRatingsInSecondary
+                        )
+                    }
                 }
-                if (reserveImdbInSecondary && secondaryDetails.isNotEmpty()) {
+                if (reserveRatingsInSecondary && secondaryDetails.isNotEmpty()) {
                     HeroMetaDivider(
                         scale = metaScale,
-                        visible = showImdbInSecondary
+                        visible = showRatingsInSecondary
                     )
                 }
                 secondaryDetails.forEachIndexed { index, value ->
@@ -684,6 +714,44 @@ private fun HeroImdbMeta(
         )
         Text(
             text = imdbText,
+            style = textStyle,
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun HeroTmdbMeta(
+    tmdbText: String,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    textColor: Color,
+    logoSize: androidx.compose.ui.unit.Dp,
+    spacing: androidx.compose.ui.unit.Dp,
+    visible: Boolean = true
+) {
+    Row(
+        modifier = Modifier
+            .graphicsLayer { alpha = if (visible) 1f else 0f }
+            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val tmdbModel = androidx.compose.runtime.remember(context) {
+            coil.request.ImageRequest.Builder(context)
+                .data(R.raw.mdblist_tmdb)
+                .build()
+        }
+        coil.compose.AsyncImage(
+            model = tmdbModel,
+            contentDescription = null,
+            modifier = Modifier.size(logoSize),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+        )
+        Text(
+            text = tmdbText,
             style = textStyle,
             color = textColor,
             maxLines = 1,

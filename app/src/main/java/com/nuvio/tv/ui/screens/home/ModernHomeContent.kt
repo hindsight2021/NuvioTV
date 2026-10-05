@@ -196,7 +196,7 @@ fun ModernHomeContent(
                     items = effectiveHero.asStable(),
                     showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
                     onItemClick = { item ->
-                        onNavigateToDetail(item.id, item.apiType, "")
+                        onNavigateToDetail(item.id, item.apiType, item.sourceAddonBaseUrl.orEmpty())
                     },
                     onItemFocus = { item -> onItemFocus(item) }
                 )
@@ -1267,7 +1267,7 @@ fun ModernHomeContent(
                 heroFocusRequester = heroFocusRequester,
                 topTabRowFocusRequester = topTabRowFocusRequester,
                 onActiveHeroItemChange = { activeHeroBannerItem = it },
-                onHeroItemClick = { item -> onNavigateToDetail(item.id, item.apiType, "") },
+                onHeroItemClick = { item -> onNavigateToDetail(item.id, item.apiType, item.sourceAddonBaseUrl.orEmpty()) },
                 showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
                 animatedBackgroundMode = uiState.animatedBackgroundMode,
                 modifier = if (uiState.heroInLandscapeEnabled && effectiveHeroList.isNotEmpty()) {
@@ -1302,7 +1302,7 @@ fun ModernHomeContent(
                 optionsItem.value = null
             },
             onDetails = {
-                onNavigateToDetail(selectedOptionsItem.contentId(), selectedOptionsItem.contentType(), "")
+                onNavigateToDetail(selectedOptionsItem.contentId(), selectedOptionsItem.contentType(), selectedOptionsItem.addonBaseUrl().orEmpty())
                 optionsItem.value = null
             },
             onStartFromBeginning = {

@@ -108,13 +108,15 @@ fun TrailerPlayer(
         player.volume = if (muted) 0f else 1f
         if (isPlaying && trailerUrl != null) {
             hasRenderedFirstFrame = false
+            player.stop()
+            player.clearMediaItems()
+            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
             if (!trailerAudioUrl.isNullOrBlank()) {
-                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerAudioUrl))
                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
             } else {
-                player.setMediaItem(MediaItem.fromUri(trailerUrl))
+                player.setMediaSource(videoSource)
             }
             player.prepare()
             player.playWhenReady = !isPaused
@@ -184,13 +186,13 @@ fun TrailerPlayer(
                 Lifecycle.Event.ON_RESUME -> {
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
                         if (player.currentMediaItem == null) {
+                            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                             if (!currentTrailerAudioUrl.isNullOrBlank()) {
-                                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerAudioUrl!!))
                                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                             } else {
-                                player.setMediaItem(MediaItem.fromUri(currentTrailerUrl!!))
+                                player.setMediaSource(videoSource)
                             }
                             player.prepare()
                         }

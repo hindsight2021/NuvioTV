@@ -104,8 +104,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1101
-        versionName = "0.9.4-plus.43"
+        versionCode = 1102
+        versionName = "0.9.4-plus.44"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "https://api.introdb.app/")}\"")

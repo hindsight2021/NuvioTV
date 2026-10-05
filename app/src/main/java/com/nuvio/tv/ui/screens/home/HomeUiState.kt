@@ -92,6 +92,7 @@ sealed class ContinueWatchingItem {
         val episodeDescription: String? = null,
         val episodeThumbnail: String? = null,
         val episodeImdbRating: Float? = null,
+        val episodeTmdbRating: Float? = null,
         val genres: List<String> = emptyList(),
         val releaseInfo: String? = null,
         val contentLanguage: String? = null
@@ -254,6 +255,7 @@ data class NextUpInfo(
     val airDateLabel: String? = null,
     val lastWatched: Long,
     val imdbRating: Float? = null,
+    val tmdbRating: Float? = null,
     val genres: List<String> = emptyList(),
     val releaseInfo: String? = null,
     val sortTimestamp: Long,

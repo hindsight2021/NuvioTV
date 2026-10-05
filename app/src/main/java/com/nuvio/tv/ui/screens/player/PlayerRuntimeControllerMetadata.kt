@@ -170,10 +170,11 @@ private suspend fun PlayerRuntimeController.enrichDescriptionFromTmdb(id: String
         }
     }
 
-    // Enrich cast from TMDB if addon didn't provide any.
+    // Enrich cast from TMDB if addon didn't provide rich cast.
     if (settings.useBasicInfo && enrichment.castMembers.isNotEmpty()) {
         _uiState.update { state ->
-            if (state.castMembers.isEmpty()) state.copy(castMembers = enrichment.castMembers)
+            val hasRichCast = state.castMembers.any { it.photo != null }
+            if (!hasRichCast) state.copy(castMembers = enrichment.castMembers)
             else state
         }
     }
