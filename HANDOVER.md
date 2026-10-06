@@ -157,18 +157,15 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 
 ## 7. Current Status & Next Steps for Codex
 
-1. **v0.9.4-plus.50 Candidate Release Build (Commit `7429605c0`, Run `37465273405`)**:
-   - **Build Status**: Succeeded (all unit tests passed, full release APK built & signed).
-   - **Artifact**: `nuviotv-0.9.4-plus.50-full-release` (SHA256: `ee1246bbef62d223a4106fd8b8d74e54ab64491ed3dd8743c0c57fc97811e190`).
-   - **Local APK Path**: `tmp_apk/app-full-arm64-v8a-release.apk`
-   - **Just Play Core & UI**: `JustPlayCoordinator`, entry points, commands, nav args, `MetaDetailsScreen`, `StreamScreen`, and HA client (`nuvio_client.py`) implemented and integrated.
-   - **Continue Watching Merging**: Multi-source candidate superset merging active without phantom episodes.
-   - **Full JVM Unit Test Suite**: All unit tests passing in CI.
+1. **v0.9.4-plus.47 Hotfix Release (Commit `2c9d7ea60`, Publish Run `37468513740`)**:
+   - **Target**: Published directly to GitHub Releases as `0.9.4-plus.47` for Nuvio in-app updater.
+   - **Scope**: Continue Watching multi-source candidate merging (Traitors Canada S4 / Great Canadian Baking Show S10E01 fix), full JVM test fixes, and release metadata alignment.
+   - **Version Details**: `versionName = "0.9.4-plus.47"`, `versionCode = 1105`.
+   - **Codex Independence**: Codex continues work on v50 ("Just Play") separately.
 2. **Device Verification on Shield TV (192.168.1.242:5555)**:
-   - User installs candidate APK manually.
+   - Update from inside Nuvio via Settings -> Check for Updates.
    - Verify *The Traitors Canada* S4E3 displays in Continue Watching.
    - Verify *The Great Canadian Baking Show* S10E01 displays properly.
-   - Verify Just Play action on home/details and via HA `/play_media` endpoint.
 3. **Primary Metadata Addon Lock**:
    - Consider adding an optional setting in Layout / Addons allowing users to designate a preferred primary metadata provider.
 4. **Movie Trivia Feature**:
