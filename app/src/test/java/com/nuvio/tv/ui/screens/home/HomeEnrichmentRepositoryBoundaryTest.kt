@@ -84,6 +84,11 @@ class HomeEnrichmentRepositoryBoundaryTest {
         // The failed lookup came back as a codeless Error, so the item was never marked prefetched
         // and the focus gate let it through again.
         awaitAtLeast(metaCalls, 2)
+        // The API invocation increments the counter before its result is consumed by the
+        // focus coroutine. Wait for the observable cache outcome rather than racing that job.
+        withTimeout(5_000) {
+            while (itemId !in viewModel.prefetchedExternalMetaIds) delay(25)
+        }
         assertEquals(
             "the resolved item should now be cached",
             true,
