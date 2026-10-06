@@ -157,11 +157,13 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 
 ## 7. Current Status & Next Steps for Codex
 
-1. **v0.9.4-plus.50 Release Build (Commit `bdbdf18d8`)**:
+1. **v0.9.4-plus.50 Candidate Release Build (Commit `7429605c0`, Run `37465273405`)**:
+   - **Build Status**: Succeeded (all unit tests passed, full release APK built & signed).
+   - **Artifact**: `nuviotv-0.9.4-plus.50-full-release` (SHA256: `ee1246bbef62d223a4106fd8b8d74e54ab64491ed3dd8743c0c57fc97811e190`).
+   - **Local APK Path**: `tmp_apk/app-full-arm64-v8a-release.apk`
    - **Just Play Core & UI**: `JustPlayCoordinator`, entry points, commands, nav args, `MetaDetailsScreen`, `StreamScreen`, and HA client (`nuvio_client.py`) implemented and integrated.
    - **Continue Watching Merging**: Multi-source candidate superset merging active without phantom episodes.
-   - **Full JVM Unit Test Suite**: All 20 previously failing unit tests resolved; `release-metadata` validation passing.
-   - **GitHub Actions Candidate Run**: `37464527060` dispatched for manual installation.
+   - **Full JVM Unit Test Suite**: All unit tests passing in CI.
 2. **Device Verification on Shield TV (192.168.1.242:5555)**:
    - User installs candidate APK manually.
    - Verify *The Traitors Canada* S4E3 displays in Continue Watching.
