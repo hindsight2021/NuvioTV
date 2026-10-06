@@ -155,13 +155,19 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 
 ---
 
-## 7. Open Tasks & Next Steps for Codex
+## 7. Current Status & Next Steps for Codex
 
-1. **Continue Watching & Metadata Verification**:
-   - Verify that *The Traitors Canada* S4E3 and *The Great Canadian Baking Show* S10E01 resolve seamlessly on physical TV test with multiple metadata addons active.
-2. **Just Play Coordination (v0.9.4-plus.50)**:
-   - Complete exact-episode resolution coordinator, AppCommandBus intent handling, and Home Assistant integration outlined in `RELEASE_PLAN_0.9.4-plus.50.md`.
+1. **v0.9.4-plus.50 Release Build (Commit `bdbdf18d8`)**:
+   - **Just Play Core & UI**: `JustPlayCoordinator`, entry points, commands, nav args, `MetaDetailsScreen`, `StreamScreen`, and HA client (`nuvio_client.py`) implemented and integrated.
+   - **Continue Watching Merging**: Multi-source candidate superset merging active without phantom episodes.
+   - **Full JVM Unit Test Suite**: All 20 previously failing unit tests resolved; `release-metadata` validation passing.
+   - **GitHub Actions Candidate Run**: `37464527060` dispatched for manual installation.
+2. **Device Verification on Shield TV (192.168.1.242:5555)**:
+   - User installs candidate APK manually.
+   - Verify *The Traitors Canada* S4E3 displays in Continue Watching.
+   - Verify *The Great Canadian Baking Show* S10E01 displays properly.
+   - Verify Just Play action on home/details and via HA `/play_media` endpoint.
 3. **Primary Metadata Addon Lock**:
-   - Provide an optional user setting in Layout / Addon settings allowing the user to set a designated "Master Metadata Provider" so catalog-only addons never intercept base show metadata.
+   - Consider adding an optional setting in Layout / Addons allowing users to designate a preferred primary metadata provider.
 4. **Movie Trivia Feature**:
-   - Continue development on the Movie Trivia feature previously requested by the user.
+   - Proceed with remaining planned features once v50 device acceptance is complete.
