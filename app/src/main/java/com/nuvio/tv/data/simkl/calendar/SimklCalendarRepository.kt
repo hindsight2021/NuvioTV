@@ -73,8 +73,15 @@ class SimklCalendarRepository @Inject constructor(
 
         private val EPISODE_MARKER_REGEX = Regex("(?i)^(?:S(\\d+))?E(\\d+)$")
 
-        internal fun normalizeTitle(title: String): String =
-            title.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+        internal fun normalizeTitle(title: String): String {
+            val base = title.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+            val stripped = title
+                .replace(Regex("""\s*[:(]?\s*\bseason\s+\d+\s*\)?\s*$""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("""\s*\(\d{4}\)\s*$"""), "")
+                .lowercase(Locale.ROOT)
+                .replace(Regex("[^a-z0-9]"), "")
+            return stripped.ifBlank { base }
+        }
 
         internal fun parseEpisodeMarker(value: String?): Pair<Int?, Int>? {
             val match = value?.trim()?.let(EPISODE_MARKER_REGEX::matchEntire) ?: return null

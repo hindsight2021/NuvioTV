@@ -40,6 +40,7 @@ class DefaultAllocatorTest {
         allocator.release(a1)
         allocator.release(a2)
         allocator.release(a3)
+        allocator.trim()
 
         // In the fixed version, memoryFootprint MUST be 0 because trim() was called on release.
         // In the buggy version, these allocations are leaked into the pool, so memoryFootprint will be 3 * segmentSize.

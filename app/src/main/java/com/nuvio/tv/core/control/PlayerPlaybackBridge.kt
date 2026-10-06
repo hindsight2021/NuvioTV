@@ -46,6 +46,7 @@ class PlayerPlaybackBridge @Inject constructor(
             observationJob?.cancel()
             controllerRef = WeakReference(controller)
 
+            val sessionId = java.util.UUID.randomUUID().toString()
             observationJob = scope.launch {
                 combine(
                     controller.uiState,
@@ -92,7 +93,11 @@ class PlayerPlaybackBridge @Inject constructor(
                         audioTracks = audioTrackSnapshots,
                         subtitleTracks = subtitleTrackSnapshots,
                         selectedAudioIndex = uiState.selectedAudioTrackIndex,
-                        selectedSubtitleIndex = uiState.selectedSubtitleTrackIndex
+                        selectedSubtitleIndex = uiState.selectedSubtitleTrackIndex,
+                        contentId = controller.contentId,
+                        videoId = controller.currentVideoId,
+                        profileId = controller.profileId,
+                        sessionId = sessionId
                     )
                 }.collect { snapshot ->
                     _playbackSnapshot.value = snapshot

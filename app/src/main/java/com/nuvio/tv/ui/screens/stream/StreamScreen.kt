@@ -118,6 +118,7 @@ import dev.chrisbanes.haze.hazeSource
 fun StreamScreen(
     viewModel: StreamScreenViewModel = hiltViewModel(),
     startFromBeginning: Boolean = false,
+    justPlayRequestId: String? = null,
     restoreSourceSelection: Boolean = false,
     onSourceSelectionRestoreHandled: () -> Unit = {},
     onBackPress: () -> Unit,
@@ -130,6 +131,15 @@ fun StreamScreen(
     )
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+    val justPlayCoordinator = remember(context) {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext,
+            com.nuvio.tv.core.control.JustPlayEntryPoint::class.java).justPlayCoordinator()
+    }
+    fun canLaunchJustPlay(): Boolean {
+        val id = justPlayRequestId ?: return true
+        val request = justPlayCoordinator.status(id) ?: return false
+        return justPlayCoordinator.isActive(id, request.profileId)
+    }
     var focusedStreamIndex by rememberSaveable { mutableStateOf(0) }
     var restoreFocusedStream by rememberSaveable { mutableStateOf(false) }
     var pendingRestoreOnResume by rememberSaveable { mutableStateOf(false) }
@@ -154,6 +164,7 @@ fun StreamScreen(
     }
 
     fun launchExternalPlayer(playbackInfo: StreamPlaybackInfo) {
+        if (!canLaunchJustPlay()) return
         val url = playbackInfo.url ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else return
         scope.coroutineLaunch {
             viewModel.launchExternalPlayer(
@@ -166,6 +177,7 @@ fun StreamScreen(
     }
 
     fun openExternalInBrowser(playbackInfo: StreamPlaybackInfo): Boolean {
+        if (!canLaunchJustPlay()) return true
         if (!playbackInfo.isExternal) return false
         val url = playbackInfo.url?.takeIf { it.isNotBlank() } ?: return false
         val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -185,6 +197,7 @@ fun StreamScreen(
     }
 
     fun launchInternalPlayer(playbackInfo: StreamPlaybackInfo) {
+        if (!canLaunchJustPlay()) return
         viewModel.onInternalPlayerLaunching()
         onStreamSelected(playbackInfo)
     }
@@ -255,7 +268,7 @@ fun StreamScreen(
                 }
                 else -> {
                     viewModel.onInternalPlayerLaunching()
-                    onAutoPlayResolved(playbackInfo)
+                    if (canLaunchJustPlay()) onAutoPlayResolved(playbackInfo)
                 }
             }
             return
@@ -267,12 +280,13 @@ fun StreamScreen(
     }
 
     BackHandler {
+        justPlayRequestId?.let(justPlayCoordinator::cancel)
         onBackPress()
     }
 
     LaunchedEffect(uiState.autoPlayStream) {
         val stream = uiState.autoPlayStream ?: return@LaunchedEffect
-        // User aborted the auto-next chain that navigated here — don't auto-launch; show the list.
+        // User aborted the auto-next chain that navigated here â€” don't auto-launch; show the list.
         if (viewModel.isAutoNextContinuationAborted()) {
             viewModel.consumeAbortedAutoNextContinuation()
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
@@ -311,8 +325,9 @@ fun StreamScreen(
     }
 
     LaunchedEffect(uiState.autoPlayPlaybackInfo) {
+        if (!canLaunchJustPlay()) return@LaunchedEffect
         val playbackInfo = uiState.autoPlayPlaybackInfo ?: return@LaunchedEffect
-        // User aborted the auto-next chain that navigated here — don't auto-launch; show the list.
+        // User aborted the auto-next chain that navigated here â€” don't auto-launch; show the list.
         if (viewModel.isAutoNextContinuationAborted()) {
             viewModel.consumeAbortedAutoNextContinuation()
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
@@ -352,7 +367,7 @@ fun StreamScreen(
                 }
                 else -> {
                     viewModel.onInternalPlayerLaunching()
-                    onAutoPlayResolved(playbackInfo)
+                    if (canLaunchJustPlay()) onAutoPlayResolved(playbackInfo)
                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 }
             }
@@ -400,7 +415,7 @@ fun StreamScreen(
 
         if (!uiState.autoPlayDecided) {
             // Don't render overlay or stream list until ViewModel decides
-            // whether direct autoplay is active — prevents single-frame flash.
+            // whether direct autoplay is active â€” prevents single-frame flash.
         } else if (showOverlay) {
             LoadingOverlay(
                 visible = true,
@@ -532,7 +547,7 @@ fun StreamScreen(
                 onDismiss = {
                     showP2pConsentDialog = false
                     pendingTorrentPlaybackInfo = null
-                    // Cancelled P2P consent — fall back to manual stream selection
+                    // Cancelled P2P consent â€” fall back to manual stream selection
                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 }
             )
@@ -640,7 +655,7 @@ private fun LeftContentSection(
         }
     }
     val infoText = remember(genres, year) {
-        listOfNotNull(genres, year).joinToString(" • ")
+        listOfNotNull(genres, year).joinToString(" â€¢ ")
     }
     Box(
         modifier = modifier.padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xl),
@@ -1236,7 +1251,7 @@ private fun StreamCard(
     // composition with badges already present (tab switch), no animation.
     val hadBadgesOnFirstComposition = remember { stream.badges.isNotEmpty() }
     val shouldAnimateBadges = stream.badges.isNotEmpty() && !hadBadgesOnFirstComposition
-    // Pre-upscale: decode at 2× target pixels so the hardware compositor
+    // Pre-upscale: decode at 2Ã— target pixels so the hardware compositor
     // has enough pixel data for smooth edges inside Card RenderNodes.
     val logoDecodeSize = remember(density) {
         with(density) { NuvioTheme.spacing.xxl.roundToPx() } * 2

@@ -200,12 +200,21 @@ class NuvioClient:
         season: Optional[int] = None,
         episode: Optional[int] = None,
     ) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {"media_id": media_id, "type": media_type}
+        payload: Dict[str, Any] = {"contentId": media_id, "type": media_type}
         if season is not None:
             payload["season"] = int(season)
         if episode is not None:
             payload["episode"] = int(episode)
         return await self._request("POST", "/api/v1/play", json=payload)
+
+    async def get_play_request(self, request_id: str) -> Dict[str, Any]:
+        """Get actual playback status; acceptance does not mean started."""
+        from urllib.parse import quote
+        return await self._request("GET", f"/api/v1/play/requests/{quote(request_id, safe='')}")
+
+    async def cancel_play_request(self, request_id: str) -> Dict[str, Any]:
+        from urllib.parse import quote
+        return await self._request("DELETE", f"/api/v1/play/requests/{quote(request_id, safe='')}")
 
     async def play_thematic_channel(self, topic: str) -> Dict[str, Any]:
         return await self._request("POST", "/api/v1/channels/thematic", json={"topic": topic})

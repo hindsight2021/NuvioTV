@@ -41,6 +41,7 @@ class ThemeSettingsViewModelTest {
         every { amoledMode } returns flowOf(false)
         every { amoledSurfacesMode } returns flowOf(false)
         every { settingsUiStyle } returns flowOf(SettingsUiStyle.CLASSIC)
+        every { appDimPercent } returns flowOf(ThemeDataStore.DEFAULT_APP_DIM_PERCENT)
         coEvery { setCustomTheme(any()) } coAnswers {
             selection.value = ThemeSelection(AppTheme.CUSTOM, firstArg())
         }

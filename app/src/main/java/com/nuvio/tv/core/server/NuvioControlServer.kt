@@ -99,6 +99,13 @@ class NuvioControlServer(
             uri == "$API_PREFIX/navigation/dpad" && method == Method.POST -> handleDpad(session)
 
             uri == "$API_PREFIX/play" && method == Method.POST -> handlePlayMedia(session)
+            uri.startsWith("$API_PREFIX/play/requests/") && (method == Method.GET || method == Method.DELETE) -> {
+                val id = uri.removePrefix("$API_PREFIX/play/requests/")
+                if (method == Method.DELETE) appCommandBus.cancelPlaybackRequest(id)
+                val request = appCommandBus.playbackRequestStatus(id)
+                if (request == null) jsonError(Response.Status.NOT_FOUND, "Unknown playback request")
+                else jsonResponse(gson.toJson(request))
+            }
 
             uri == "$API_PREFIX/channels/curated" && method == Method.GET -> handleCuratedList()
             uri == "$API_PREFIX/channels/curated" && method == Method.POST -> handleCuratedPlay(session)

@@ -19,6 +19,7 @@ class AppCommandBus @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playerPlaybackBridge: PlayerPlaybackBridge,
     private val navigationCommander: NavigationCommander,
+    private val justPlayCoordinator: JustPlayCoordinator,
     private val aiOperatorEngine: AiOperatorEngine,
     private val thematicChannelGenerator: ThematicChannelGenerator
 ) {
@@ -26,6 +27,9 @@ class AppCommandBus @Inject constructor(
     /**
      * Dispatches a single [command] to its owning subsystem and returns a [CommandResult].
      */
+    fun playbackRequestStatus(id: String) = justPlayCoordinator.status(id)
+    fun cancelPlaybackRequest(id: String) { justPlayCoordinator.cancel(id) }
+
     suspend fun dispatch(command: AppCommand): CommandResult {
         return when (command) {
             // --- Playback commands: delegated to the playback bridge ---
@@ -68,8 +72,7 @@ class AppCommandBus @Inject constructor(
 
             // --- Content commands ---
             is AppCommand.PlayMedia -> {
-                navigationCommander.search(command.title ?: command.contentId)
-                CommandResult.Success("Initiated playback search for ${command.title ?: command.contentId}")
+                justPlayCoordinator.request(command)
             }
 
             is AppCommand.PlayStream -> {

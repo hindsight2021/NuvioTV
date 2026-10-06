@@ -57,17 +57,18 @@ object MetaMerger {
      * The resulting list is sorted by season then episode.
      */
     fun merge(primary: Meta, secondary: Meta): Meta {
-        val primaryByKey: MutableMap<Pair<Int, Int>, Video> = LinkedHashMap()
+        // Identity guard: only merge when the two metas refer to the same item.
+        if (!sameIdentity(primary, secondary)) return primary
+
+        val primaryByKey: MutableMap<Any, Video> = LinkedHashMap()
+        val primaryAnonymousCounts = mutableMapOf<Video, Int>()
+        val secondaryAnonymousCounts = mutableMapOf<Video, Int>()
         for (video in primary.videos) {
-            val s = video.season ?: 0
-            val e = video.episode ?: 0
-            primaryByKey[s to e] = video
+            primaryByKey[videoKey(video, primaryAnonymousCounts)] = video
         }
 
         for (secondaryVideo in secondary.videos) {
-            val s = secondaryVideo.season ?: 0
-            val e = secondaryVideo.episode ?: 0
-            val key = s to e
+            val key = videoKey(secondaryVideo, secondaryAnonymousCounts)
             val existing = primaryByKey[key]
             if (existing == null) {
                 // New episode from secondary (e.g. newly aired season!)
@@ -132,24 +133,75 @@ object MetaMerger {
 
     /**
      * Merges multiple metadata instances into a unified [Meta].
-     * Prefers a non-stub metadata with the largest episode count as the base,
-     * and sequentially merges all other sources into it.
+     * Preserves primary identity and precedence, supplementing it in the supplied
+     * provider order. Callers must provide a deterministic source order.
      */
     fun mergeAll(primary: Meta, others: List<Meta>): Meta {
         if (others.isEmpty()) return primary
 
-        val all = listOf(primary) + others
-        // Select base: prefer non-stub, then largest episode count
-        val base = all.sortedWith(
-            compareByDescending<Meta> { !isStub(it) }
-                .thenByDescending { it.videos.size }
-        ).first()
-
-        var current = base
-        for (other in all) {
-            if (other === base) continue
+        // Primary is always the canonical base; merge others sequentially in supplied order.
+        var current = primary
+        for (other in others) {
+            if (other === primary) continue
             current = merge(current, other)
         }
         return current
+    }
+
+    private fun sameIdentity(a: Meta, b: Meta): Boolean {
+        if (a.type != b.type) return false
+
+        fun imdb(m: Meta): String? {
+            val t = m.imdbId.orEmpty().trim()
+            if (t.isNotBlank() && Regex("tt\\d+").matches(t)) return t
+            val i = m.id.trim()
+            return if (Regex("tt\\d+").matches(i)) i else null
+        }
+
+        val ia = imdb(a)
+        val ib = imdb(b)
+        if (ia != null && ib != null && ia != ib) return false
+
+        val ida = a.id.trim()
+        val idb = b.id.trim()
+        val pa = ida.substringBefore(':', "")
+        val pb = idb.substringBefore(':', "")
+        if (pa.isNotBlank() && pa == pb && ida != idb) return false
+
+        if (ida.isNotBlank() && ida == idb) return true
+
+        if (ia != null && ib != null && ia == ib) return true
+
+        fun norm(s: String): String = s.trim().lowercase().replace(Regex("\\s+"), " ")
+        val na = norm(a.name)
+        val nb = norm(b.name)
+        if (na.isBlank() || na != nb) return false
+
+        val ra = a.releaseInfo.orEmpty().trim()
+        val rb = b.releaseInfo.orEmpty().trim()
+        if (ra.isBlank() || rb.isBlank() || ra != rb) return false
+
+        return true
+    }
+
+    /**
+     * Builds a dedup key for a [Video].
+     *
+     * - Valid season (>= 0) AND episode (> 0) -> Pair(season, episode).
+     * - Otherwise, non-blank id -> "id:<id>".
+     * - Otherwise -> full value and per-source occurrence, preserving anonymous
+     *   duplicates while keeping repeated merges idempotent.
+     */
+    private fun videoKey(video: Video, anonymousCounts: MutableMap<Video, Int>): Any {
+        val season = video.season
+        val episode = video.episode
+        if (season != null && season >= 0 && episode != null && episode > 0) {
+            return season to episode
+        }
+        val id = video.id.trim()
+        if (id.isNotEmpty()) return "id:$id"
+        val occurrenceIndex = anonymousCounts.getOrDefault(video, 0)
+        anonymousCounts[video] = occurrenceIndex + 1
+        return video to occurrenceIndex
     }
 }

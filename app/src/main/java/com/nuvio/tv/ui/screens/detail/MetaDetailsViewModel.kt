@@ -69,6 +69,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withLock
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -1043,8 +1045,15 @@ class MetaDetailsViewModel @Inject constructor(
         fetchSecondaryMetaSources(contentId, enriched)
     }
 
+    private var metaSourcesGeneration: Int = 0
+    private val metaSourcesMutex = kotlinx.coroutines.sync.Mutex()
+
     private fun fetchSecondaryMetaSources(metaLookupId: String, primaryMeta: Meta) {
+        enrichedMergedMeta = null
         rawPrimaryMeta = primaryMeta
+        secondaryMetaJob?.cancel()
+        val generation = ++metaSourcesGeneration
+        loadedMetaSources.clear()
         val primarySourceId = preferredAddonBaseUrl ?: "primary"
         loadedMetaSources[primarySourceId] = Pair(
             context.getString(R.string.detail_meta_source_primary_fallback),
@@ -1055,10 +1064,11 @@ class MetaDetailsViewModel @Inject constructor(
             primaryMeta.apiType.equals("series", ignoreCase = true) ||
             primaryMeta.apiType.equals("tv", ignoreCase = true)
 
-        secondaryMetaJob?.cancel()
-        secondaryMetaJob = viewModelScope.launch(Dispatchers.IO) {
+        secondaryMetaJob = viewModelScope.launch {
             if (preferredAddonBaseUrl != null) {
                 val resolvedName = resolveAddonDisplayName(preferredAddonBaseUrl)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (generation != metaSourcesGeneration) return@launch
                 loadedMetaSources[preferredAddonBaseUrl] = Pair(resolvedName, primaryMeta)
             }
 
@@ -1068,6 +1078,8 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val candidates = metaRepository.getCandidateMetaAddons(type = itemType, id = metaLookupId)
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (generation != metaSourcesGeneration) return@launch
             if (candidates.isEmpty()) {
                 updateMetaSourcesUi()
                 return@launch
@@ -1079,86 +1091,96 @@ class MetaDetailsViewModel @Inject constructor(
                     if (addon.baseUrl == preferredAddonBaseUrl) return@forEach
                     launch {
                         try {
-                            val result = metaRepository.getMeta(
-                                addonBaseUrl = addon.baseUrl,
-                                type = candidateType,
-                                id = metaLookupId
-                            ).firstOrNull { it !is NetworkResult.Loading }
+                            val result = withTimeoutOrNull(12000) {
+                                metaRepository.getMeta(
+                                    addonBaseUrl = addon.baseUrl,
+                                    type = candidateType,
+                                    id = metaLookupId
+                                ).firstOrNull { it !is NetworkResult.Loading }
+                            }
 
                             if (result is NetworkResult.Success) {
+                                if (generation != metaSourcesGeneration) return@launch
                                 loadedMetaSources[addon.baseUrl] = Pair(addon.displayName, result.data)
-                                recalculateMetaSourcesAndMerge(primaryMeta)
+                                recalculateMetaSourcesAndMerge(primaryMeta, generation)
                             }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             Log.d(TAG, "Secondary meta fetch failed for ${addon.displayName}: ${e.message}")
                         }
                     }
                 }
             }
-            recalculateMetaSourcesAndMerge(primaryMeta)
+            if (generation != metaSourcesGeneration) return@launch
+            recalculateMetaSourcesAndMerge(primaryMeta, generation)
         }
     }
 
-    private suspend fun recalculateMetaSourcesAndMerge(basePrimaryMeta: Meta) {
-        val allMetas = loadedMetaSources.values.map { it.second }
-        val mergedRaw = MetaMerger.mergeAll(basePrimaryMeta, allMetas)
-        val enrichedMerged = if (tmdbSettingsDataStore.settings.first().enabled) {
-            enrichMeta(mergedRaw)
-        } else {
-            mergedRaw
-        }
-        enrichedMergedMeta = enrichedMerged
+    private suspend fun recalculateMetaSourcesAndMerge(basePrimaryMeta: Meta, generation: Int) {
+        metaSourcesMutex.withLock {
+            if (generation != metaSourcesGeneration) return
+            val snapshot = loadedMetaSources.toSortedMap()
+            val primarySourceId = preferredAddonBaseUrl ?: "primary"
+            val allMetas = snapshot.filterKeys { it != primarySourceId }.values.map { it.second }
+            val mergedRaw = MetaMerger.mergeAll(basePrimaryMeta, allMetas)
+            val enrichedMerged = if (tmdbSettingsDataStore.settings.first().enabled) {
+                enrichMeta(mergedRaw)
+            } else {
+                mergedRaw
+            }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (generation != metaSourcesGeneration) return
+            enrichedMergedMeta = enrichedMerged
 
-        val sourcesList = buildList {
-            // First source: All (Merged)
-            val mergedSeasonCount = enrichedMerged.videos.mapNotNull { it.season }.filter { it > 0 }.distinct().size
-            val mergedEpisodeCount = enrichedMerged.videos.size
-            add(
-                com.nuvio.tv.domain.model.MetaSource(
-                    id = "merged",
-                    displayName = context.getString(R.string.detail_meta_source_merged),
-                    seasonCount = mergedSeasonCount,
-                    episodeCount = mergedEpisodeCount,
-                    isMerged = true,
-                    isPrimary = true
-                )
-            )
-            // Contributing sources
-            loadedMetaSources.forEach { (sourceId, pair) ->
-                val (name, meta) = pair
-                val sCount = meta.videos.mapNotNull { it.season }.filter { it > 0 }.distinct().size
-                val eCount = meta.videos.size
+            val sourcesList = buildList {
+                // First source: All (Merged)
+                val mergedSeasonCount = enrichedMerged.videos.mapNotNull { it.season }.filter { it > 0 }.distinct().size
+                val mergedEpisodeCount = enrichedMerged.videos.size
                 add(
                     com.nuvio.tv.domain.model.MetaSource(
-                        id = sourceId,
-                        displayName = name,
-                        seasonCount = sCount,
-                        episodeCount = eCount,
-                        isMerged = false,
-                        isPrimary = sourceId == (preferredAddonBaseUrl ?: "primary")
+                        id = "merged",
+                        displayName = context.getString(R.string.detail_meta_source_merged),
+                        seasonCount = mergedSeasonCount,
+                        episodeCount = mergedEpisodeCount,
+                        isMerged = true,
+                        isPrimary = true
                     )
                 )
+                // Contributing sources
+                snapshot.forEach { (sourceId, pair) ->
+                    val (name, meta) = pair
+                    val sCount = meta.videos.mapNotNull { it.season }.filter { it > 0 }.distinct().size
+                    val eCount = meta.videos.size
+                    add(
+                        com.nuvio.tv.domain.model.MetaSource(
+                            id = sourceId,
+                            displayName = name,
+                            seasonCount = sCount,
+                            episodeCount = eCount,
+                            isMerged = false,
+                            isPrimary = sourceId == primarySourceId
+                        )
+                    )
+                }
             }
-        }
 
-        val currentState = _uiState.value
-        val isViewingMerged = currentState.selectedMetaSourceId == "merged"
-        val hasNewEpisodes = enrichedMerged.videos.size > (currentState.meta?.videos?.size ?: 0)
-
-        _uiState.update { state ->
-            if (isViewingMerged && (hasNewEpisodes || state.meta == null)) {
-                val seasons = enrichedMerged.videos.mapNotNull { it.season }.distinct().sorted()
-                val targetSeason = if (state.selectedSeason in seasons) state.selectedSeason else seasons.firstOrNull() ?: 1
-                val episodes = getEpisodesForSeason(enrichedMerged.videos, targetSeason)
-                state.copy(
-                    availableMetaSources = sourcesList,
-                    meta = enrichedMerged,
-                    seasons = seasons,
-                    selectedSeason = targetSeason,
-                    episodesForSeason = episodes
-                )
-            } else {
-                state.copy(availableMetaSources = sourcesList)
+            _uiState.update { state ->
+                val isViewingMerged = state.selectedMetaSourceId == "merged"
+                if (isViewingMerged) {
+                    val seasons = enrichedMerged.videos.mapNotNull { it.season }.distinct().sorted()
+                    val targetSeason = if (state.selectedSeason in seasons) state.selectedSeason else seasons.firstOrNull() ?: 1
+                    val episodes = getEpisodesForSeason(enrichedMerged.videos, targetSeason)
+                    state.copy(
+                        availableMetaSources = sourcesList,
+                        meta = enrichedMerged,
+                        seasons = seasons,
+                        selectedSeason = targetSeason,
+                        episodesForSeason = episodes
+                    )
+                } else {
+                    state.copy(availableMetaSources = sourcesList)
+                }
             }
         }
     }

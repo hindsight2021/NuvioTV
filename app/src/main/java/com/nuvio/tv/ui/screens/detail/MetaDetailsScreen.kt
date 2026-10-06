@@ -370,6 +370,9 @@ fun MetaDetailsScreen(
     heroRestoreToken: Int = 0,
     heroBackdropUrl: String? = null,
     playOnLoad: Boolean = false,
+    justPlayRequestId: String? = null,
+    justPlayProfileId: Int? = null,
+    onJustPlayHandoff: (String) -> Unit = {},
     playOnLoadManually: Boolean = false,
     playOnLoadIsRandomEpisode: Boolean = false,
     onBackPress: () -> Unit,
@@ -441,16 +444,23 @@ fun MetaDetailsScreen(
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
     var restoreSharedTrailerFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var isTrailerPaused by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val justPlayCoordinator = remember(context) {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext,
+            com.nuvio.tv.core.control.JustPlayEntryPoint::class.java).justPlayCoordinator()
+    }
+    val justPlayStates by justPlayCoordinator.stateFlow.collectAsStateWithLifecycle()
+    val justPlayActive = justPlayRequestId == null || (justPlayProfileId != null && justPlayStates[justPlayRequestId]?.status == com.nuvio.tv.core.control.JustPlayCoordinator.Status.RESOLVING && justPlayCoordinator.isActive(justPlayRequestId, justPlayProfileId))
     val playOnLoadConsumed = rememberSaveable { mutableStateOf(false) }
     val playOnLoadHandoffDispatched = rememberSaveable { mutableStateOf(false) }
     val playOnLoadReturnObserved = rememberSaveable { mutableStateOf(false) }
-    val suppressInitialPlayOnLoadContent = playOnLoad && !playOnLoadReturnObserved.value
+    val suppressInitialPlayOnLoadContent = playOnLoad && justPlayActive && !playOnLoadReturnObserved.value
     val playOnLoadReturnContentReady = !uiState.isLoading && uiState.meta != null
     var playOnLoadReturnRevealRequested by remember(playOnLoad) { mutableStateOf(!playOnLoad) }
     var playOnLoadReturnContentRevealed by remember(playOnLoad) { mutableStateOf(!playOnLoad) }
 
-    LaunchedEffect(playOnLoad, playOnLoadReturnObserved.value, playOnLoadReturnContentReady) {
-        if (!playOnLoad || (playOnLoadReturnObserved.value && playOnLoadReturnContentReady)) {
+    LaunchedEffect(playOnLoad, justPlayActive, playOnLoadReturnObserved.value, playOnLoadReturnContentReady) {
+        if (!playOnLoad || !justPlayActive || (playOnLoadReturnObserved.value && playOnLoadReturnContentReady)) {
             playOnLoadReturnRevealRequested = true
         }
     }
@@ -473,6 +483,7 @@ fun MetaDetailsScreen(
             isTrailerPaused = false
             viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
         } else {
+            justPlayRequestId?.let(justPlayCoordinator::cancel)
             onBackPress()
         }
     }
@@ -660,6 +671,7 @@ fun MetaDetailsScreen(
                 }
                 val playEpisode: (Video, Boolean) -> Unit = playEpisode@{ video, isRandom ->
                     if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
+                        justPlayRequestId?.let { justPlayCoordinator.fail(it, "No source provider available. Choose a source on TV.") }
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@playEpisode
                     }
@@ -764,7 +776,7 @@ fun MetaDetailsScreen(
                     if (hasSpecificTargetEpisode) {
                         meta.videos.firstOrNull { it.season == returnFocusSeason && it.episode == returnFocusEpisode }
                             ?: uiState.episodesForSeason.firstOrNull { it.season == returnFocusSeason && it.episode == returnFocusEpisode }
-                            ?: resolveHeroPlaybackVideo(meta, uiState.nextToWatch, uiState.episodesForSeason)
+
                     } else {
                         resolveHeroPlaybackVideo(
                             meta = meta,
@@ -776,6 +788,7 @@ fun MetaDetailsScreen(
 
                 LaunchedEffect(
                     playOnLoad,
+                    justPlayActive,
                     playOnLoadManually,
                     playOnLoadIsRandomEpisode,
                     playOnLoadConsumed.value,
@@ -787,7 +800,7 @@ fun MetaDetailsScreen(
                     returnFocusSeason,
                     returnFocusEpisode
                 ) {
-                    if (!playOnLoad || playOnLoadConsumed.value) {
+                    if (!playOnLoad || !justPlayActive || playOnLoadConsumed.value) {
                         return@LaunchedEffect
                     }
                     if (isSeries && !hasSpecificTargetEpisode && uiState.nextToWatch == null) {
@@ -795,9 +808,18 @@ fun MetaDetailsScreen(
                     }
                     if (isSeries && hasSpecificTargetEpisode) {
                         val matchesTarget = playOnLoadVideo?.season == returnFocusSeason && playOnLoadVideo?.episode == returnFocusEpisode
-                        if (!matchesTarget && meta.videos.isEmpty()) {
+                        if (!matchesTarget) {
+                            playOnLoadConsumed.value = true
+                            playOnLoadReturnObserved.value = true
+                            justPlayRequestId?.let { justPlayCoordinator.fail(it, "Requested episode was not found. Choose an episode on TV.") }
+                            Toast.makeText(context, "Requested episode was not found", Toast.LENGTH_LONG).show()
                             return@LaunchedEffect
                         }
+                    }
+                    if (justPlayRequestId != null && isSeries && !hasSpecificTargetEpisode && uiState.nextToWatch?.nextVideoId == null) {
+                        justPlayCoordinator.fail(justPlayRequestId, "No next episode is available. Choose an episode on TV.")
+                        playOnLoadReturnObserved.value = true
+                        return@LaunchedEffect
                     }
                     if (!playbackAvailability.isLoaded) return@LaunchedEffect
                     playOnLoadConsumed.value = true
@@ -807,6 +829,7 @@ fun MetaDetailsScreen(
                         return@LaunchedEffect
                     }
                     playOnLoadHandoffDispatched.value = true
+                    justPlayRequestId?.let(onJustPlayHandoff)
                     if (playOnLoadVideo != null) {
                         if (playOnLoadManually) {
                             playEpisodeManually(playOnLoadVideo, playOnLoadIsRandomEpisode)

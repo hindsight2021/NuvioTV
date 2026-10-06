@@ -159,7 +159,8 @@ class SimklMutationReconciliationTest {
         assertEquals(SimklListStatus.WATCHING, entry.status)
         assertEquals("tv", entry.animeType)
         assertEquals("2023-11-14T22:13:20Z", entry.seasons.single().episodes.single().watchedAt)
-        assertFalse(receipt.requiresReconciliation)
+        // Episode updates still reconcile authoritative series totals from the server.
+        assertTrue(receipt.requiresReconciliation)
     }
 
     @Test

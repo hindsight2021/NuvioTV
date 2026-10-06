@@ -47,6 +47,9 @@ class NavigationCommander @Inject constructor() {
     /** Hot stream of navigation requests. */
     val requests: SharedFlow<NavigationRequest> = _requests.asSharedFlow()
 
+    fun tryNavigateTo(route: String): Boolean =
+        _requests.subscriptionCount.value > 0 && _requests.tryEmit(NavigationRequest.NavigateTo(route))
+
     /** Request navigation to [route]. */
     fun navigateTo(route: String) {
         _requests.tryEmit(NavigationRequest.NavigateTo(route))

@@ -499,6 +499,7 @@ class TrackSelectionInvestigationTest {
         every { mockExoPlayer.videoFormat } returns activeFormat
         every { mockExoPlayer.currentTracks } returns mockTracks
         every { controller._exoPlayer } returns mockExoPlayer
+        every { controller.playbackTimeline } returns MutableStateFlow(PlaybackTimelineState())
 
         // Mock other controller properties
         every { controller._uiState } returns MutableStateFlow(PlayerUiState(

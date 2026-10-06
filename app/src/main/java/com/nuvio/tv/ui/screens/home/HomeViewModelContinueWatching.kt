@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
@@ -2383,6 +2384,82 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
     }
     var currentMeta = meta
     var nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp)
+    if (nextVideo == null && isSeriesTypeCW(progress.contentType)) {
+        val supplemented = withTimeoutOrNull(6000L) {
+            try {
+                val primary = (metaRepository.getMetaFromPrimaryAddon(
+                    type = progress.contentType,
+                    id = progress.contentId
+                ).firstOrNull { it !is NetworkResult.Loading } as? NetworkResult.Success<Meta>)?.data
+                    ?: return@withTimeoutOrNull null
+
+                val candidateIds = buildList {
+                    add(progress.contentId)
+                    if (progress.contentId.startsWith("tmdb:")) {
+                        add(progress.contentId.substringAfter(':'))
+                    }
+                    resolveTmdbIdForNextUp(progress, currentMeta, debug)?.let { tmdbId ->
+                        add("tmdb:$tmdbId")
+                        add(tmdbId)
+                    }
+                    currentMeta.imdbId?.takeIf { it.isNotBlank() }?.let { add(it) }
+                }.distinct()
+
+                val candidateAddons = candidateIds.flatMap { candidateId ->
+                    metaRepository.getCandidateMetaAddons(
+                        type = progress.contentType,
+                        id = candidateId
+                    ).map { (addon, candidateType) -> Triple(addon, candidateType, candidateId) }
+                }.distinctBy { (addon, _, candidateId) -> "${addon.baseUrl}:$candidateId" }
+
+                val others = coroutineScope {
+                    candidateAddons
+                        .sortedBy { it.first.baseUrl }
+                        .map { (addon, candidateType, candidateId) ->
+                            async {
+                                withTimeoutOrNull(3000L) {
+                                    try {
+                                        val res = (metaRepository.getMeta(
+                                            addonBaseUrl = addon.baseUrl,
+                                            type = candidateType,
+                                            id = candidateId
+                                        ).firstOrNull { it !is NetworkResult.Loading } as? NetworkResult.Success<Meta>)?.data
+                                        res?.let {
+                                            if (it.name.equals(primary.name, ignoreCase = true) ||
+                                                it.name.trim().lowercase() == primary.name.trim().lowercase()) {
+                                                it.copy(id = primary.id, imdbId = primary.imdbId ?: it.imdbId)
+                                            } else {
+                                                it
+                                            }
+                                        }
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                }
+                            }
+                        }
+                        .awaitAll()
+                        .filterNotNull()
+                }
+
+                com.nuvio.tv.domain.model.MetaMerger.mergeAll(primary, others).toCwSummary()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        if (supplemented != null && supplemented.videos.size > currentMeta.videos.size) {
+            currentMeta = supplemented
+            synchronized(cwMetaCache) {
+                cwMetaCache["${progress.contentType}:${progress.contentId}"] = supplemented
+            }
+            nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp)
+        }
+    }
     if (nextVideo == null &&
         isSeriesTypeCW(progress.contentType) &&
         currentTmdbSettings.enabled
@@ -2439,36 +2516,6 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                         cwMetaCache["${progress.contentType}:${progress.contentId}"] = updatedMeta
                     }
                     nextVideo = resolveNextUpVideoFromMeta(progress, updatedMeta, showUnairedNextUp)
-                }
-            }
-        }
-    }
-
-    if (nextVideo == null) {
-        val s = progress.season
-        val e = progress.episode
-        if (s != null && e != null && currentMeta.releaseInfo?.endsWith("-") == true) {
-            val episodes = currentMeta.videos
-                .filter { it.season != null && it.episode != null && it.season != 0 }
-                .sortedWith(compareBy<CwVideoSummary>({ it.season ?: Int.MAX_VALUE }, { it.episode ?: Int.MAX_VALUE }))
-            
-            val watchedIndex = episodes.indexOfFirst { it.season == s && it.episode == e }
-            if (watchedIndex >= 0 && watchedIndex == episodes.size - 1) {
-                val watchedEpisodeSeason = episodes[watchedIndex].season ?: s
-                val nextSeason = watchedEpisodeSeason + 1
-                val nextEpisode = 1
-                nextVideo = CwVideoSummary(
-                    id = "${currentMeta.id}:$nextSeason:$nextEpisode",
-                    title = "Season $nextSeason, Episode $nextEpisode",
-                    released = null,
-                    thumbnail = null,
-                    season = nextSeason,
-                    episode = nextEpisode,
-                    overview = null,
-                    available = true
-                )
-                if (shouldTraceNextUpSeries(progress)) {
-                    logNextUpDecision("synthesized-next-season contentId=${progress.contentId} name=${progress.name} seed=${s}x${e} synthesized=${nextSeason}x$nextEpisode")
                 }
             }
         }
@@ -2533,11 +2580,26 @@ private fun resolveNextUpVideoFromMeta(
     meta: CwMetaSummary
 ): CwVideoSummary? = resolveNextUpVideoFromMeta(progress, meta, showUnairedNextUp = true)
 
-private const val CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS = 7
+internal fun isNextUpEpisodeUnaired(releaseDate: LocalDate?, today: LocalDate): Boolean {
+    if (releaseDate == null) return false
+    return releaseDate.isAfter(today)
+}
 
-// An episode with no date is no more watchable than one dated ahead, so a missing date counts as unaired and stays under the same setting instead of passing as aired.
-internal fun isNextUpEpisodeUnaired(releaseDate: LocalDate?, today: LocalDate): Boolean =
-    releaseDate == null || releaseDate.isAfter(today)
+internal fun isNextUpEpisodeEligible(
+    releaseDate: LocalDate?,
+    available: Boolean?,
+    isSeasonRollover: Boolean,
+    showUnairedNextUp: Boolean,
+    today: LocalDate
+): Boolean {
+    if (available == false) return false
+    if (releaseDate == null) return true
+    if (!releaseDate.isAfter(today)) return true
+    if (!showUnairedNextUp) return false
+    if (!isSeasonRollover) return true
+    val daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, releaseDate)
+    return daysUntil <= 7
+}
 
 private fun resolveNextUpVideoFromMeta(
     progress: WatchProgress,
@@ -2592,36 +2654,10 @@ private fun resolveNextUpVideoFromMeta(
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
     val watchedEpisodeSeason = episodes[watchedIndex].season
     val nextVideo = episodes.drop(watchedIndex + 1).firstOrNull { video ->
-        val releaseDate = parseEpisodeReleaseDate(video.released)
-        val isSeasonRollover = video.season != watchedEpisodeSeason
-        if (isSeasonRollover) {
-            if (releaseDate == null) {
-                logNextUpDecision(
-                    "skip contentId=${progress.contentId} name=${progress.name} reason=unaired-next-season-missing-date " +
-                        "seed=${seedSeason}x${seedEpisode} next=${video.season}x${video.episode}"
-                )
-                return@firstOrNull false
-            }
-            if (!releaseDate.isAfter(todayLocal)) {
-                return@firstOrNull true
-            }
-            // Match mobile: show unaired next-season episodes within 7-day window
-            if (showUnairedNextUp) {
-                val daysUntil = java.time.temporal.ChronoUnit.DAYS.between(todayLocal, releaseDate)
-                if (daysUntil <= CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS) {
-                    return@firstOrNull true
-                }
-            }
-            return@firstOrNull false
-        }
-
-        if (!isNextUpEpisodeUnaired(releaseDate, todayLocal)) {
-            return@firstOrNull true
-        }
-        if (releaseDate == null && video.available == false) {
-            return@firstOrNull false
-        }
-        showUnairedNextUp
+        isNextUpEpisodeEligible(
+            parseEpisodeReleaseDate(video.released), video.available,
+            video.season != watchedEpisodeSeason, showUnairedNextUp, todayLocal
+        )
     }
 
     if (nextVideo == null) {
@@ -2665,6 +2701,12 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
     val idCandidates = buildList {
         add(progress.contentId)
         if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
+        synchronized(cwTmdbIdCache) {
+            cwTmdbIdCache["${progress.contentType}:${progress.contentId}"]
+        }?.let { tmdbId ->
+            add("tmdb:$tmdbId")
+            add(tmdbId)
+        }
     }.distinct()
 
     val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()

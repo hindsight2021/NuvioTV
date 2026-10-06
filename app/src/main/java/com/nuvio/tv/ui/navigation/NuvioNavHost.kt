@@ -306,6 +306,8 @@ private fun PlaybackNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("justPlayRequestId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("justPlayProfileId") { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("playOnLoad") {
                     type = NavType.StringType
                     nullable = true
@@ -343,6 +345,9 @@ private fun PlaybackNavHost(
             val isRandomEpisode = detailArgs?.getString("isRandomEpisode")?.toBooleanStrictOrNull() == true ||
                 com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
             MetaDetailsScreen(
+                justPlayRequestId = detailArgs?.getString("justPlayRequestId")?.takeIf { it.isNotBlank() },
+                justPlayProfileId = detailArgs?.getString("justPlayProfileId")?.toIntOrNull(),
+                onJustPlayHandoff = { savedState["justPlayLaunchRequestId"] = it },
                 returnFocusSeason = returnFocusSeason,
                 returnFocusEpisode = returnFocusEpisode,
                 heroRestoreToken = heroRestoreToken,
@@ -575,7 +580,11 @@ private fun PlaybackNavHost(
                 ?.getString("isRandomEpisode")
                 ?.toBooleanStrictOrNull() == true ||
                 com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
+            val justPlayId = androidx.compose.runtime.remember(backStackEntry) {
+                navController.previousBackStackEntry?.savedStateHandle?.remove<String>("justPlayLaunchRequestId")
+            }
             StreamScreen(
+                justPlayRequestId = justPlayId,
                 startFromBeginning = startFromBeginning,
                 restoreSourceSelection = restoreSourceSelection,
                 onSourceSelectionRestoreHandled = {

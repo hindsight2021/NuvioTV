@@ -6,6 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SimklCalendarFilterTest {
+    @Test
+    fun normalizeTitle_preservesMeaningfulTitleWordsAndNumbers() {
+        assertEquals("the100", SimklCalendarRepository.normalizeTitle("The 100"))
+        assertEquals("1883", SimklCalendarRepository.normalizeTitle("1883"))
+        assertEquals("seasonofthewitch", SimklCalendarRepository.normalizeTitle("Season of the Witch"))
+        assertEquals("season2", SimklCalendarRepository.normalizeTitle("Season 2"))
+    }
+
 
     @Test
     fun normalizeTitle_removesSpecialCharactersAndSpaces() {

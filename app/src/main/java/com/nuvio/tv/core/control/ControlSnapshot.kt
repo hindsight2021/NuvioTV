@@ -88,7 +88,11 @@ data class PlaybackSnapshot(
     val selectedAudioIndex: Int = -1,
 
     @SerializedName("selectedSubtitleIndex")
-    val selectedSubtitleIndex: Int = -1
+    val selectedSubtitleIndex: Int = -1,
+    val contentId: String? = null,
+    val videoId: String? = null,
+    val profileId: Int? = null,
+    val sessionId: String? = null
 )
 
 /**

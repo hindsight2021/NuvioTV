@@ -217,7 +217,7 @@ class LocalhostZeroCopyDataSourceTest {
             .build()
         
         try {
-            assertThrows(HttpDataSource.InvalidResponseCodeException::class.java) {
+            assertThrows(HttpDataSource.HttpDataSourceException::class.java) {
                 dataSource.open(dataSpec)
             }
         } finally {

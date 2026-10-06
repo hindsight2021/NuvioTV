@@ -52,7 +52,7 @@ jobs:
           UPSTREAM_HEAD: ${{ steps.upstream.outputs.upstream_head }}
         run: |
           sha12="${UPSTREAM_HEAD:0:12}"
-          branch="sync/upstream-${sha12}"
+          branch="codex/upstream-${sha12}"
 
           if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
             echo "Branch ${branch} already exists on origin."
@@ -73,4 +73,6 @@ jobs:
             --title "chore(sync): upstream/dev (${sha12})" \
             --body "Automated upstream sync from NuvioMedia/NuvioTV@dev (${UPSTREAM_HEAD}).
 
-          This PR exposes any merge conflicts for review. It does not merge or push to plus-dev automatically."
+          This PR exposes any merge conflicts for review. It does not merge or push to plus-dev automatically.
+
+          GitHub bot-created pull requests do not automatically start pull_request workflows. After resolving conflicts on the integration branch, manually dispatch PR Full Debug Build on that branch and require its full unit-test and APK build result before merging."

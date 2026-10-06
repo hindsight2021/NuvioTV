@@ -143,13 +143,25 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 | **Build Configuration** | `app/build.gradle.kts` |
 | **Release CI/CD Workflow** | `.github/workflows/android-release.yml` |
 
+### F. Continue Watching Multi-Source Addon Superset Merging (v0.9.4-plus.50)
+* **Problem**: When a new season or episode airs (e.g. *The Traitors Canada* Season 4 Episode 3, where S4E1/S4E2 had already been watched), primary metadata providers like Cinemeta often lag behind and only index up to Season 3. When Nuvio's Continue Watching engine checked the primary addon, `watchedIndex` was `-1`, causing Nuvio to drop the series with `seed-not-found-in-meta`. Meanwhile, other installed addons (such as AIOMetadata under `tmdb:234613`) already had all 10 episodes of Season 4, but Continue Watching never queried them because secondary candidate fetching was gated behind `externalMetaPrefetchEnabled` and only queried the single original content ID without counterpart ID translation.
+* **Solution**:
+  - In `HomeViewModelContinueWatching.kt` (`findNextUpEpisodeFromMetaSeed`):
+    - Removed the `externalMetaPrefetchEnabled` gate so candidate addon supplementing runs for all TV series when `nextVideo == null`.
+    - Expanded candidate queries across both primary ID and counterpart IDs (`progress.contentId`, `tmdb:$tmdbId`, `$tmdbId`, `currentMeta.imdbId`).
+    - Concurrently queried all candidate addons for those IDs, normalized matching show titles, and merged them with `MetaMerger.mergeAll(primary, others).toCwSummary()`.
+    - If the supplemented metadata has more episodes, `currentMeta` is updated and cached in `cwMetaCache`, cleanly resolving the next real episode (e.g. S4E3) without creating phantom/synthetic episodes.
+  - In `resolveMetaForProgress`: added cached TMDB ID lookup to `idCandidates` to prevent single-addon failure from blocking metadata resolution.
+
 ---
 
 ## 7. Open Tasks & Next Steps for Codex
 
-1. **Settings: Primary Metadata Addon Lock**:
-   - Provide an optional user setting in Layout / Addon settings allowing the user to set a designated "Master Metadata Provider" (e.g. Cinemeta) so catalog-only addons never intercept base show metadata.
-2. **Movie Trivia Feature**:
+1. **Continue Watching & Metadata Verification**:
+   - Verify that *The Traitors Canada* S4E3 and *The Great Canadian Baking Show* S10E01 resolve seamlessly on physical TV test with multiple metadata addons active.
+2. **Just Play Coordination (v0.9.4-plus.50)**:
+   - Complete exact-episode resolution coordinator, AppCommandBus intent handling, and Home Assistant integration outlined in `RELEASE_PLAN_0.9.4-plus.50.md`.
+3. **Primary Metadata Addon Lock**:
+   - Provide an optional user setting in Layout / Addon settings allowing the user to set a designated "Master Metadata Provider" so catalog-only addons never intercept base show metadata.
+4. **Movie Trivia Feature**:
    - Continue development on the Movie Trivia feature previously requested by the user.
-3. **Automated Unit Tests**:
-   - Add additional unit tests for `MetaSourceSelector` and multi-addon candidate filtering.

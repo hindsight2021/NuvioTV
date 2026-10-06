@@ -46,7 +46,7 @@ class PostPlayRecommendationStateTest {
     }
 
     @Test
-    fun `loaded recommendation holds natural completion until overlay evaluation`() {
+    fun `prefetched recommendation alone does not trap natural completion`() {
         val recommendation = PostPlayRecommendation(
             id = "tmdb:1",
             contentType = "movie",
@@ -61,7 +61,8 @@ class PostPlayRecommendationStateTest {
             runtime = null
         )
 
-        assertTrue(PostPlayRecommendationUiState(recommendation = recommendation).blocksNaturalCompletion)
+        assertFalse(PostPlayRecommendationUiState(recommendation = recommendation).blocksNaturalCompletion)
+        assertTrue(PostPlayRecommendationUiState(recommendation = recommendation, isVisible = true).blocksNaturalCompletion)
     }
 
     @Test
@@ -85,7 +86,7 @@ class PostPlayRecommendationStateTest {
         assertFalse(state.copy(isVisible = false).canReturnToPlayer)
         assertFalse(returned.isVisible)
         assertTrue(returned.hasReturnedToPlayer)
-        assertTrue(returned.blocksNaturalCompletion)
+        assertFalse(returned.blocksNaturalCompletion)
     }
 
     @Test

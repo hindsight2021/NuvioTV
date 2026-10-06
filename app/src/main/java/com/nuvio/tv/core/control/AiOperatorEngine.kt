@@ -25,6 +25,7 @@ class AiOperatorEngine @Inject constructor(
     private val aiManager: AiManager,
     private val thematicChannelGenerator: ThematicChannelGenerator,
     private val navigationCommander: NavigationCommander,
+    private val justPlayCoordinator: JustPlayCoordinator,
     private val playerPlaybackBridge: PlayerPlaybackBridge
 ) {
 
@@ -143,15 +144,11 @@ class AiOperatorEngine @Inject constructor(
         )
     }
 
-    private fun handlePlay(intent: ParsedIntent, originalPrompt: String): CommandResult {
+    private suspend fun handlePlay(intent: ParsedIntent, originalPrompt: String): CommandResult {
         val title = intent.title?.takeIf { it.isNotBlank() }
             ?: return CommandResult.Error("play intent missing 'title'.")
 
-        navigationCommander.search(title)
-        return CommandResult.Success(
-            "Searching for '$title' to play.",
-            mapOf("title" to title, "season" to intent.season, "episode" to intent.episode)
-        )
+        return justPlayCoordinator.requestTitle(title, intent.contentType, intent.season, intent.episode)
     }
 
     private fun resolveScreenRoute(name: String): String? = when (name.lowercase().trim()) {

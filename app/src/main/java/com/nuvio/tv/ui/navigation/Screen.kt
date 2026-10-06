@@ -5,7 +5,7 @@ import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
-    data object Detail : Screen("detail/{itemId}/{itemType}?addonBaseUrl={addonBaseUrl}&returnFocusSeason={returnFocusSeason}&returnFocusEpisode={returnFocusEpisode}&returnToHomeOnBack={returnToHomeOnBack}&heroBackdropUrl={heroBackdropUrl}&playOnLoad={playOnLoad}&manualSelection={manualSelection}&isRandomEpisode={isRandomEpisode}") {
+    data object Detail : Screen("detail/{itemId}/{itemType}?addonBaseUrl={addonBaseUrl}&returnFocusSeason={returnFocusSeason}&returnFocusEpisode={returnFocusEpisode}&returnToHomeOnBack={returnToHomeOnBack}&heroBackdropUrl={heroBackdropUrl}&playOnLoad={playOnLoad}&manualSelection={manualSelection}&isRandomEpisode={isRandomEpisode}&justPlayRequestId={justPlayRequestId}&justPlayProfileId={justPlayProfileId}") {
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
@@ -19,13 +19,15 @@ sealed class Screen(val route: String) {
             heroBackdropUrl: String? = null,
             playOnLoad: Boolean = false,
             manualSelection: Boolean = false,
-            isRandomEpisode: Boolean = false
+            isRandomEpisode: Boolean = false,
+            justPlayRequestId: String? = null,
+            justPlayProfileId: Int? = null
         ): String {
             val encodedItemId = encode(itemId)
             val encodedItemType = encode(itemType)
             val encodedAddon = addonBaseUrl?.let { encode(it) } ?: ""
             val encodedHeroBackdrop = heroBackdropUrl?.let { encode(it) } ?: ""
-            return "detail/$encodedItemId/$encodedItemType?addonBaseUrl=$encodedAddon&returnFocusSeason=${returnFocusSeason ?: ""}&returnFocusEpisode=${returnFocusEpisode ?: ""}&returnToHomeOnBack=$returnToHomeOnBack&heroBackdropUrl=$encodedHeroBackdrop&playOnLoad=$playOnLoad&manualSelection=$manualSelection&isRandomEpisode=$isRandomEpisode"
+            return "detail/$encodedItemId/$encodedItemType?addonBaseUrl=$encodedAddon&returnFocusSeason=${returnFocusSeason ?: ""}&returnFocusEpisode=${returnFocusEpisode ?: ""}&returnToHomeOnBack=$returnToHomeOnBack&heroBackdropUrl=$encodedHeroBackdrop&playOnLoad=$playOnLoad&manualSelection=$manualSelection&isRandomEpisode=$isRandomEpisode&justPlayRequestId=${justPlayRequestId?.let { encode(it) } ?: ""}&justPlayProfileId=${justPlayProfileId ?: ""}"
         }
     }
     data object Stream : Screen("stream/{videoId}/{contentType}/{title}?poster={poster}&backdrop={backdrop}&logo={logo}&season={season}&episode={episode}&episodeName={episodeName}&genres={genres}&year={year}&contentId={contentId}&contentName={contentName}&runtime={runtime}&manualSelection={manualSelection}&returnToDetailOnBack={returnToDetailOnBack}&returnToHomeOnBack={returnToHomeOnBack}&startFromBeginning={startFromBeginning}&contentLanguage={contentLanguage}&profileId={profileId}&isRandomEpisode={isRandomEpisode}") {

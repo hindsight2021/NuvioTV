@@ -70,3 +70,6 @@ status-page/
 
 tmp_apk/
 
+
+.codex-*
+.codex-ci-baseline/
