@@ -42,6 +42,9 @@ while IFS= read -r commit; do
             current_bump="$commit"
             continue
         fi
+        if (( 10#$version_code > 10#$current_version_code )); then
+            continue
+        fi
         previous_version="$version"
         previous_version_code="$version_code"
         previous_bump="$commit"
