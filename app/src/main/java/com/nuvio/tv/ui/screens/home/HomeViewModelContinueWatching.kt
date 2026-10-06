@@ -2402,7 +2402,10 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                         add("tmdb:$tmdbId")
                         add(tmdbId)
                     }
-                    currentMeta.imdbId?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    primary.imdbId?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    if (currentMeta.id.startsWith("tt")) {
+                        add(currentMeta.id)
+                    }
                 }.distinct()
 
                 val candidateAddons = candidateIds.flatMap { candidateId ->

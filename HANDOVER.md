@@ -148,7 +148,7 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 * **Solution**:
   - In `HomeViewModelContinueWatching.kt` (`findNextUpEpisodeFromMetaSeed`):
     - Removed the `externalMetaPrefetchEnabled` gate so candidate addon supplementing runs for all TV series when `nextVideo == null`.
-    - Expanded candidate queries across both primary ID and counterpart IDs (`progress.contentId`, `tmdb:$tmdbId`, `$tmdbId`, `currentMeta.imdbId`).
+    - Expanded candidate queries across both primary ID and counterpart IDs (`progress.contentId`, `tmdb:$tmdbId`, `$tmdbId`, `primary.imdbId`).
     - Concurrently queried all candidate addons for those IDs, normalized matching show titles, and merged them with `MetaMerger.mergeAll(primary, others).toCwSummary()`.
     - If the supplemented metadata has more episodes, `currentMeta` is updated and cached in `cwMetaCache`, cleanly resolving the next real episode (e.g. S4E3) without creating phantom/synthetic episodes.
   - In `resolveMetaForProgress`: added cached TMDB ID lookup to `idCandidates` to prevent single-addon failure from blocking metadata resolution.
