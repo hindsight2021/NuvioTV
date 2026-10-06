@@ -2393,12 +2393,13 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                 ).firstOrNull { it !is NetworkResult.Loading } as? NetworkResult.Success<Meta>)?.data
                     ?: return@withTimeoutOrNull null
 
+                val resolvedTmdbId = resolveTmdbIdForNextUp(progress, currentMeta, debug)
                 val candidateIds = buildList {
                     add(progress.contentId)
                     if (progress.contentId.startsWith("tmdb:")) {
                         add(progress.contentId.substringAfter(':'))
                     }
-                    resolveTmdbIdForNextUp(progress, currentMeta, debug)?.let { tmdbId ->
+                    resolvedTmdbId?.let { tmdbId ->
                         add("tmdb:$tmdbId")
                         add(tmdbId)
                     }
@@ -2428,12 +2429,9 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                                             id = candidateId
                                         ).firstOrNull { it !is NetworkResult.Loading } as? NetworkResult.Success<Meta>)?.data
                                         res?.let {
-                                            if (it.name.equals(primary.name, ignoreCase = true) ||
-                                                it.name.trim().lowercase() == primary.name.trim().lowercase()) {
-                                                it.copy(id = primary.id, imdbId = primary.imdbId ?: it.imdbId)
-                                            } else {
-                                                it
-                                            }
+                                            com.nuvio.tv.domain.model.canonicalizeResolvedTmdbAlias(
+                                                primary, it, candidateId, resolvedTmdbId
+                                            )
                                         }
                                     } catch (e: CancellationException) {
                                         throw e

@@ -11,6 +11,39 @@ import org.junit.Test
  */
 class MetaMergerTest {
     @Test
+    fun `resolved TMDB alias supplements matching series`() {
+        val primary = createTestMeta(id = "tt1234567", name = "The Show", videos = seasonEpisodes(1, 2))
+            .copy(releaseInfo = "2017", imdbId = "tt1234567")
+        val candidate = createTestMeta(id = "tmdb:42", name = " The   Show ", videos = listOf(video(10, 1)))
+            .copy(releaseInfo = "2017-", imdbId = "tt1234567")
+        val trusted = canonicalizeResolvedTmdbAlias(primary, candidate, "tmdb:42", "42")
+        assertEquals(primary.id, trusted.id)
+        assertTrue(MetaMerger.merge(primary, trusted).videos.any { it.season == 10 })
+    }
+
+    @Test
+    fun `same title remake and conflicting IMDb cannot become aliases`() {
+        val primary = createTestMeta(id = "tt1234567", name = "The Show", videos = seasonEpisodes(1, 2))
+            .copy(releaseInfo = "2017", imdbId = "tt1234567")
+        val remake = createTestMeta(id = "tmdb:42", name = "The Show", videos = listOf(video(10, 1)))
+            .copy(releaseInfo = "2024")
+        val conflict = remake.copy(releaseInfo = "2017", imdbId = "tt9999999")
+        assertEquals(remake, canonicalizeResolvedTmdbAlias(primary, remake, "tmdb:42", "42"))
+        assertEquals(conflict, canonicalizeResolvedTmdbAlias(primary, conflict, "tmdb:42", "42"))
+    }
+
+    @Test
+    fun `returned unrelated id and unverified year cannot become aliases`() {
+        val primary = createTestMeta(id = "tt1234567", name = "The Show", videos = emptyList())
+            .copy(releaseInfo = "2017")
+        val candidate = createTestMeta(id = "tmdb:99", name = "The Show", videos = listOf(video(10, 1)))
+            .copy(releaseInfo = "2017")
+        assertEquals(candidate, canonicalizeResolvedTmdbAlias(primary, candidate, "tmdb:42", "42"))
+        assertEquals(candidate, canonicalizeResolvedTmdbAlias(primary, candidate, "tmdb:99", null))
+        val withoutYear = candidate.copy(releaseInfo = null)
+        assertEquals(withoutYear, canonicalizeResolvedTmdbAlias(primary, withoutYear, "tmdb:99", "99"))
+    }
+    @Test
     fun mergeAnonymousIdempotentPreservesDuplicates() {
         val anonymous = video(1, 1).copy(id = "", season = null, episode = null, title = "anonymous")
         val primary = createTestMeta(videos = listOf(anonymous, anonymous))
