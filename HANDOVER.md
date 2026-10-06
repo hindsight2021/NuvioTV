@@ -74,9 +74,9 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
    git commit -m "feat/fix: <description> (vX.X.X-plus.XX)"
    git push origin plus-dev
    ```
-2. Dispatch the GitHub Action with release publishing mode enabled:
+2. Dispatch a signed candidate build and full unit suite:
    ```powershell
-   gh workflow run android-release.yml --ref plus-dev -f mode=publish
+   gh workflow run android-release.yml --ref plus-dev -f mode=candidate
    ```
 3. Monitor the build run:
    ```powershell
@@ -90,7 +90,7 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
    gh run download <run-id> -D tmp_apk
    ```
 
-> **IMPORTANT**: The user requested that for the current release, we **compile on GitHub but DO NOT push to the TV automatically**, allowing them to install manually when ready.
+> **IMPORTANT**: The user subsequently authorized ADB installation of plus.50 on Shield. That installation is complete. Future device installs remain task-specific; check the latest instruction before interrupting playback. Publish an accepted candidate APK without rebuilding if its exact bytes must be retained.
 
 ---
 
@@ -149,13 +149,18 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
   - In `HomeViewModelContinueWatching.kt` (`findNextUpEpisodeFromMetaSeed`):
     - Removed the `externalMetaPrefetchEnabled` gate so candidate addon supplementing runs for all TV series when `nextVideo == null`.
     - Expanded candidate queries across both primary ID and counterpart IDs (`progress.contentId`, `tmdb:$tmdbId`, `$tmdbId`, `primary.imdbId`).
-    - Concurrently queried all candidate addons for those IDs, normalized matching show titles, and merged them with `MetaMerger.mergeAll(primary, others).toCwSummary()`.
+    - Concurrently queried candidate addons for those IDs and merged them with `MetaMerger.mergeAll(primary, others).toCwSummary()`. In plus.50, cross-ID TMDB aliases are canonicalized only when the returned ID, content type, normalized title, release year, and IMDb are consistent; title alone no longer rewrites identity.
     - If the supplemented metadata has more episodes, `currentMeta` is updated and cached in `cwMetaCache`, cleanly resolving the next real episode (e.g. S4E3) without creating phantom/synthetic episodes.
   - In `resolveMetaForProgress`: added cached TMDB ID lookup to `idCandidates` to prevent single-addon failure from blocking metadata resolution.
 
 ---
 
 ## 7. Current Status & Next Steps for Codex
+
+0. **v0.9.4-plus.50 released and installed (6 October 2026)**:
+   - Release tag and candidate build SHA: `d9c331ca0d818c6235bfb932c67829ebc732a476`; candidate run `37492621422` passed 1,443 unit tests and assembled the arm64 APK.
+   - Published release: `https://github.com/hindsight2021/NuvioTV/releases/tag/0.9.4-plus.50`. The published APK, candidate APK, and APK pulled from Shield share SHA-256 `1c2dd7553879090d74873a61f323907a6af62f475ff3dd4f48d6d81936b3e223`.
+   - Shield `com.nuvio.tv.plus` reports versionCode `1108`, versionName `0.9.4-plus.50`; launch reached `MainActivity` without a fatal crash in the checked log window. Exact-episode playback and resume on Shield still need hands-on acceptance. See `RELEASE_ACCEPTANCE_0.9.4-plus.50.md`.
 
 1. **v0.9.4-plus.47 Hotfix Release (Commit `2c9d7ea60`, Publish Run `37468513740`)**:
    - **Target**: Published directly to GitHub Releases as `0.9.4-plus.47` for Nuvio in-app updater.
