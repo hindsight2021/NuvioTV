@@ -76,6 +76,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
         viewModel.onItemFocusPipeline(item(itemId))
         awaitAtLeast(metaCalls, 1)
+        awaitFocusPipelineIdle(viewModel, itemId)
 
         reachable.set(true)
         focusAndSettle(viewModel, item(otherId))
@@ -86,7 +87,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
         awaitAtLeast(metaCalls, 2)
         // The API invocation increments the counter before its result is consumed by the
         // focus coroutine. Wait for the observable cache outcome rather than racing that job.
-        withTimeout(5_000) {
+        withTimeout(10_000) {
             while (itemId !in viewModel.prefetchedExternalMetaIds) delay(25)
         }
         assertEquals(
@@ -98,7 +99,18 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
     private suspend fun focusAndSettle(viewModel: HomeViewModel, item: MetaPreview) {
         viewModel.onItemFocusPipeline(item)
-        delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS + 400)
+        delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS + 50)
+        awaitFocusPipelineIdle(viewModel, item.id)
+    }
+
+    private suspend fun awaitFocusPipelineIdle(viewModel: HomeViewModel, id: String) {
+        withTimeout(5_000) {
+            while (viewModel.tmdbEnrichFocusJob?.isActive == true ||
+                id in viewModel.externalMetaPrefetchInFlightIds
+            ) {
+                delay(25)
+            }
+        }
     }
 
     private suspend fun awaitAtLeast(counter: AtomicInteger, expected: Int) {
