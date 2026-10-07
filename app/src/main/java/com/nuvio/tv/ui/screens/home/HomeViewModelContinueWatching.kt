@@ -2497,11 +2497,14 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                 val newVideos = fetchedEpisodes.mapNotNull { (pair, ep) ->
                     val (s, e) = pair
                     if (s <= 0 || e <= 0 || !existingKeys.add(s to e)) return@mapNotNull null
+                    val rawAirDate = ep.airDate?.trim()?.takeIf { it.isNotEmpty() }
+                    // Filter out unannounced/unreleased future season episodes that have no air date
+                    if (s > currentSeason && rawAirDate == null) return@mapNotNull null
 
                     CwVideoSummary(
                         id = "${currentMeta.id}:$s:$e",
                         title = ep.title?.takeIf { it.isNotBlank() } ?: "Episode $e",
-                        released = ep.airDate,
+                        released = rawAirDate,
                         thumbnail = ep.thumbnail,
                         season = s,
                         episode = e,
@@ -2594,6 +2597,7 @@ internal fun isNextUpEpisodeEligible(
     today: LocalDate
 ): Boolean {
     if (available == false) return false
+    if (isSeasonRollover && releaseDate == null) return false
     if (releaseDate == null) return true
     if (!releaseDate.isAfter(today)) return true
     if (!showUnairedNextUp) return false

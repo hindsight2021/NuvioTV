@@ -299,7 +299,141 @@ class ContinueWatchingAiringRulesTest {
         )
     }
 
-    private fun episode(season: Int, ep: Int, released: String) = CwVideoSummary(
+    // --- isNextUpEpisodeEligible tests ---
+
+    @Test
+    fun `season rollover with null release date is never eligible`() {
+        val today = LocalDate.of(2026, 10, 7)
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = null,
+                available = true,
+                isSeasonRollover = true,
+                showUnairedNextUp = true,
+                today = today
+            )
+        )
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = null,
+                available = null,
+                isSeasonRollover = true,
+                showUnairedNextUp = false,
+                today = today
+            )
+        )
+    }
+
+    @Test
+    fun `mid-season episode with null release date is eligible if available not false`() {
+        val today = LocalDate.of(2026, 10, 7)
+        assertTrue(
+            isNextUpEpisodeEligible(
+                releaseDate = null,
+                available = true,
+                isSeasonRollover = false,
+                showUnairedNextUp = false,
+                today = today
+            )
+        )
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = null,
+                available = false,
+                isSeasonRollover = false,
+                showUnairedNextUp = false,
+                today = today
+            )
+        )
+    }
+
+    @Test
+    fun `season rollover with future release date within 7 days is eligible only when showUnairedNextUp is true`() {
+        val today = LocalDate.of(2026, 10, 7)
+        val nearFuture = today.plusDays(5)
+        assertTrue(
+            isNextUpEpisodeEligible(
+                releaseDate = nearFuture,
+                available = true,
+                isSeasonRollover = true,
+                showUnairedNextUp = true,
+                today = today
+            )
+        )
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = nearFuture,
+                available = true,
+                isSeasonRollover = true,
+                showUnairedNextUp = false,
+                today = today
+            )
+        )
+    }
+
+    @Test
+    fun `season rollover with future release date beyond 7 days is not eligible even when showUnairedNextUp is true`() {
+        val today = LocalDate.of(2026, 10, 7)
+        val distantFuture = today.plusDays(14)
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = distantFuture,
+                available = true,
+                isSeasonRollover = true,
+                showUnairedNextUp = true,
+                today = today
+            )
+        )
+    }
+
+    @Test
+    fun `season rollover with already aired episode is eligible`() {
+        val today = LocalDate.of(2026, 10, 7)
+        val past = today.minusDays(1)
+        assertTrue(
+            isNextUpEpisodeEligible(
+                releaseDate = past,
+                available = true,
+                isSeasonRollover = true,
+                showUnairedNextUp = false,
+                today = today
+            )
+        )
+        assertTrue(
+            isNextUpEpisodeEligible(
+                releaseDate = today,
+                available = true,
+                isSeasonRollover = true,
+                showUnairedNextUp = false,
+                today = today
+            )
+        )
+    }
+
+    @Test
+    fun `available false is never eligible regardless of other parameters`() {
+        val today = LocalDate.of(2026, 10, 7)
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = today.minusDays(1),
+                available = false,
+                isSeasonRollover = false,
+                showUnairedNextUp = true,
+                today = today
+            )
+        )
+        assertFalse(
+            isNextUpEpisodeEligible(
+                releaseDate = today.minusDays(1),
+                available = false,
+                isSeasonRollover = true,
+                showUnairedNextUp = true,
+                today = today
+            )
+        )
+    }
+
+    private fun episode(season: Int, ep: Int, released: String?) = CwVideoSummary(
         id = "tt-test:$season:$ep",
         title = "E$ep",
         released = released,
