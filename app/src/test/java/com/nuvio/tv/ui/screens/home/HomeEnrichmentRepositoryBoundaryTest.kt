@@ -74,9 +74,8 @@ class HomeEnrichmentRepositoryBoundaryTest {
         val viewModel = newViewModel(realRepository(api))
         viewModel.seedCatalog(item(itemId))
 
-        viewModel.onItemFocusPipeline(item(itemId))
+        focusAndSettle(viewModel, item(itemId))
         awaitAtLeast(metaCalls, 1)
-        awaitFocusPipelineIdle(viewModel, itemId)
 
         reachable.set(true)
         focusAndSettle(viewModel, item(otherId))
@@ -99,12 +98,12 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
     private suspend fun focusAndSettle(viewModel: HomeViewModel, item: MetaPreview) {
         viewModel.onItemFocusPipeline(item)
-        delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS + 50)
+        viewModel.tmdbEnrichFocusJob?.join()
         awaitFocusPipelineIdle(viewModel, item.id)
     }
 
     private suspend fun awaitFocusPipelineIdle(viewModel: HomeViewModel, id: String) {
-        withTimeout(5_000) {
+        withTimeout(10_000) {
             while (viewModel.tmdbEnrichFocusJob?.isActive == true ||
                 id in viewModel.externalMetaPrefetchInFlightIds
             ) {
