@@ -157,7 +157,17 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 
 ## 7. Current Status & Next Steps for Codex
 
-0. **v0.9.4-plus.50 released and installed (6 October 2026)**:
+0. **v0.9.4-plus.51 compiled (7 October 2026)**:
+   - Built on branch `plus-dev` at commit `b48692226` (Workflow run `37613324707`).
+   - Features:
+     - Calendar default set to TV Shows / Episodes; Movies are opt-in via Category pills.
+     - 1-Week Look-Back support ("This Week" vs "Look Back (Past Week)") with immediate access to "Yesterday" for watching 1 day behind.
+     - Modernized Calendar UI tailored for Android TV D-pad navigation, day strips with "★ TODAY" and "⟲ YESTERDAY" badges, quick jump card, and responsive layout.
+     - Synchronized focus prefetch boundary test to eliminate CI race condition.
+   - Compiled APK: `tmp_apk/app-full-arm64-v8a-release-v51.apk` (SHA-256: `995078d4a9d7b56cf2c4295d41a36e38c841bd7acf6f9875992035d3ac10c0da`).
+   - Mode: Candidate build ready for **manual installation only**.
+
+0a. **v0.9.4-plus.50 released and installed (6 October 2026)**:
    - Release tag and candidate build SHA: `d9c331ca0d818c6235bfb932c67829ebc732a476`; candidate run `37492621422` passed 1,443 unit tests and assembled the arm64 APK.
    - Published release: `https://github.com/hindsight2021/NuvioTV/releases/tag/0.9.4-plus.50`. The published APK, candidate APK, and APK pulled from Shield share SHA-256 `1c2dd7553879090d74873a61f323907a6af62f475ff3dd4f48d6d81936b3e223`.
    - Shield `com.nuvio.tv.plus` reports versionCode `1108`, versionName `0.9.4-plus.50`; launch reached `MainActivity` without a fatal crash in the checked log window. Exact-episode playback and resume on Shield still need hands-on acceptance. See `RELEASE_ACCEPTANCE_0.9.4-plus.50.md`.
