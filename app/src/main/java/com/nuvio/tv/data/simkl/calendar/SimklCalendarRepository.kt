@@ -61,6 +61,7 @@ class SimklCalendarRepository @Inject constructor(
 
         /** Number of days shown in the calendar strip. */
         private const val DAYS_TO_SHOW = 7
+        private const val PAST_DAYS_TO_SHOW = 7
 
         /** How many days back to include already-released digital titles on "Today". */
         private const val DIGITAL_LOOKBACK_DAYS = 7
@@ -102,6 +103,22 @@ class SimklCalendarRepository @Inject constructor(
 
     private val movieUrl: String =
         "https://data.simkl.in/calendar/movie_release.json?client_id=$clientId&app-name=$APP_NAME&app-version=$APP_VERSION"
+
+    private fun tvArchiveUrl(year: Int, month: Int): String =
+        "https://data.simkl.in/calendar/$year/$month/tv.json?client_id=$clientId&app-name=$APP_NAME&app-version=$APP_VERSION"
+
+    private fun movieArchiveUrl(year: Int, month: Int): String =
+        "https://data.simkl.in/calendar/$year/$month/movie_release.json?client_id=$clientId&app-name=$APP_NAME&app-version=$APP_VERSION"
+
+    private fun monthsToFetchArchive(today: LocalDate = LocalDate.now()): List<LocalDate> {
+        val current = today.withDayOfMonth(1)
+        val weekAgo = today.minusDays(PAST_DAYS_TO_SHOW.toLong()).withDayOfMonth(1)
+        return if (weekAgo.monthValue != today.monthValue || weekAgo.year != today.year) {
+            listOf(current, weekAgo)
+        } else {
+            listOf(current)
+        }
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -416,39 +433,64 @@ class SimklCalendarRepository @Inject constructor(
         val allItems = mappedTv + mappedDvd + mappedMovies
         val availableToStreamCount = allItems.count { it.isAvailableToStream }
 
-        val days = buildDayGroups(mappedTv, mappedDvd, mappedMovies)
+        val (thisWeekDays, pastWeekDays) = buildDayGroups(mappedTv, mappedDvd, mappedMovies)
 
         CalendarData(
-            days = days,
+            days = thisWeekDays,
+            thisWeekDays = thisWeekDays,
+            pastWeekDays = pastWeekDays,
             allItems = allItems,
             availableToStreamCount = availableToStreamCount
         )
     }
 
     private fun fetchTvItems(userShows: TrackedMediaFilter): List<SimklTvCalendarItem> {
-        val items = try {
-            val body = fetchBody(tvUrl) ?: return emptyList()
-            json.decodeFromString<List<SimklTvCalendarItem>>(body)
+        val today = LocalDate.now()
+        val allRawItems = mutableListOf<SimklTvCalendarItem>()
+
+        // 1. Fetch primary rolling TV feed (~33 days)
+        try {
+            val body = fetchBody(tvUrl)
+            if (body != null) {
+                allRawItems.addAll(json.decodeFromString<List<SimklTvCalendarItem>>(body))
+            }
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
-            Log.w(TAG, "Failed to fetch TV calendar", t)
-            return emptyList()
+            Log.w(TAG, "Failed to fetch TV calendar primary feed", t)
+        }
+
+        // 2. Fetch monthly archives covering the lookback window (past 7 days)
+        for (m in monthsToFetchArchive(today)) {
+            try {
+                val archiveBody = fetchBody(tvArchiveUrl(m.year, m.monthValue))
+                if (archiveBody != null) {
+                    allRawItems.addAll(json.decodeFromString<List<SimklTvCalendarItem>>(archiveBody))
+                }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to fetch TV archive for ${m.year}/${m.monthValue}", t)
+            }
         }
 
         val hasTrackedShows = !userShows.isEmpty
-        return items.filter { item ->
-            val imdb = item.ids.simklImdbId()
-            val tmdb = item.ids.simklTmdbId()
-            val simklId = item.ids.simklNumericId()
-            val isTracked = userShows.matches(imdb, tmdb, simklId, item.title)
-
-            if (hasTrackedShows) {
-                isTracked
-            } else {
-                isTrendingTvShow(item)
+        return allRawItems
+            .distinctBy { item ->
+                "${item.ids.simklNumericId() ?: item.ids.simklImdbId() ?: item.title}:${item.episode?.season}:${item.episode?.episode}:${item.date?.take(10)}"
             }
-        }
+            .filter { item ->
+                val imdb = item.ids.simklImdbId()
+                val tmdb = item.ids.simklTmdbId()
+                val simklId = item.ids.simklNumericId()
+                val isTracked = userShows.matches(imdb, tmdb, simklId, item.title)
+
+                if (hasTrackedShows) {
+                    isTracked
+                } else {
+                    isTrendingTvShow(item)
+                }
+            }
     }
 
     private fun fetchDvdItems(userMovies: TrackedMediaFilter): List<SimklDvdReleaseItem> {
@@ -466,17 +508,38 @@ class SimklCalendarRepository @Inject constructor(
     }
 
     private fun fetchMovieItems(userMovies: TrackedMediaFilter): List<SimklMovieCalendarItem> {
-        val items = try {
-            val body = fetchBody(movieUrl) ?: return emptyList()
-            json.decodeFromString<List<SimklMovieCalendarItem>>(body)
+        val today = LocalDate.now()
+        val allRawItems = mutableListOf<SimklMovieCalendarItem>()
+
+        try {
+            val body = fetchBody(movieUrl)
+            if (body != null) {
+                allRawItems.addAll(json.decodeFromString<List<SimklMovieCalendarItem>>(body))
+            }
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
             Log.w(TAG, "Failed to fetch movie calendar", t)
-            return emptyList()
         }
 
-        return items.filter { isTrendingTheatricalMovie(it, userMovies) }
+        for (m in monthsToFetchArchive(today)) {
+            try {
+                val archiveBody = fetchBody(movieArchiveUrl(m.year, m.monthValue))
+                if (archiveBody != null) {
+                    allRawItems.addAll(json.decodeFromString<List<SimklMovieCalendarItem>>(archiveBody))
+                }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to fetch movie archive for ${m.year}/${m.monthValue}", t)
+            }
+        }
+
+        return allRawItems
+            .distinctBy { item ->
+                "${item.ids.simklNumericId() ?: item.ids.simklImdbId() ?: item.title}:${item.date?.take(10)}"
+            }
+            .filter { isTrendingTheatricalMovie(it, userMovies) }
     }
 
     private fun isTrendingTvShow(item: SimklTvCalendarItem): Boolean {
@@ -712,7 +775,7 @@ class SimklCalendarRepository @Inject constructor(
         tvItems: List<CalendarMediaItem>,
         dvdItems: List<CalendarMediaItem>,
         movieItems: List<CalendarMediaItem>
-    ): List<CalendarDayGroup> {
+    ): Pair<List<CalendarDayGroup>, List<CalendarDayGroup>> {
         val today = LocalDate.now()
         val allMapped = tvItems + dvdItems + movieItems
 
@@ -725,11 +788,10 @@ class SimklCalendarRepository @Inject constructor(
                 !item.digitalReleaseDate.isAfter(today)
         }
 
-        val dayGroups = mutableListOf<CalendarDayGroup>()
-
+        // 1. This week (Today through +6 days)
+        val thisWeekDays = mutableListOf<CalendarDayGroup>()
         for (offset in 0 until DAYS_TO_SHOW) {
             val dayDate = today.plusDays(offset.toLong())
-
             val itemsForDay = allMapped.filter { it.date == dayDate }.toMutableList()
 
             // On "Today", also surface recent digital releases.
@@ -761,18 +823,57 @@ class SimklCalendarRepository @Inject constructor(
                 else -> "$dowFull, $month ${dayDate.dayOfMonth}" to "$shortDow ${dayDate.dayOfMonth}"
             }
 
-            dayGroups.add(
+            thisWeekDays.add(
                 CalendarDayGroup(
                     date = dayDate,
                     label = label,
                     shortLabel = shortLabel,
                     isToday = offset == 0,
+                    isYesterday = false,
                     items = sorted
                 )
             )
         }
 
-        return dayGroups
+        // 2. Past week (Yesterday down to 7 days ago, with Yesterday at index 0)
+        val pastWeekDays = mutableListOf<CalendarDayGroup>()
+        for (offset in -1 downTo -PAST_DAYS_TO_SHOW) {
+            val dayDate = today.plusDays(offset.toLong())
+            val itemsForDay = allMapped.filter { it.date == dayDate }.toMutableList()
+
+            val sorted = itemsForDay
+                .distinctBy { "${it.type}:${it.id}:${it.date}" }
+                .sortedWith(dayItemComparator())
+
+            val dowFull = dayDate.dayOfWeek.getDisplayName(
+                java.time.format.TextStyle.FULL, Locale.US
+            )
+            val month = dayDate.month.getDisplayName(
+                java.time.format.TextStyle.SHORT, Locale.US
+            )
+            val shortDow = dayDate.dayOfWeek.getDisplayName(
+                java.time.format.TextStyle.SHORT, Locale.US
+            ).uppercase(Locale.US)
+
+            val (label, shortLabel) = when (offset) {
+                -1 -> "Yesterday · $dowFull, $month ${dayDate.dayOfMonth}" to "YESTERDAY · $shortDow ${dayDate.dayOfMonth}"
+                -2 -> "2 Days Ago · $dowFull, $month ${dayDate.dayOfMonth}" to "2D AGO · $shortDow ${dayDate.dayOfMonth}"
+                else -> "$dowFull, $month ${dayDate.dayOfMonth}" to "$shortDow ${dayDate.dayOfMonth}"
+            }
+
+            pastWeekDays.add(
+                CalendarDayGroup(
+                    date = dayDate,
+                    label = label,
+                    shortLabel = shortLabel,
+                    isToday = false,
+                    isYesterday = offset == -1,
+                    items = sorted
+                )
+            )
+        }
+
+        return Pair(thisWeekDays, pastWeekDays)
     }
 
     private fun dayItemComparator(): Comparator<CalendarMediaItem> = Comparator { a, b ->

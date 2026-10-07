@@ -20,15 +20,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,13 +61,14 @@ import com.nuvio.tv.data.simkl.calendar.CalendarCategory
 import com.nuvio.tv.data.simkl.calendar.CalendarDayGroup
 import com.nuvio.tv.data.simkl.calendar.CalendarItemType
 import com.nuvio.tv.data.simkl.calendar.CalendarMediaItem
+import com.nuvio.tv.data.simkl.calendar.CalendarTimePeriod
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /**
  * Android TV Leanback-style Calendar screen.
  *
- * Displays an upcoming release calendar with a day navigator, category filters,
- * a grid of media items, and a preview pane for the currently focused item.
+ * Displays TV episodes / shows by default (movies enabled via category filter),
+ * with the ability to view "This Week" or look back in time up to 7 days ("Past Week").
  */
 @Composable
 fun CalendarScreen(
@@ -114,9 +116,9 @@ fun CalendarScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                NuvioTheme.colors.Background.copy(alpha = 0.90f),
+                                NuvioTheme.colors.Background.copy(alpha = 0.92f),
                                 Color.Transparent,
-                                NuvioTheme.colors.Background.copy(alpha = 0.95f)
+                                NuvioTheme.colors.Background.copy(alpha = 0.96f)
                             )
                         )
                     )
@@ -124,7 +126,7 @@ fun CalendarScreen(
         }
 
         // Loading State
-        if (uiState.isLoading && uiState.days.isEmpty()) {
+        if (uiState.isLoading && uiState.currentDays.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -138,7 +140,7 @@ fun CalendarScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        text = "Loading Upcoming Calendar…",
+                        text = "Loading Episode Calendar…",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = NuvioTheme.colors.TextPrimary
                     )
@@ -148,7 +150,7 @@ fun CalendarScreen(
         }
 
         // Error State
-        if (uiState.errorMessage != null && uiState.days.isEmpty()) {
+        if (uiState.errorMessage != null && uiState.currentDays.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -185,26 +187,42 @@ fun CalendarScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = NuvioTheme.spacing.xxl, end = NuvioTheme.spacing.xxl, top = NuvioTheme.spacing.xl, bottom = NuvioTheme.spacing.lg)
+                .padding(
+                    start = NuvioTheme.spacing.xxl,
+                    end = NuvioTheme.spacing.xxl,
+                    top = NuvioTheme.spacing.xl,
+                    bottom = NuvioTheme.spacing.lg
+                )
         ) {
-            // Header Bar
-            CalendarHeader(uiState = uiState)
+            // Header Bar with Period Switcher
+            CalendarHeader(
+                uiState = uiState,
+                onSelectPeriod = { period ->
+                    AudioFeedbackManager.playClick(context)
+                    viewModel.selectTimePeriod(period)
+                }
+            )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // Day Navigator Bar
+            // Day Navigator Bar (with quick period switch action)
             DayNavigator(
-                days = uiState.days,
+                days = uiState.currentDays,
                 selectedDayIndex = uiState.selectedDayIndex,
+                timePeriod = uiState.timePeriod,
                 onSelect = { index ->
                     AudioFeedbackManager.playClick(context)
                     viewModel.selectDay(index)
+                },
+                onSwitchPeriod = { nextPeriod ->
+                    AudioFeedbackManager.playClick(context)
+                    viewModel.selectTimePeriod(nextPeriod)
                 }
             )
 
             Spacer(Modifier.height(10.dp))
 
-            // Category Filter Tabs
+            // Category Filter Tabs (TV Shows default)
             CategoryFilters(
                 selected = uiState.selectedCategory,
                 onSelect = { category ->
@@ -232,11 +250,23 @@ fun CalendarScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "No releases scheduled for this filter",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = NuvioTheme.colors.TextSecondary
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Tv,
+                                    contentDescription = null,
+                                    tint = NuvioTheme.colors.TextSecondary.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = if (uiState.selectedCategory == CalendarCategory.MOVIES)
+                                        "No movie releases scheduled for this day"
+                                    else
+                                        "No episodes scheduled for this filter",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = NuvioTheme.colors.TextSecondary
+                                )
+                            }
                         }
                     } else {
                         LazyVerticalGrid(
@@ -248,7 +278,9 @@ fun CalendarScreen(
                         ) {
                             itemsIndexed(
                                 items = uiState.filteredItems,
-                                key = { index, item -> "${item.type}_${item.id}_${item.date}_${item.season}_${item.episode}_$index" }
+                                key = { index, item ->
+                                    "${item.type}_${item.id}_${item.date}_${item.season}_${item.episode}_$index"
+                                }
                             ) { _, item ->
                                 CalendarGridItem(
                                     item = item,
@@ -279,48 +311,138 @@ fun CalendarScreen(
 }
 
 @Composable
-private fun CalendarHeader(uiState: CalendarViewModel.CalendarUiState) {
+private fun CalendarHeader(
+    uiState: CalendarViewModel.CalendarUiState,
+    onSelectPeriod: (CalendarTimePeriod) -> Unit
+) {
     Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Icon(
-            imageVector = Icons.Default.CalendarToday,
-            contentDescription = null,
-            tint = NuvioTheme.colors.Primary,
-            modifier = Modifier.size(28.dp)
-        )
-        Text(
-            text = "UPCOMING CALENDAR",
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            color = NuvioTheme.colors.TextPrimary
-        )
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF0055A5).copy(alpha = 0.25f))
-                .border(1.dp, Color(0xFF0055A5), RoundedCornerShape(6.dp))
-                .padding(horizontal = 8.dp, vertical = 2.dp)
+        // Title & Badges
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
-            Text(
-                text = "SIMKL TRACKER",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF4DA6FF)
+            Icon(
+                imageVector = Icons.Default.CalendarToday,
+                contentDescription = null,
+                tint = NuvioTheme.colors.Primary,
+                modifier = Modifier.size(28.dp)
             )
-        }
-        if (uiState.totalAvailableToStream > 0) {
+            Column {
+                Text(
+                    text = "RELEASE CALENDAR",
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    color = NuvioTheme.colors.TextPrimary
+                )
+            }
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF10B981).copy(alpha = 0.22f))
-                    .border(1.dp, Color(0xFF10B981), RoundedCornerShape(6.dp))
+                    .background(Color(0xFF0055A5).copy(alpha = 0.25f))
+                    .border(1.dp, Color(0xFF0055A5), RoundedCornerShape(6.dp))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = "⚡ ${uiState.totalAvailableToStream} STREAMING NOW",
+                    text = "SIMKL TRACKER",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = Color(0xFF34D399)
+                    color = Color(0xFF4DA6FF)
                 )
+            }
+
+            if (uiState.totalAvailableToStream > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF10B981).copy(alpha = 0.22f))
+                        .border(1.dp, Color(0xFF10B981), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "⚡ ${uiState.totalAvailableToStream} STREAMING NOW",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF34D399)
+                    )
+                }
+            }
+        }
+
+        // Time Period Switcher: "This Week" vs "Past Week" (Look Back)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val isThisWeek = uiState.timePeriod == CalendarTimePeriod.THIS_WEEK
+            Card(
+                onClick = { onSelectPeriod(CalendarTimePeriod.THIS_WEEK) },
+                colors = CardDefaults.colors(
+                    containerColor = if (isThisWeek) NuvioTheme.colors.Primary else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.4f),
+                    focusedContainerColor = NuvioTheme.colors.FocusBackground
+                ),
+                border = CardDefaults.border(
+                    focusedBorder = Border(
+                        border = androidx.compose.foundation.BorderStroke(2.dp, NuvioTheme.colors.Primary),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                ),
+                shape = CardDefaults.shape(RoundedCornerShape(16.dp)),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = if (isThisWeek) Color.White else NuvioTheme.colors.TextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "This Week",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (isThisWeek) Color.White else NuvioTheme.colors.TextSecondary
+                    )
+                }
+            }
+
+            val isPastWeek = uiState.timePeriod == CalendarTimePeriod.PAST_WEEK
+            Card(
+                onClick = { onSelectPeriod(CalendarTimePeriod.PAST_WEEK) },
+                colors = CardDefaults.colors(
+                    containerColor = if (isPastWeek) Color(0xFF0284C7) else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.4f),
+                    focusedContainerColor = NuvioTheme.colors.FocusBackground
+                ),
+                border = CardDefaults.border(
+                    focusedBorder = Border(
+                        border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF38BDF8)),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                ),
+                shape = CardDefaults.shape(RoundedCornerShape(16.dp)),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = if (isPastWeek) Color.White else NuvioTheme.colors.TextSecondary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Look Back (Past Week)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (isPastWeek) Color.White else NuvioTheme.colors.TextSecondary
+                    )
+                }
             }
         }
     }
@@ -330,33 +452,117 @@ private fun CalendarHeader(uiState: CalendarViewModel.CalendarUiState) {
 private fun DayNavigator(
     days: List<CalendarDayGroup>,
     selectedDayIndex: Int,
-    onSelect: (Int) -> Unit
+    timePeriod: CalendarTimePeriod,
+    onSelect: (Int) -> Unit,
+    onSwitchPeriod: (CalendarTimePeriod) -> Unit
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // In "This Week", offer a quick leading card to look back into the past week
+        if (timePeriod == CalendarTimePeriod.THIS_WEEK) {
+            item(key = "quick_past_week") {
+                Card(
+                    onClick = { onSwitchPeriod(CalendarTimePeriod.PAST_WEEK) },
+                    colors = CardDefaults.colors(
+                        containerColor = Color(0xFF0F2B48).copy(alpha = 0.6f),
+                        focusedContainerColor = NuvioTheme.colors.FocusBackground
+                    ),
+                    border = CardDefaults.border(
+                        focusedBorder = Border(
+                            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF38BDF8)),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    ),
+                    shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                    modifier = Modifier.height(42.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = Color(0xFF38BDF8),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "⟲ Past 7 Days",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF7DD3FC)
+                        )
+                    }
+                }
+            }
+        }
+
         itemsIndexed(
             items = days,
-            key = { index, day -> "${day.date}_$index" }
+            key = { index, day -> "${day.date}_${timePeriod}_$index" }
         ) { index, day ->
             val isSelected = index == selectedDayIndex
+            val isToday = day.isToday
+            val isYesterday = day.isYesterday
+
             Card(
                 onClick = { onSelect(index) },
                 colors = CardDefaults.colors(
-                    containerColor = if (isSelected) NuvioTheme.colors.Primary else NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.5f),
+                    containerColor = when {
+                        isSelected && isToday -> NuvioTheme.colors.Primary
+                        isSelected -> Color(0xFF0284C7)
+                        isToday -> NuvioTheme.colors.Primary.copy(alpha = 0.25f)
+                        isYesterday -> Color(0xFF0284C7).copy(alpha = 0.20f)
+                        else -> NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.5f)
+                    },
                     focusedContainerColor = NuvioTheme.colors.FocusBackground
                 ),
                 border = CardDefaults.border(
                     focusedBorder = Border(
-                        border = androidx.compose.foundation.BorderStroke(2.dp, NuvioTheme.colors.Primary),
+                        border = androidx.compose.foundation.BorderStroke(
+                            2.dp,
+                            if (isToday) NuvioTheme.colors.Primary else Color(0xFF38BDF8)
+                        ),
                         shape = RoundedCornerShape(12.dp)
                     )
                 ),
                 shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
-                modifier = Modifier.height(38.dp)
+                modifier = Modifier.height(42.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Badge indicator for Today or Yesterday
+                    if (isToday) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSelected) Color.White.copy(alpha = 0.3f) else NuvioTheme.colors.Primary.copy(alpha = 0.5f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "TODAY",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black, fontSize = 8.sp),
+                                color = Color.White
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    } else if (isYesterday) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSelected) Color.White.copy(alpha = 0.3f) else Color(0xFF0284C7).copy(alpha = 0.5f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "YESTERDAY",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black, fontSize = 8.sp),
+                                color = Color.White
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+
                     Text(
                         text = day.shortLabel,
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -381,6 +587,38 @@ private fun DayNavigator(
                 }
             }
         }
+
+        // In "Past Week", offer a quick trailing card to return to "This Week"
+        if (timePeriod == CalendarTimePeriod.PAST_WEEK) {
+            item(key = "quick_this_week") {
+                Card(
+                    onClick = { onSwitchPeriod(CalendarTimePeriod.THIS_WEEK) },
+                    colors = CardDefaults.colors(
+                        containerColor = NuvioTheme.colors.Primary.copy(alpha = 0.35f),
+                        focusedContainerColor = NuvioTheme.colors.FocusBackground
+                    ),
+                    border = CardDefaults.border(
+                        focusedBorder = Border(
+                            border = androidx.compose.foundation.BorderStroke(2.dp, NuvioTheme.colors.Primary),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    ),
+                    shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                    modifier = Modifier.height(42.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "➔ Back to This Week",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -393,6 +631,14 @@ private fun CategoryFilters(
         items(CalendarCategory.entries.size) { index ->
             val category = CalendarCategory.entries[index]
             val isSelected = category == selected
+            val label = when (category) {
+                CalendarCategory.TV_EPISODES -> "📺 TV Shows"
+                CalendarCategory.ACTIVELY_WATCHING -> "⚡ Watching"
+                CalendarCategory.MOVIES -> "🎬 Movies"
+                CalendarCategory.ALL -> "🍿 All Media"
+                CalendarCategory.DIGITAL_STREAMING -> "▶ Available to Stream"
+            }
+
             Card(
                 onClick = { onSelect(category) },
                 colors = CardDefaults.colors(
@@ -413,7 +659,7 @@ private fun CategoryFilters(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = category.displayName,
+                        text = label,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = if (isSelected) Color.White else NuvioTheme.colors.TextSecondary
                     )
@@ -635,7 +881,7 @@ private fun CalendarPreviewPane(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Select a show or movie to preview",
+                    text = "Select a show or episode to preview",
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioTheme.colors.TextSecondary
                 )
@@ -789,39 +1035,6 @@ private fun CalendarPreviewPane(
                                 )
                             }
                         }
-                    } else if (item.digitalReleaseDate != null) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF06B6D4).copy(alpha = 0.22f))
-                                    .border(1.dp, Color(0xFF06B6D4), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "DIGITAL: ${item.digitalReleaseDate}",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color(0xFF22D3EE)
-                                )
-                            }
-                        }
-                    }
-                    if (item.theatricalReleaseDate != null) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF8B5CF6).copy(alpha = 0.22f))
-                                    .border(1.dp, Color(0xFF8B5CF6), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "THEATERS: ${item.theatricalReleaseDate}",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color(0xFFA78BFA)
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -852,6 +1065,22 @@ private fun CalendarPreviewPane(
                     color = NuvioTheme.colors.Primary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
+                )
+
+                // Air Date Display
+                Spacer(Modifier.height(4.dp))
+                val airDateText = buildString {
+                    val dow = item.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+                    val mon = item.date.month.name.lowercase().replaceFirstChar { it.uppercase() }
+                    append("📅 $dow, $mon ${item.date.dayOfMonth}")
+                    if (!item.airTimeString.isNullOrBlank()) {
+                        append(" at ${item.airTimeString}")
+                    }
+                }
+                Text(
+                    text = airDateText,
+                    style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF94A3B8)),
+                    maxLines = 1
                 )
 
                 if (!item.userStatusNote.isNullOrBlank()) {

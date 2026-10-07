@@ -17,14 +17,22 @@ enum class CalendarItemType {
 }
 
 /**
+ * Time period filter for the calendar view.
+ */
+enum class CalendarTimePeriod(val displayName: String) {
+    THIS_WEEK("This Week"),
+    PAST_WEEK("Past Week")
+}
+
+/**
  * Calendar filter categories with a human-readable display name.
  */
 enum class CalendarCategory(val displayName: String) {
-    ALL("All"),
+    TV_EPISODES("TV Shows"),
     ACTIVELY_WATCHING("Watching"),
-    TV_EPISODES("TV Episodes"),
-    DIGITAL_STREAMING("Available to Stream"),
-    MOVIES("In Theaters")
+    MOVIES("Movies"),
+    ALL("All Media"),
+    DIGITAL_STREAMING("Available to Stream")
 }
 
 /**
@@ -69,11 +77,14 @@ data class CalendarDayGroup(
     val label: String,
     val shortLabel: String,
     val isToday: Boolean = false,
+    val isYesterday: Boolean = false,
     val items: List<CalendarMediaItem> = emptyList()
 )
 
 data class CalendarData(
     val days: List<CalendarDayGroup> = emptyList(),
+    val thisWeekDays: List<CalendarDayGroup> = emptyList(),
+    val pastWeekDays: List<CalendarDayGroup> = emptyList(),
     val allItems: List<CalendarMediaItem> = emptyList(),
     val availableToStreamCount: Int = 0
 )

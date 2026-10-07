@@ -92,4 +92,74 @@ class SimklCalendarFilterTest {
         assertTrue(emptyFilter.isEmpty)
         assertFalse(emptyFilter.matches("tt1234567", null, null, "Severance"))
     }
+    @Test
+    fun calendarCategory_defaultsToTvShows_andMoviesAreSeparate() {
+        val firstCategory = CalendarCategory.entries.first()
+
+        assertEquals(
+            "The first calendar category should default to TV episodes",
+            CalendarCategory.TV_EPISODES,
+            firstCategory
+        )
+        assertEquals(
+            "TV episodes category should display as 'TV Shows'",
+            "TV Shows",
+            firstCategory.displayName
+        )
+        assertTrue(
+            "Movies category should be present in entries list",
+            CalendarCategory.entries.contains(CalendarCategory.MOVIES)
+        )
+    }
+
+    @Test
+    fun calendarTimePeriod_hasThisWeekAndPastWeek() {
+        assertEquals("This Week", CalendarTimePeriod.THIS_WEEK.displayName)
+        assertEquals("Past Week", CalendarTimePeriod.PAST_WEEK.displayName)
+    }
+
+    @Test
+    fun calendarDayGroup_flagsTodayAndYesterdayCorrectly() {
+        val date = java.time.LocalDate.now()
+        val today = CalendarDayGroup(
+            date = date,
+            label = "Today",
+            shortLabel = "TODAY",
+            isToday = true,
+            isYesterday = false
+        )
+        val yesterday = CalendarDayGroup(
+            date = date.minusDays(1),
+            label = "Yesterday",
+            shortLabel = "YESTERDAY",
+            isToday = false,
+            isYesterday = true
+        )
+
+        assertTrue(today.isToday)
+        assertFalse(today.isYesterday)
+        assertFalse(yesterday.isToday)
+        assertTrue(yesterday.isYesterday)
+    }
+
+    @Test
+    fun calendarData_supportsThisWeekAndPastWeek() {
+        val date = java.time.LocalDate.now()
+        val thisWeek = listOf(
+            CalendarDayGroup(date = date, label = "Today", shortLabel = "TODAY", isToday = true)
+        )
+        val pastWeek = listOf(
+            CalendarDayGroup(date = date.minusDays(1), label = "Yesterday", shortLabel = "YESTERDAY", isYesterday = true)
+        )
+
+        val data = CalendarData(
+            days = thisWeek,
+            thisWeekDays = thisWeek,
+            pastWeekDays = pastWeek
+        )
+
+        assertEquals(thisWeek, data.thisWeekDays)
+        assertEquals(pastWeek, data.pastWeekDays)
+        assertEquals(thisWeek, data.days)
+    }
 }
