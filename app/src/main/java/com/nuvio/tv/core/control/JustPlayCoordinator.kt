@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.nuvio.tv.ambient.coordinator.AmbientCoordinator
+import com.nuvio.tv.ambient.coordinator.AmbientIdleController
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,6 +27,8 @@ class JustPlayCoordinator @Inject constructor(
     private val bridge: PlayerPlaybackBridge,
     private val profileManager: ProfileManager,
     private val watchProgress: WatchProgressRepository,
+    private val ambientCoordinator: AmbientCoordinator? = null,
+    private val ambientIdleController: AmbientIdleController? = null,
 ) {
     enum class Status { RESOLVING, STARTED, FAILED, CANCELLED }
 
@@ -93,6 +97,8 @@ class JustPlayCoordinator @Inject constructor(
 
     suspend fun request(cmd: AppCommand.PlayMedia): CommandResult =
         withContext(Dispatchers.Main.immediate) {
+            ambientCoordinator?.stopAmbient()
+            ambientIdleController?.notifyUserActivity()
             if (cmd.contentId.isBlank()) return@withContext CommandResult.Unavailable("Blank contentId")
             val type = cmd.contentType.lowercase()
             if (type != "movie" && type != "series") {
@@ -188,6 +194,8 @@ class JustPlayCoordinator @Inject constructor(
         season: Int?,
         episode: Int?,
     ): CommandResult = withContext(Dispatchers.Main.immediate) {
+        ambientCoordinator?.stopAmbient()
+        ambientIdleController?.notifyUserActivity()
         val pid = profileManager.activeProfileId.value
         val all = withTimeoutOrNull(10_000) {
             watchProgress.allProgress.first()

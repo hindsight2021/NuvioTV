@@ -149,6 +149,29 @@ class NuvioMediaPlayer(CoordinatorEntity[NuvioDataUpdateCoordinator], MediaPlaye
         return None
 
     @property
+    def media_content_type(self) -> MediaType | None:
+        content_type = self._playback.get("contentType")
+        if content_type == "movie":
+            return MediaType.MOVIE
+        if content_type == "series":
+            return MediaType.TVSHOW
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        playback = self._playback
+        content_type = playback.get("contentType")
+        return {
+            "content_type": content_type,
+            "content_name": playback.get("title") or playback.get("contentName"),
+            "content_id": playback.get("contentId"),
+            "video_id": playback.get("videoId"),
+            "season": playback.get("seasonNumber") or playback.get("season"),
+            "episode": playback.get("episodeNumber") or playback.get("episode"),
+            "is_movie": content_type == "movie",
+        }
+
+    @property
     def volume_level(self) -> float | None:
         vol = self._playback.get("volume")
         if vol is not None:

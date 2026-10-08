@@ -157,6 +157,14 @@ The local Windows workstation lacks a local Android SDK installation. **Compilat
 
 ## 7. Current Status & Next Steps for Codex
 
+-1. **v0.9.4-plus.52 (8 October 2026)**:
+   - Changes:
+     - Immediate screensaver dismissal and decoder yield across all playback and navigation requests to prevent MediaCodec exhaustion crashes.
+     - Home Assistant Cinema Mode automation (dimming strictly for movies after 5 PM with slow 7s transition).
+     - Private MCP bridge lighting control tools (`set_light_color` / `set_light`).
+     - REST API control body parsing fix in `NuvioControlServer`.
+   - Version Details: `versionName = "0.9.4-plus.52"`, `versionCode = 1110`.
+
 0. **v0.9.4-plus.51 compiled (7 October 2026)**:
    - Built on branch `plus-dev` at commit `b48692226` (Workflow run `37613324707`).
    - Features:

@@ -91,6 +91,15 @@ class AmbientCoordinator @Inject constructor(
                 playback.nextCandidate?.let { nextCandidate = it }
             }
         }
+
+        scope.launch {
+            playerPlaybackBridge.playbackSnapshot.collect { snapshot ->
+                if (snapshot != null && snapshot.isActive && _uiState.value.isAmbientActive) {
+                    Log.d(TAG, "Active playback session detected while ambient is active; dropping ambient screensaver immediately.")
+                    stopAmbient()
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -192,8 +201,23 @@ class AmbientCoordinator @Inject constructor(
         }
     }
 
-    /** Stops ambient playback and releases hardware decoders. */
+    /** Stops ambient playback and releases hardware decoders immediately. */
     fun stopAmbient() {
+        // Drop the screensaver UI immediately so Compose dismisses AmbientScreen without delay.
+        _uiState.update {
+            it.copy(
+                isAmbientActive = false,
+                isChannelPickerOpen = false,
+                isQuickActionsOpen = false,
+                currentCandidate = null,
+                nextCandidate = null
+            )
+        }
+
+        // Release hardware decoders synchronously before the mutex coroutine.
+        runCatching { playerPool.yield() }
+            .onFailure { Log.w(TAG, "playerPool.yield failed during immediate stop", it) }
+
         scope.launch {
             mutex.withLock {
                 try {
@@ -208,16 +232,6 @@ class AmbientCoordinator @Inject constructor(
 
                     currentCandidate = null
                     nextCandidate = null
-
-                    _uiState.update {
-                        it.copy(
-                            isAmbientActive = false,
-                            isChannelPickerOpen = false,
-                            isQuickActionsOpen = false,
-                            currentCandidate = null,
-                            nextCandidate = null
-                        )
-                    }
                 } catch (t: Throwable) {
                     Log.e(TAG, "stopAmbient failed", t)
                 }

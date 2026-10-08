@@ -1,6 +1,6 @@
 blueprint:
   name: "Nuvio TV - Cinematic Lighting Mode"
-  description: "Automatically dims lights when Nuvio TV starts playing, and brightens them when paused or stopped."
+  description: "Automatically dims lights when Nuvio TV starts playing a movie after 5pm (theatre style 5-8s), and brightens them when paused or stopped."
   domain: automation
   input:
     nuvio_player:
@@ -12,14 +12,16 @@ blueprint:
           integration: nuvio
     lights_to_dim:
       name: "Lights to Dim"
-      description: "Lights or light group to dim during playback."
+      description: "Lights or light group to dim during movie playback (e.g., family room lights)."
+      default:
+        entity_id: light.family_room
       selector:
         target:
           entity:
             domain: light
     dim_brightness:
       name: "Dimmed Brightness (%)"
-      description: "Brightness level while playing."
+      description: "Brightness level while playing movies."
       default: 15
       selector:
         number:
@@ -35,6 +37,15 @@ blueprint:
           min: 0
           max: 100
           unit_of_measurement: "%"
+    dim_transition:
+      name: "Dim Transition (seconds)"
+      description: "Theatre-style slow dim transition duration in seconds (5-8s)."
+      default: 7
+      selector:
+        number:
+          min: 5
+          max: 8
+          unit_of_measurement: "s"
 
 mode: restart
 
@@ -52,17 +63,25 @@ trigger:
     to: "idle"
     id: "stopped"
 
+condition: []
+
 action:
   - choose:
       - conditions:
           - condition: trigger
             id: "playing"
+          - condition: template
+            value_template: >-
+              {{ state_attr(trigger.entity_id, 'media_content_type') == 'movie'
+                 or state_attr(trigger.entity_id, 'content_type') == 'movie' }}
+          - condition: time
+            after: "17:00:00"
         sequence:
           - service: light.turn_on
             target: !input lights_to_dim
             data:
               brightness_pct: !input dim_brightness
-              transition: 2
+              transition: !input dim_transition
       - conditions:
           - condition: trigger
             id:
@@ -73,4 +92,4 @@ action:
             target: !input lights_to_dim
             data:
               brightness_pct: !input bright_brightness
-              transition: 1.5
+              transition: 2

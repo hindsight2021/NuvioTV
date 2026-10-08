@@ -4,6 +4,8 @@ import android.content.Context
 import com.nuvio.tv.core.ai.ThematicChannelGenerator
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
+import com.nuvio.tv.ambient.coordinator.AmbientCoordinator
+import com.nuvio.tv.ambient.coordinator.AmbientIdleController
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,7 +23,9 @@ class AppCommandBus @Inject constructor(
     private val navigationCommander: NavigationCommander,
     private val justPlayCoordinator: JustPlayCoordinator,
     private val aiOperatorEngine: AiOperatorEngine,
-    private val thematicChannelGenerator: ThematicChannelGenerator
+    private val thematicChannelGenerator: ThematicChannelGenerator,
+    private val ambientCoordinator: AmbientCoordinator? = null,
+    private val ambientIdleController: AmbientIdleController? = null,
 ) {
 
     /**
@@ -29,6 +33,11 @@ class AppCommandBus @Inject constructor(
      */
     fun playbackRequestStatus(id: String) = justPlayCoordinator.status(id)
     fun cancelPlaybackRequest(id: String) { justPlayCoordinator.cancel(id) }
+
+    private fun dropScreensaver() {
+        ambientCoordinator?.stopAmbient()
+        ambientIdleController?.notifyUserActivity()
+    }
 
     suspend fun dispatch(command: AppCommand): CommandResult {
         return when (command) {
@@ -46,6 +55,11 @@ class AppCommandBus @Inject constructor(
             is AppCommand.SelectAudioTrack,
             is AppCommand.SelectSubtitleTrack,
             AppCommand.DisableSubtitles -> {
+                when (command) {
+                    AppCommand.Play,
+                    AppCommand.PlayPause -> dropScreensaver()
+                    else -> Unit
+                }
                 playerPlaybackBridge.executePlaybackCommand(command)
             }
 
@@ -72,10 +86,12 @@ class AppCommandBus @Inject constructor(
 
             // --- Content commands ---
             is AppCommand.PlayMedia -> {
+                dropScreensaver()
                 justPlayCoordinator.request(command)
             }
 
             is AppCommand.PlayStream -> {
+                dropScreensaver()
                 CommandResult.Unavailable("Direct stream injection requires active player session")
             }
 
@@ -86,6 +102,7 @@ class AppCommandBus @Inject constructor(
             }
 
             is AppCommand.PlayNextItem -> {
+                dropScreensaver()
                 PlaylistManager.playNext(command.item)
                 CommandResult.Success("Set to play next: ${command.item.title}")
             }
@@ -102,6 +119,7 @@ class AppCommandBus @Inject constructor(
 
             // --- Thematic channel commands ---
             is AppCommand.PlayThematicChannel -> {
+                dropScreensaver()
                 val channelResult = thematicChannelGenerator.generateChannel(context, command.prompt)
                 val channel = channelResult.getOrElse { t ->
                     return CommandResult.Error("Failed to generate channel: ${t.message}", t)
@@ -126,6 +144,7 @@ class AppCommandBus @Inject constructor(
             }
 
             is AppCommand.PlayCuratedMood -> {
+                dropScreensaver()
                 val mood = thematicChannelGenerator.curatedMoods.firstOrNull { it.id == command.moodId }
                     ?: return CommandResult.Unavailable("Unknown mood: ${command.moodId}")
 

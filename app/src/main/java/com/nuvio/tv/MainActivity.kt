@@ -962,11 +962,15 @@ open class MainActivity : ComponentActivity() {
                         navigationCommander.requests.collect { request ->
                             when (request) {
                                 is com.nuvio.tv.core.control.NavigationRequest.NavigateTo -> {
+                                    ambientCoordinator.stopAmbient()
+                                    ambientIdleController.notifyUserActivity()
                                     navController.navigate(request.route) {
                                         launchSingleTop = true
                                     }
                                 }
                                 is com.nuvio.tv.core.control.NavigationRequest.OpenDetails -> {
+                                    ambientCoordinator.stopAmbient()
+                                    ambientIdleController.notifyUserActivity()
                                     navController.navigate(
                                         Screen.Detail.createRoute(itemId = request.contentId, itemType = request.contentType)
                                     ) {
@@ -1001,6 +1005,8 @@ open class MainActivity : ComponentActivity() {
                     // Navigate to content when launched from the Continue Watching channel row.
                     LaunchedEffect(navController) {
                         if (launchContentId != null && launchContentType != null && layoutChosen) {
+                            ambientCoordinator.stopAmbient()
+                            ambientIdleController.notifyUserActivity()
                             if (launchMode == "stream" && launchVideoId != null && launchName != null) {
                                 navController.navigate(
                                     Screen.Stream.createRoute(
@@ -1465,6 +1471,8 @@ open class MainActivity : ComponentActivity() {
 
     private fun captureDeepLinkIntent(intent: Intent?) {
         val url = intent?.dataString?.trim()?.takeIf(String::isNotBlank) ?: return
+        ambientCoordinator.stopAmbient()
+        ambientIdleController.notifyUserActivity()
         pendingDeepLinkUrl.value = url
     }
 
@@ -1472,6 +1480,8 @@ open class MainActivity : ComponentActivity() {
         val contentId = intent?.getStringExtra("contentId") ?: return
         val launchMode = intent.getStringExtra("launchMode") ?: return
         if (launchMode != "stream") return
+        ambientCoordinator.stopAmbient()
+        ambientIdleController.notifyUserActivity()
         pendingLaunchIntent.value = intent
     }
 
