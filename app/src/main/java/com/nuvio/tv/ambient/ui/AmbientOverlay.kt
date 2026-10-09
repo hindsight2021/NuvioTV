@@ -99,7 +99,7 @@ fun AmbientOverlay(
 
         // --- Clock / Date / Weather (top-right) ---
         AnimatedVisibility(
-            visible = isVisible && (settings.showClock || settings.showDate),
+            visible = settings.showClock || settings.showDate,
             enter = fadeIn(tween(800)),
             exit = fadeOut(tween(1200)),
             modifier = Modifier
