@@ -15,9 +15,15 @@ import com.nuvio.tv.core.control.QueueSnapshot
 import com.nuvio.tv.core.control.RemoteControlSettingsDataStore
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
+import com.nuvio.tv.data.simkl.calendar.CalendarItemType
+import com.nuvio.tv.data.simkl.calendar.SimklCalendarRepository
+import com.nuvio.tv.domain.repository.WatchProgressRepository
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayInputStream
+import java.time.LocalDate
 
 /**
  * Embedded HTTP server that exposes a REST API for controlling Nuvio TV.
@@ -31,6 +37,8 @@ class NuvioControlServer(
     private val playerPlaybackBridge: PlayerPlaybackBridge,
     private val remoteControlSettingsDataStore: RemoteControlSettingsDataStore,
     private val thematicChannelGenerator: ThematicChannelGenerator,
+    private val watchProgressRepository: WatchProgressRepository,
+    private val simklCalendarRepository: SimklCalendarRepository,
     port: Int = 8910
 ) : NanoHTTPD(port) {
 
@@ -80,6 +88,8 @@ class NuvioControlServer(
     private fun route(session: IHTTPSession, uri: String, method: Method): Response {
         return when {
             uri == "$API_PREFIX/status" && method == Method.GET -> handleStatus()
+            uri == "$API_PREFIX/continue-watching" && method == Method.GET -> handleContinueWatching()
+            uri == "$API_PREFIX/calendar/tv" && method == Method.GET -> handleTvCalendar(session)
 
             uri == "$API_PREFIX/playback/play_pause" && method == Method.POST -> dispatch(AppCommand.PlayPause)
             uri == "$API_PREFIX/playback/play" && method == Method.POST -> dispatch(AppCommand.Play)
@@ -155,6 +165,73 @@ class NuvioControlServer(
             queue = queueSnapshot
         )
         return jsonResponse(gson.toJson(response))
+    }
+
+    private fun handleContinueWatching(): Response {
+        val items = runBlocking { withTimeout(5_000) { watchProgressRepository.continueWatching.first() } }
+        return jsonResponse(gson.toJson(mapOf(
+            "items" to items.take(100).map { progress -> mapOf(
+                "contentId" to progress.contentId,
+                "contentType" to progress.contentType,
+                "title" to progress.name,
+                "videoId" to progress.videoId,
+                "season" to progress.season,
+                "episode" to progress.episode,
+                "episodeTitle" to progress.episodeTitle,
+                "positionMs" to progress.position,
+                "durationMs" to progress.duration,
+                "progressPercent" to progress.progressPercent,
+                "lastWatchedMs" to progress.lastWatched,
+                "source" to progress.source
+            )
+        )))
+    }
+
+    private fun handleTvCalendar(session: IHTTPSession): Response {
+        val period = session.parameters["period"]?.firstOrNull() ?: "both"
+        if (period !in setOf("upcoming", "previous", "both")) {
+            return jsonError(Response.Status.BAD_REQUEST, "period must be upcoming, previous, or both")
+        }
+        val days = session.parameters["days"]?.firstOrNull()?.toIntOrNull() ?: 7
+        if (days !in 1..7) return jsonError(Response.Status.BAD_REQUEST, "days must be 1-7")
+        val result = runBlocking { withTimeout(20_000) { simklCalendarRepository.getCalendarData() } }
+        val calendar = result.getOrElse {
+            return jsonError(Response.Status.SERVICE_UNAVAILABLE, "Simkl calendar is unavailable")
+        }
+        val today = LocalDate.now()
+        val items = calendar.allItems.asSequence()
+            .filter { it.type == CalendarItemType.TV_EPISODE }
+            .filter { item ->
+                when (period) {
+                    "upcoming" -> item.date >= today && item.date <= today.plusDays(days.toLong())
+                    "previous" -> item.date < today && item.date >= today.minusDays(days.toLong())
+                    else -> item.date >= today.minusDays(days.toLong()) && item.date <= today.plusDays(days.toLong())
+                }
+            }
+            .sortedBy { it.date }
+            .take(100)
+            .map { item -> mapOf(
+                "title" to item.title,
+                "date" to item.date.toString(),
+                "airTime" to item.airTimeString,
+                "season" to item.season,
+                "episode" to item.episode,
+                "episodeTitle" to item.episodeTitle,
+                "imdbId" to item.imdbId,
+                "tmdbId" to item.tmdbId,
+                "simklId" to item.simklId,
+                "isActivelyWatching" to item.isActivelyWatching,
+                "isWatchlist" to item.isWatchlist,
+                "isNextUpForUser" to item.isNextUpForUser
+            ) }
+            .toList()
+        return jsonResponse(gson.toJson(mapOf(
+            "period" to period,
+            "days" to days,
+            "today" to today.toString(),
+            "timezone" to java.time.ZoneId.systemDefault().id,
+            "items" to items
+        )))
     }
 
     private fun dispatch(command: AppCommand): Response {
