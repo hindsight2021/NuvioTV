@@ -230,8 +230,10 @@ android {
             )
             signingConfig = if (useDebugReleaseSigning) {
                 signingConfigs.getByName("debug")
-            } else {
+            } else if (file("../nuviotv.jks").exists() || releaseStoreFilePath?.let(::file)?.exists() == true) {
                 signingConfigs.getByName("release")
+            } else {
+                null
             }
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "false")
@@ -332,6 +334,9 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            it.jvmArgs("-Duser.timezone=UTC")
+        }
     }
 }
 

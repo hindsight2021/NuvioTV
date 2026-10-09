@@ -186,7 +186,7 @@ class NuvioControlServer(
                 "progressPercent" to progress.progressPercent,
                 "lastWatchedMs" to progress.lastWatched,
                 "source" to progress.source
-            ),
+            ) },
             "nextUpSeeds" to nextUpSeeds.take(100).map { progress -> mapOf(
                 "contentId" to progress.contentId,
                 "title" to progress.name,

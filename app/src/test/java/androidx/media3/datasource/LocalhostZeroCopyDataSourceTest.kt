@@ -140,11 +140,17 @@ class LocalhostZeroCopyDataSourceTest {
         val expectedData = "BufferLookAhead"
         val responseHeaders = "HTTP/1.1 200 OK\r\n" +
                 "Content-Length: ${expectedData.length}\r\n" +
+                "Connection: close\r\n" +
                 "\r\n"
 
         thread {
             try {
                 val client = serverSocket.accept()
+                val reader = client.getInputStream().bufferedReader()
+                while (true) {
+                    val line = reader.readLine()
+                    if (line.isNullOrEmpty()) break
+                }
                 val out = client.getOutputStream()
                 val fullPayload = responseHeaders.toByteArray() + expectedData.toByteArray()
                 out.write(fullPayload)
