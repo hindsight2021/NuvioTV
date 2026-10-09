@@ -1299,7 +1299,8 @@ fun PlayerScreen(
                 .zIndex(2.2f)
         )
 
-        val showClockOverlay = uiState.osdClockEnabled &&
+        val showClockOverlay = uiState.showControls &&
+            uiState.osdClockEnabled &&
             uiState.error == null &&
             !uiState.showLoadingOverlay &&
             !uiState.showPauseOverlay &&
