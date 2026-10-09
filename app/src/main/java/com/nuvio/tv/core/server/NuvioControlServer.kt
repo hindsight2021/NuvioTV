@@ -169,7 +169,10 @@ class NuvioControlServer(
 
     private fun handleContinueWatching(): Response {
         val items = runBlocking { withTimeout(5_000) { watchProgressRepository.continueWatching.first() } }
+        val nextUpSeeds = runBlocking { withTimeout(5_000) { watchProgressRepository.observeNextUpSeeds().first() } }
+        val progressLoaded = runBlocking { withTimeout(5_000) { watchProgressRepository.observeRemoteProgressLoaded().first() } }
         return jsonResponse(gson.toJson(mapOf(
+            "progressLoaded" to progressLoaded,
             "items" to items.take(100).map { progress -> mapOf(
                 "contentId" to progress.contentId,
                 "contentType" to progress.contentType,
@@ -183,7 +186,14 @@ class NuvioControlServer(
                 "progressPercent" to progress.progressPercent,
                 "lastWatchedMs" to progress.lastWatched,
                 "source" to progress.source
-            )
+            ),
+            "nextUpSeeds" to nextUpSeeds.take(100).map { progress -> mapOf(
+                "contentId" to progress.contentId,
+                "title" to progress.name,
+                "lastCompletedSeason" to progress.season,
+                "lastCompletedEpisode" to progress.episode,
+                "lastWatchedMs" to progress.lastWatched
+            ) }
         )))
     }
 
