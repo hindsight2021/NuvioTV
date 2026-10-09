@@ -61,21 +61,25 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
     @Test
     fun `a real repository transport failure is retried and then resolves`() = runBlocking {
-        val metaCalls = AtomicInteger()
+        val itemIdCalls = AtomicInteger()
         val reachable = AtomicBoolean(false)
         val api = mockk<AddonApi>()
         coEvery { api.getMeta(any()) } coAnswers {
-            metaCalls.incrementAndGet()
+            val url = firstArg<String>()
+            if (url.contains(itemId)) {
+                itemIdCalls.incrementAndGet()
+            }
             if (!reachable.get()) throw IOException("offline")
+            val id = if (url.contains(itemId)) itemId else otherId
             Response.success(
-                MetaResponseDto(meta = MetaDto(id = itemId, type = "series", name = "Test Meta"))
+                MetaResponseDto(meta = MetaDto(id = id, type = "series", name = "Test Meta"))
             )
         }
         val viewModel = newViewModel(realRepository(api))
         viewModel.seedCatalog(item(itemId))
 
         focusAndSettle(viewModel, item(itemId))
-        awaitAtLeast(metaCalls, 1)
+        awaitAtLeast(itemIdCalls, 1)
 
         reachable.set(true)
         focusAndSettle(viewModel, item(otherId))
@@ -83,7 +87,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
         // The failed lookup came back as a codeless Error, so the item was never marked prefetched
         // and the focus gate let it through again.
-        awaitAtLeast(metaCalls, 2)
+        awaitAtLeast(itemIdCalls, 2)
         // The API invocation increments the counter before its result is consumed by the
         // focus coroutine. Wait for the observable cache outcome rather than racing that job.
         withTimeout(10_000) {
@@ -98,18 +102,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
     private suspend fun focusAndSettle(viewModel: HomeViewModel, item: MetaPreview) {
         viewModel.onItemFocusPipeline(item)
-        viewModel.tmdbEnrichFocusJob?.join()
-        awaitFocusPipelineIdle(viewModel, item.id)
-    }
-
-    private suspend fun awaitFocusPipelineIdle(viewModel: HomeViewModel, id: String) {
-        withTimeout(10_000) {
-            while (viewModel.tmdbEnrichFocusJob?.isActive == true ||
-                id in viewModel.externalMetaPrefetchInFlightIds
-            ) {
-                delay(25)
-            }
-        }
+        delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS + 400)
     }
 
     private suspend fun awaitAtLeast(counter: AtomicInteger, expected: Int) {
