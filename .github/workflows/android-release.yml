@@ -135,7 +135,7 @@ jobs:
             release-notes.md
             release-note-quality.md
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 3
 
       - name: Set up Java
         if: inputs.mode != 'dry-run'
@@ -206,7 +206,7 @@ jobs:
             app/build/reports/tests/**
             app/build/test-results/**
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 3
 
       - name: Generate checksums and build SHA manifest
         if: inputs.mode != 'dry-run'
@@ -240,7 +240,7 @@ jobs:
           cat build-sha-manifest.txt
 
       - name: Upload build artifacts
-        if: inputs.mode != 'dry-run'
+        if: inputs.mode == 'candidate'
         uses: actions/upload-artifact@v6
         with:
           name: nuviotv-${{ steps.release.outputs.version }}-full-release
@@ -249,6 +249,7 @@ jobs:
             checksums.txt
             build-sha-manifest.txt
           if-no-files-found: error
+          retention-days: 7
 
       - name: Create GitHub release
         if: inputs.mode == 'draft' || inputs.mode == 'publish'
