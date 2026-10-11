@@ -104,13 +104,13 @@ fun TrailerPlayer(
             hasRenderedFirstFrame = false
             player.stop()
             player.clearMediaItems()
+            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
             if (!trailerAudioUrl.isNullOrBlank()) {
-                val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
-                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerAudioUrl))
-                player.setMediaSource(androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource))
+                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
             } else {
-                player.setMediaItem(MediaItem.fromUri(trailerUrl))
+                player.setMediaSource(videoSource)
             }
             player.prepare()
             player.playWhenReady = !isPaused
@@ -167,7 +167,16 @@ fun TrailerPlayer(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
                     currentOnEnded()
+                } else if (playbackState == Player.STATE_READY) {
+                    if (!hasRenderedFirstFrame) {
+                        hasRenderedFirstFrame = true
+                        currentOnFirstFrameRendered()
+                    }
                 }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.w("TrailerPlayer", "Trailer playback error: ${error.message}", error)
             }
 
             override fun onRenderedFirstFrame() {
@@ -180,13 +189,13 @@ fun TrailerPlayer(
                 Lifecycle.Event.ON_RESUME -> {
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
                         if (player.currentMediaItem == null) {
+                            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                             if (!currentTrailerAudioUrl.isNullOrBlank()) {
-                                val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
-                                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerAudioUrl!!))
-                                player.setMediaSource(androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource))
+                                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                             } else {
-                                player.setMediaItem(MediaItem.fromUri(currentTrailerUrl!!))
+                                player.setMediaSource(videoSource)
                             }
                             player.prepare()
                         }

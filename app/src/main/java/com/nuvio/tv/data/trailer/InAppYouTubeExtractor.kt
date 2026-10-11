@@ -447,16 +447,20 @@ class InAppYouTubeExtractor @Inject constructor() {
         }
 
         val bestProgressive = sortCandidates(progressive).firstOrNull()
-        val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
-        val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
-
         // Try adaptive video + audio first (best quality, separate streams)
-        kotlinx.coroutines.yield()
-        val resolvedVideo = bestVideo?.url?.let { resolveReachableUrl(it) }
-        val resolvedAudio = if (resolvedVideo != null) bestAudio?.url?.let { resolveReachableUrl(it) } else null
-
-        if (resolvedVideo != null) {
-            return TrailerPlaybackSource(videoUrl = resolvedVideo, audioUrl = resolvedAudio)
+        // Check preferred client (visionos) first, then fall back to any other client if unavailable
+        val clientOrder = listOf(PREFERRED_SEPARATE_CLIENT) + CLIENTS.map { it.key }.filter { it != PREFERRED_SEPARATE_CLIENT }
+        for (clientKey in clientOrder) {
+            val candidateVideo = pickBestForClient(adaptiveVideo, clientKey)
+            val candidateAudio = pickBestForClient(adaptiveAudio, clientKey)
+            if (candidateVideo != null) {
+                kotlinx.coroutines.yield()
+                val resolvedVideo = resolveReachableUrl(candidateVideo.url)
+                if (resolvedVideo != null) {
+                    val resolvedAudio = candidateAudio?.url?.let { resolveReachableUrl(it) }
+                    return TrailerPlaybackSource(videoUrl = resolvedVideo, audioUrl = resolvedAudio)
+                }
+            }
         }
 
         // Adaptive failed (403) — fall back to HLS manifest (1080p, always works for COPPA/kids content)
