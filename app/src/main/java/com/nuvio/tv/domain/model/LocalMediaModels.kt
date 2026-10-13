@@ -39,6 +39,12 @@ data class LocalMediaItem(
     val format: String = FORMAT_MKV,
     /** Last modified timestamp in epoch milliseconds. */
     val lastModified: Long = 0L,
+    /** Absolute filesystem path or URI to local poster image. */
+    val posterPath: String? = null,
+    /** Absolute filesystem path or URI to local fanart / backdrop image. */
+    val fanartPath: String? = null,
+    /** Synopsis / overview parsed from .nfo file if present. */
+    val overview: String? = null,
 ) {
     /** Display-friendly quality label, falling back to the raw [resolution] value. */
     val displayQuality: String
@@ -139,6 +145,8 @@ data class LocalSeriesSummary(
     val totalEpisodes: Int,
     /** All episodes belonging to this series. */
     val episodes: List<LocalMediaItem>,
+    val posterPath: String? = null,
+    val fanartPath: String? = null,
 ) {
     /** Episodes grouped by season number, sorted ascending. */
     val episodesBySeason: Map<Int, List<LocalMediaItem>>
@@ -163,11 +171,11 @@ fun LocalMediaItem.toMetaPreview(): MetaPreview = MetaPreview(
     id = id,
     type = if (type == LocalMediaItem.TYPE_SERIES) ContentType.SERIES else ContentType.MOVIE,
     name = title,
-    poster = null,
+    poster = posterPath,
     posterShape = PosterShape.POSTER,
-    background = null,
+    background = fanartPath,
     logo = null,
-    description = "Local storage • $displayQuality • $displayFileSize",
+    description = overview ?: "Local storage • $displayQuality • $displayFileSize",
     releaseInfo = year?.toString(),
     imdbRating = null,
     genres = listOf("Local NAS", displayQuality)
@@ -177,9 +185,9 @@ fun LocalSeriesSummary.toMetaPreview(): MetaPreview = MetaPreview(
     id = episodes.firstOrNull()?.id ?: "local:series:${title.lowercase().replace(' ', '_')}",
     type = ContentType.SERIES,
     name = title,
-    poster = null,
+    poster = posterPath ?: episodes.firstNotNullOfOrNull { it.posterPath },
     posterShape = PosterShape.POSTER,
-    background = null,
+    background = fanartPath ?: episodes.firstNotNullOfOrNull { it.fanartPath },
     logo = null,
     description = "Local NAS • $totalSeasons Seasons • $totalEpisodes Episodes",
     releaseInfo = year?.toString(),

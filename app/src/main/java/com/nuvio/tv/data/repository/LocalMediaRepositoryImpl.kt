@@ -80,6 +80,12 @@ class LocalMediaRepositoryImpl @Inject constructor(
 
     override suspend fun setScanPaths(paths: List<String>) = dataStore.setScanPaths(paths)
 
+    override suspend fun setMoviesPath(path: String?) = dataStore.setMoviesPath(path)
+
+    override suspend fun setTvShowsPath(path: String?) = dataStore.setTvShowsPath(path)
+
+    override suspend fun setShowHomeRows(enabled: Boolean) = dataStore.setShowHomeRows(enabled)
+
     override suspend fun addScanPath(path: String) = dataStore.addScanPath(path)
 
     override suspend fun removeScanPath(path: String) = dataStore.removeScanPath(path)
@@ -91,8 +97,13 @@ class LocalMediaRepositoryImpl @Inject constructor(
 
     override suspend fun scanNow(customPaths: List<String>?): LocalMediaScanSummary {
         val currentSettings = dataStore.settings.first()
-        val configuredPaths = customPaths ?: currentSettings.scanPaths.ifEmpty {
-            scanner.detectStorageRoots().map { it.absolutePath }
+        val specificPaths = listOfNotNull(currentSettings.moviesPath, currentSettings.tvShowsPath).filter { it.isNotBlank() }
+        val configuredPaths = customPaths ?: if (specificPaths.isNotEmpty()) {
+            (specificPaths + currentSettings.scanPaths).distinct()
+        } else {
+            currentSettings.scanPaths.ifEmpty {
+                scanner.detectStorageRoots().map { it.absolutePath }
+            }
         }
 
         Log.i(TAG, "Starting local media scan on: $configuredPaths")
@@ -216,7 +227,7 @@ class LocalMediaRepositoryImpl @Inject constructor(
                 addonName = ADDON_NAME_LOCAL_NAS,
                 addonBaseUrl = "local://storage",
                 catalogId = "local_nas_movies",
-                catalogName = "NAS Movies",
+                catalogName = "Local Movies",
                 type = ContentType.MOVIE,
                 items = movies.map { it.toMetaPreview() }
             )
@@ -231,7 +242,9 @@ class LocalMediaRepositoryImpl @Inject constructor(
                     year = epList.mapNotNull { it.year }.firstOrNull(),
                     totalSeasons = epList.mapNotNull { it.season }.distinct().size,
                     totalEpisodes = epList.size,
-                    episodes = epList.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
+                    episodes = epList.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 })),
+                    posterPath = epList.firstNotNullOfOrNull { it.posterPath },
+                    fanartPath = epList.firstNotNullOfOrNull { it.fanartPath }
                 )
             }
             .sortedBy { it.title.lowercase(Locale.ROOT) }
@@ -242,7 +255,7 @@ class LocalMediaRepositoryImpl @Inject constructor(
                 addonName = ADDON_NAME_LOCAL_NAS,
                 addonBaseUrl = "local://storage",
                 catalogId = "local_nas_series",
-                catalogName = "NAS TV Shows",
+                catalogName = "Local TV Shows",
                 type = ContentType.SERIES,
                 items = seriesSummaries.map { it.toMetaPreview() }
             )
@@ -265,11 +278,11 @@ class LocalMediaRepositoryImpl @Inject constructor(
                 id = item.id,
                 type = ContentType.SERIES,
                 name = item.title,
-                poster = null,
+                poster = item.posterPath ?: seriesEpisodes.firstNotNullOfOrNull { it.posterPath },
                 posterShape = PosterShape.POSTER,
-                background = null,
+                background = item.fanartPath ?: seriesEpisodes.firstNotNullOfOrNull { it.fanartPath },
                 logo = null,
-                description = "Locally stored TV show with ${seriesEpisodes.size} episodes available on Shield storage.",
+                description = item.overview ?: "Locally stored TV show with ${seriesEpisodes.size} episodes available on Shield storage.",
                 releaseInfo = item.year?.toString(),
                 imdbRating = null,
                 genres = listOf("Local NAS", item.displayQuality),
@@ -281,10 +294,10 @@ class LocalMediaRepositoryImpl @Inject constructor(
                         id = "${item.id}:${ep.season}:${ep.episode}",
                         title = ep.episodeTitle ?: "Episode ${ep.episode}",
                         released = null,
-                        thumbnail = null,
+                        thumbnail = ep.posterPath,
                         season = ep.season ?: 1,
                         episode = ep.episode ?: 1,
-                        overview = null
+                        overview = ep.overview
                     )
                 },
                 country = null,
@@ -297,11 +310,11 @@ class LocalMediaRepositoryImpl @Inject constructor(
                 id = item.id,
                 type = ContentType.MOVIE,
                 name = item.title,
-                poster = null,
+                poster = item.posterPath,
                 posterShape = PosterShape.POSTER,
-                background = null,
+                background = item.fanartPath,
                 logo = null,
-                description = "Locally stored movie (${item.displayQuality}, ${item.displayFileSize}) at ${item.filePath}",
+                description = item.overview ?: "Locally stored movie (${item.displayQuality}, ${item.displayFileSize}) at ${item.filePath}",
                 releaseInfo = item.year?.toString(),
                 imdbRating = null,
                 genres = listOf("Local NAS", item.displayQuality),

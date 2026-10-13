@@ -85,7 +85,8 @@ class HomeViewModel @Inject constructor(
     internal val tvRecommendationManager: TvRecommendationManager,
     internal val aiManager: com.nuvio.tv.core.ai.AiManager? = null,
     internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
-    internal val simklTrendingRepository: com.nuvio.tv.data.simkl.trending.SimklTrendingRepository? = null
+    internal val simklTrendingRepository: com.nuvio.tv.data.simkl.trending.SimklTrendingRepository? = null,
+    internal val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -223,6 +224,7 @@ class HomeViewModel @Inject constructor(
     internal var followAddonsOrderEnabled: Boolean = false
     internal var customCatalogTitles: Map<String, String> = emptyMap()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
+    internal var localMediaRows: List<CatalogRow> = emptyList()
     internal var catalogUpdateJob: Job? = null
     internal var hasRenderedFirstCatalog = false
     internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
@@ -372,6 +374,7 @@ class HomeViewModel @Inject constructor(
             observeBlurUnwatchedEpisodes()
             observeProgressSourceChanges()
             observeCollections()
+            observeLocalMedia()
             observeInstalledAddons()
             observeManualAddonRefresh()
             loadSimklTrending()
@@ -592,6 +595,8 @@ class HomeViewModel @Inject constructor(
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
 
     fun preloadAdjacentItem(item: MetaPreview) = preloadAdjacentItemPipeline(item)
+
+    private fun observeLocalMedia() = observeLocalMediaPipeline()
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 

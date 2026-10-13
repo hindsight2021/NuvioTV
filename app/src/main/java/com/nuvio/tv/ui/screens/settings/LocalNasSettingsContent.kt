@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -35,6 +37,33 @@ fun LocalNasSettingsContent(
         runCatching {
             (initialFocusRequester ?: toggleFocusRequester).requestFocus()
         }
+    }
+
+    var showMoviesFolderPicker by remember { mutableStateOf(false) }
+    var showTvShowsFolderPicker by remember { mutableStateOf(false) }
+
+    if (showMoviesFolderPicker) {
+        StorageFolderPickerDialog(
+            title = "Select Movies Folder",
+            initialPath = uiState.moviesPath ?: "/storage",
+            onDismiss = { showMoviesFolderPicker = false },
+            onFolderSelected = { selectedPath ->
+                viewModel.setMoviesPath(selectedPath)
+                showMoviesFolderPicker = false
+            }
+        )
+    }
+
+    if (showTvShowsFolderPicker) {
+        StorageFolderPickerDialog(
+            title = "Select TV Shows Folder",
+            initialPath = uiState.tvShowsPath ?: "/storage",
+            onDismiss = { showTvShowsFolderPicker = false },
+            onFolderSelected = { selectedPath ->
+                viewModel.setTvShowsPath(selectedPath)
+                showTvShowsFolderPicker = false
+            }
+        )
     }
 
     Column(
@@ -65,6 +94,31 @@ fun LocalNasSettingsContent(
                             checked = uiState.isEnabled,
                             onToggle = { viewModel.toggleEnabled(!uiState.isEnabled) },
                             modifier = Modifier.focusRequester(toggleFocusRequester)
+                        )
+                    }
+
+                    item(key = "local_nas_movies_folder") {
+                        SettingsActionRow(
+                            title = "Movies Folder",
+                            subtitle = uiState.moviesPath ?: "Tap to select mapped folder (e.g. /storage/192.168.1.142/Movies)",
+                            onClick = { showMoviesFolderPicker = true }
+                        )
+                    }
+
+                    item(key = "local_nas_tv_folder") {
+                        SettingsActionRow(
+                            title = "TV Shows Folder",
+                            subtitle = uiState.tvShowsPath ?: "Tap to select mapped folder (e.g. /storage/192.168.1.142/TV Shows)",
+                            onClick = { showTvShowsFolderPicker = true }
+                        )
+                    }
+
+                    item(key = "local_nas_show_home_rows") {
+                        SettingsToggleRow(
+                            title = "Show Local Media Rows on Home",
+                            subtitle = "Adds dedicated 'Local Movies' and 'Local TV Shows' rows directly into your Movies and TV tabs",
+                            checked = uiState.showHomeRows,
+                            onToggle = { viewModel.setShowHomeRows(!uiState.showHomeRows) }
                         )
                     }
 

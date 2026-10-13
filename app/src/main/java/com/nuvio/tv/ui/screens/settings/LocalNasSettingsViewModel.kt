@@ -23,6 +23,9 @@ import javax.inject.Inject
 data class LocalNasSettingsUiState(
     val isEnabled: Boolean = true,
     val isScanning: Boolean = false,
+    val moviesPath: String? = null,
+    val tvShowsPath: String? = null,
+    val showHomeRows: Boolean = true,
     val detectedPaths: List<String> = emptyList(),
     val configuredPaths: List<String> = emptyList(),
     val movieCount: Int = 0,
@@ -60,6 +63,9 @@ class LocalNasSettingsViewModel @Inject constructor(
                 _uiState.update { current ->
                     current.copy(
                         isEnabled = settings.enabled,
+                        moviesPath = settings.moviesPath,
+                        tvShowsPath = settings.tvShowsPath,
+                        showHomeRows = settings.showHomeRows,
                         configuredPaths = settings.scanPaths,
                         movieCount = movies,
                         seriesCount = episodes,
@@ -77,6 +83,24 @@ class LocalNasSettingsViewModel @Inject constructor(
     fun toggleEnabled(enabled: Boolean) {
         viewModelScope.launch {
             localMediaRepository.setEnabled(enabled)
+        }
+    }
+
+    fun setMoviesPath(path: String?) {
+        viewModelScope.launch {
+            localMediaRepository.setMoviesPath(path)
+        }
+    }
+
+    fun setTvShowsPath(path: String?) {
+        viewModelScope.launch {
+            localMediaRepository.setTvShowsPath(path)
+        }
+    }
+
+    fun setShowHomeRows(enabled: Boolean) {
+        viewModelScope.launch {
+            localMediaRepository.setShowHomeRows(enabled)
         }
     }
 

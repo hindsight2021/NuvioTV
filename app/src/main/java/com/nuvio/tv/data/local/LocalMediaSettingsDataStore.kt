@@ -27,6 +27,9 @@ class LocalMediaSettingsDataStore @Inject constructor(
         private const val FEATURE = "local_media_settings"
         private val KEY_ENABLED = booleanPreferencesKey("local_media_enabled")
         private val KEY_SCAN_PATHS = stringPreferencesKey("local_media_scan_paths")
+        private val KEY_MOVIES_PATH = stringPreferencesKey("local_media_movies_path")
+        private val KEY_TV_SHOWS_PATH = stringPreferencesKey("local_media_tv_shows_path")
+        private val KEY_SHOW_HOME_ROWS = booleanPreferencesKey("local_media_show_home_rows")
         private val KEY_LAST_SCAN_TIMESTAMP = longPreferencesKey("local_media_last_scan_timestamp")
         private val KEY_CACHED_ITEMS = stringPreferencesKey("local_media_cached_items")
 
@@ -45,6 +48,9 @@ class LocalMediaSettingsDataStore @Inject constructor(
             LocalMediaSettings(
                 enabled = prefs[KEY_ENABLED] ?: true,
                 scanPaths = prefs[KEY_SCAN_PATHS]?.let(::decodeStringList) ?: emptyList(),
+                moviesPath = prefs[KEY_MOVIES_PATH],
+                tvShowsPath = prefs[KEY_TV_SHOWS_PATH],
+                showHomeRows = prefs[KEY_SHOW_HOME_ROWS] ?: true,
                 lastScanTimestamp = prefs[KEY_LAST_SCAN_TIMESTAMP] ?: 0L,
                 cachedItems = prefs[KEY_CACHED_ITEMS]?.let(::decodeItems) ?: emptyList()
             )
@@ -59,6 +65,33 @@ class LocalMediaSettingsDataStore @Inject constructor(
     /** Replaces the full set of scan paths. */
     suspend fun setScanPaths(paths: List<String>) {
         store().edit { prefs -> prefs[KEY_SCAN_PATHS] = encodeStringList(paths) }
+    }
+
+    /** Sets the specific local Movies folder path. */
+    suspend fun setMoviesPath(path: String?) {
+        store().edit { prefs ->
+            if (path.isNullOrBlank()) {
+                prefs.remove(KEY_MOVIES_PATH)
+            } else {
+                prefs[KEY_MOVIES_PATH] = path
+            }
+        }
+    }
+
+    /** Sets the specific local TV Shows folder path. */
+    suspend fun setTvShowsPath(path: String?) {
+        store().edit { prefs ->
+            if (path.isNullOrBlank()) {
+                prefs.remove(KEY_TV_SHOWS_PATH)
+            } else {
+                prefs[KEY_TV_SHOWS_PATH] = path
+            }
+        }
+    }
+
+    /** Sets whether dedicated local rows are displayed on the home screen. */
+    suspend fun setShowHomeRows(enabled: Boolean) {
+        store().edit { prefs -> prefs[KEY_SHOW_HOME_ROWS] = enabled }
     }
 
     /** Adds a scan path if it is not already present. */
@@ -117,6 +150,9 @@ class LocalMediaSettingsDataStore @Inject constructor(
 data class LocalMediaSettings(
     val enabled: Boolean = true,
     val scanPaths: List<String> = emptyList(),
+    val moviesPath: String? = null,
+    val tvShowsPath: String? = null,
+    val showHomeRows: Boolean = true,
     val lastScanTimestamp: Long = 0L,
     val cachedItems: List<LocalMediaItem> = emptyList()
 )

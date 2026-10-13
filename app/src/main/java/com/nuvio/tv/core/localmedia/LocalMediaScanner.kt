@@ -28,7 +28,8 @@ import kotlin.coroutines.coroutineContext
  */
 @Singleton
 class LocalMediaScanner @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val nfoParser: KodiNfoParser
 ) {
 
     companion object {
@@ -252,13 +253,24 @@ class LocalMediaScanner @Inject constructor(
         if (episodeMatch != null) {
             val (seriesTitle, season, episode, epTitle) = episodeMatch
             val stableId = generateStableId(LocalMediaItem.TYPE_SERIES, "$seriesTitle:S${season}E${episode}")
+            val nfo = parentDir?.let { nfoParser.findAndParseNfo(it, name) }
+                ?: parentDir?.parentFile?.let { nfoParser.findAndParseNfo(it) }
+
+            val posterPath = nfo?.posterFile?.absolutePath
+                ?: parentDir?.let { nfoParser.findPoster(it)?.absolutePath }
+                ?: parentDir?.parentFile?.let { nfoParser.findPoster(it)?.absolutePath }
+
+            val fanartPath = nfo?.fanartFile?.absolutePath
+                ?: parentDir?.let { nfoParser.findFanart(it)?.absolutePath }
+                ?: parentDir?.parentFile?.let { nfoParser.findFanart(it)?.absolutePath }
+
             return LocalMediaItem(
                 id = stableId,
                 filePath = file.absolutePath,
                 fileUri = "file://${file.absolutePath}",
-                title = seriesTitle,
+                title = nfo?.title ?: seriesTitle,
                 type = LocalMediaItem.TYPE_SERIES,
-                year = extractYear(name) ?: extractYear(seriesTitle),
+                year = nfo?.year ?: extractYear(name) ?: extractYear(seriesTitle),
                 season = season,
                 episode = episode,
                 episodeTitle = epTitle,
@@ -266,20 +278,32 @@ class LocalMediaScanner @Inject constructor(
                 resolution = resolution,
                 qualityValue = qualityValue,
                 format = ext.uppercase(Locale.ROOT),
-                lastModified = file.lastModified()
+                lastModified = file.lastModified(),
+                posterPath = posterPath,
+                fanartPath = fanartPath,
+                overview = nfo?.plot
             )
         }
 
         // 3. Otherwise treat as movie
         val (movieTitle, movieYear) = parseMovieInfo(name, parentName, fullPath)
-        val stableId = generateStableId(LocalMediaItem.TYPE_MOVIE, "$movieTitle:${movieYear ?: 0}")
+        val nfo = parentDir?.let { nfoParser.findAndParseNfo(it, name) }
+        val finalTitle = nfo?.title ?: movieTitle
+        val finalYear = nfo?.year ?: movieYear
+
+        val posterPath = nfo?.posterFile?.absolutePath
+            ?: parentDir?.let { nfoParser.findPoster(it)?.absolutePath }
+        val fanartPath = nfo?.fanartFile?.absolutePath
+            ?: parentDir?.let { nfoParser.findFanart(it)?.absolutePath }
+
+        val stableId = generateStableId(LocalMediaItem.TYPE_MOVIE, "$finalTitle:${finalYear ?: 0}")
         return LocalMediaItem(
             id = stableId,
             filePath = file.absolutePath,
             fileUri = "file://${file.absolutePath}",
-            title = movieTitle,
+            title = finalTitle,
             type = LocalMediaItem.TYPE_MOVIE,
-            year = movieYear,
+            year = finalYear,
             season = null,
             episode = null,
             episodeTitle = null,
@@ -287,7 +311,10 @@ class LocalMediaScanner @Inject constructor(
             resolution = resolution,
             qualityValue = qualityValue,
             format = ext.uppercase(Locale.ROOT),
-            lastModified = file.lastModified()
+            lastModified = file.lastModified(),
+            posterPath = posterPath,
+            fanartPath = fanartPath,
+            overview = nfo?.plot
         )
     }
 

@@ -61,6 +61,23 @@ internal fun HomeViewModel.observeCollectionsPipeline() {
     }
 }
 
+internal fun HomeViewModel.observeLocalMediaPipeline() {
+    val repo = localMediaRepository ?: return
+    viewModelScope.launch {
+        repo.settings
+            .distinctUntilChanged()
+            .collectLatest { settings ->
+                if (settings.enabled && settings.showHomeRows) {
+                    val rows = repo.getLocalCatalogRows()
+                    localMediaRows = rows
+                } else {
+                    localMediaRows = emptyList()
+                }
+                scheduleUpdateCatalogRows()
+            }
+    }
+}
+
 internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
     viewModelScope.launch {
         layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->
@@ -789,6 +806,19 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             val placeholdersByKey = synchronized(catalogStateLock) {
                 placeholderDescriptors.associateBy { it.catalogKey }
             }
+            // Inject local media rows (Local Movies / Local TV Shows) if available
+            localMediaRows.forEach { localRow ->
+                if (localRow.items.isNotEmpty()) {
+                    val matchesTab = !separateMoviesTvEnabled || when (selectedHomeTab) {
+                        HomeTab.TV_SHOWS -> isTvCatalogType(localRow.apiType)
+                        HomeTab.MOVIES -> isMovieCatalogType(localRow.apiType)
+                    }
+                    if (matchesTab) {
+                        add(HomeRow.Catalog(localRow))
+                    }
+                }
+            }
+
             val addedCollectionIds = mutableSetOf<String>()
             collectionsCache.forEach { collection ->
                 val key = "collection_${collection.id}"

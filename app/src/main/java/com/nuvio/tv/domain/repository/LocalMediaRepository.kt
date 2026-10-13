@@ -14,6 +14,9 @@ interface LocalMediaRepository {
 
     suspend fun setEnabled(enabled: Boolean)
     suspend fun setScanPaths(paths: List<String>)
+    suspend fun setMoviesPath(path: String?)
+    suspend fun setTvShowsPath(path: String?)
+    suspend fun setShowHomeRows(enabled: Boolean)
     suspend fun addScanPath(path: String)
     suspend fun removeScanPath(path: String)
     suspend fun clearCache()
