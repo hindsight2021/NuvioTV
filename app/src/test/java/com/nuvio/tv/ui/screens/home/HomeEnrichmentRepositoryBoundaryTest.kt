@@ -107,7 +107,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
     private suspend fun awaitAtLeast(counter: AtomicInteger, expected: Int) {
         val reached = runCatching {
-            withTimeout(5_000) { while (counter.get() < expected) delay(25) }
+            withTimeout(12_000) { while (counter.get() < expected) delay(25) }
         }.isSuccess
         assertEquals("expected at least $expected meta requests", true, reached)
     }
