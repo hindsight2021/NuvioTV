@@ -15,8 +15,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -72,10 +76,10 @@ fun TrailerPlayer(
     val currentOnRemoteKey by rememberUpdatedState(onRemoteKey)
     val zoomScale = if (cropToFill) overscanZoom.coerceAtLeast(1f) else 1f
     var hasRenderedFirstFrame by remember(trailerUrl) { mutableStateOf(false) }
-    val playerAlphaState = animateFloatAsState(
-        targetValue = if (isPlaying && hasRenderedFirstFrame) 1f else 0f,
+    val scrimAlphaState = animateFloatAsState(
+        targetValue = if (isPlaying && hasRenderedFirstFrame) 0f else 1f,
         animationSpec = tween(durationMillis = 300),
-        label = "trailerFirstFrameAlpha"
+        label = "trailerScrimAlpha"
     )
 
     // Resolve pool: explicit parameter > CompositionLocal
@@ -105,14 +109,19 @@ fun TrailerPlayer(
             player.stop()
             player.clearMediaItems()
             val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+            val isHls = trailerUrl.contains(".m3u8", ignoreCase = true)
             val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
-            if (!trailerAudioUrl.isNullOrBlank()) {
+            if (!isHls && !trailerAudioUrl.isNullOrBlank()) {
                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerAudioUrl))
-                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
+                player.setMediaSource(MergingMediaSource(true, true, videoSource, audioSource))
             } else {
                 player.setMediaSource(videoSource)
             }
             player.prepare()
+            if (player.playbackState == Player.STATE_READY && player.videoSize.height > 0) {
+                hasRenderedFirstFrame = true
+                currentOnFirstFrameRendered()
+            }
             player.playWhenReady = !isPaused
         } else {
             hasRenderedFirstFrame = false
@@ -179,6 +188,15 @@ fun TrailerPlayer(
                 android.util.Log.w("TrailerPlayer", "Trailer playback error: ${error.message}", error)
             }
 
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.height > 0) {
+                    if (!hasRenderedFirstFrame) {
+                        hasRenderedFirstFrame = true
+                        currentOnFirstFrameRendered()
+                    }
+                }
+            }
+
             override fun onRenderedFirstFrame() {
                 hasRenderedFirstFrame = true
                 currentOnFirstFrameRendered()
@@ -190,10 +208,12 @@ fun TrailerPlayer(
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
                         if (player.currentMediaItem == null) {
                             val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
-                            if (!currentTrailerAudioUrl.isNullOrBlank()) {
+                            val url = currentTrailerUrl!!
+                            val isHls = url.contains(".m3u8", ignoreCase = true)
+                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
+                            if (!isHls && !currentTrailerAudioUrl.isNullOrBlank()) {
                                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerAudioUrl!!))
-                                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
+                                player.setMediaSource(MergingMediaSource(true, true, videoSource, audioSource))
                             } else {
                                 player.setMediaSource(videoSource)
                             }
@@ -231,46 +251,50 @@ fun TrailerPlayer(
             enter = enter,
             exit = exit
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    (LayoutInflater.from(ctx).inflate(R.layout.trailer_player_view, null) as PlayerView).apply {
-                        player = trailerPlayer
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        setOnKeyListener { _, keyCode, event ->
-                            currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+            Box(modifier = modifier.clipToBounds()) {
+                AndroidView(
+                    factory = { ctx ->
+                        (LayoutInflater.from(ctx).inflate(R.layout.trailer_player_view, null) as PlayerView).apply {
+                            player = trailerPlayer
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            setOnKeyListener { _, keyCode, event ->
+                                currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+                            }
+                            keepScreenOn = true
+                            resizeMode = if (cropToFill) {
+                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            } else {
+                                AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            }
                         }
-                        keepScreenOn = true
-                        resizeMode = if (cropToFill) {
+                    },
+                    update = { view ->
+                        // Re-attach player in case it was reclaimed after yield
+                        if (view.player !== trailerPlayer) {
+                            view.player = trailerPlayer
+                        }
+                        view.resizeMode = if (cropToFill) {
                             AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                         } else {
                             AspectRatioFrameLayout.RESIZE_MODE_FIT
                         }
-                    }
-                },
-                update = { view ->
-                    // Re-attach player in case it was reclaimed after yield
-                    if (view.player !== trailerPlayer) {
-                        view.player = trailerPlayer
-                    }
-                    view.resizeMode = if (cropToFill) {
-                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    } else {
-                        AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    }
-                },
-                onRelease = { view ->
-                    view.player = null
-                    view.keepScreenOn = false
-                },
-                modifier = modifier
-                    .clipToBounds()
-                    .graphicsLayer {
-                        alpha = playerAlphaState.value
-                        scaleX = zoomScale
-                        scaleY = zoomScale
-                    }
-            )
+                    },
+                    onRelease = { view ->
+                        view.player = null
+                        view.keepScreenOn = false
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Black scrim on top of the SurfaceView, fading out once the first frame renders
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = scrimAlphaState.value }
+                        .background(Color.Black)
+                )
+            }
         }
     }
 }

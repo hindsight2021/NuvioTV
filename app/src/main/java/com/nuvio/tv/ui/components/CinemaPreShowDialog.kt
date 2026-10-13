@@ -17,6 +17,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -578,15 +580,18 @@ private fun TriviaAct(
 
         // Center Question & Options
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(if (answerRevealed) 12.dp else 20.dp)
         ) {
             Text(
                 text = item.question,
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp,
-                    lineHeight = 36.sp
+                    fontSize = if (answerRevealed) 24.sp else 28.sp,
+                    lineHeight = if (answerRevealed) 30.sp else 36.sp
                 ),
                 color = Color.White
             )
@@ -595,7 +600,7 @@ private fun TriviaAct(
             var focusedOptionIndex by remember(item) { mutableIntStateOf(0) }
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(if (answerRevealed) 6.dp else 10.dp)
             ) {
                 item.options.forEachIndexed { optIdx, optText ->
                     val isCorrect = answerRevealed && optText.equals(item.answer, ignoreCase = true)
@@ -610,6 +615,7 @@ private fun TriviaAct(
                         isSelected = isUserSelection,
                         enabled = !answerRevealed,
                         focusRequester = if (optIdx == 0) firstOptionFocus else null,
+                        compact = answerRevealed,
                         onFocused = { focusedOptionIndex = optIdx },
                         onClick = {
                             if (!answerRevealed) {
@@ -632,7 +638,7 @@ private fun TriviaAct(
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0x2800E676))
                         .border(1.dp, CinemaEmerald.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
@@ -690,6 +696,7 @@ private fun TriviaChoiceCard(
     isSelected: Boolean,
     enabled: Boolean,
     focusRequester: FocusRequester?,
+    compact: Boolean = false,
     onFocused: () -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -750,7 +757,7 @@ private fun TriviaChoiceCard(
                 false
             }
             .clickable(enabled = enabled, interactionSource = interactionSource, indication = null) { onClick() }
-            .padding(horizontal = 18.dp, vertical = 12.dp)
+            .padding(horizontal = 18.dp, vertical = if (compact) 8.dp else 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
