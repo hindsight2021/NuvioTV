@@ -11,16 +11,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -33,12 +30,16 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import com.nuvio.tv.core.player.LetterboxDetector
+import com.nuvio.tv.core.player.LetterboxSampler
+import com.nuvio.tv.core.player.LetterboxTracker
 import com.nuvio.tv.core.player.LocalTrailerPlayerPool
 import com.nuvio.tv.core.player.TrailerPlayerPool
 import com.nuvio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import android.view.LayoutInflater
+import android.view.TextureView
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
 
@@ -49,7 +50,7 @@ fun TrailerPlayer(
     trailerAudioUrl: String? = null,
     isPlaying: Boolean,
     isPaused: Boolean = false,
-    onEnded: () -> Unit,
+    onEnded: () -> Unit = {},
     onFirstFrameRendered: () -> Unit = {},
     muted: Boolean = false,
     seekRequestToken: Int = 0,
@@ -58,6 +59,7 @@ fun TrailerPlayer(
     onRemoteKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean = { _, _, _ -> false },
     cropToFill: Boolean = false,
     overscanZoom: Float = 1f,
+    autoCropLetterbox: Boolean = false,
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500)),
@@ -76,18 +78,25 @@ fun TrailerPlayer(
     val currentOnRemoteKey by rememberUpdatedState(onRemoteKey)
     val zoomScale = if (cropToFill) overscanZoom.coerceAtLeast(1f) else 1f
     var hasRenderedFirstFrame by remember(trailerUrl) { mutableStateOf(false) }
-    val scrimAlphaState = animateFloatAsState(
-        targetValue = if (isPlaying && hasRenderedFirstFrame) 0f else 1f,
+    val playerAlphaState = animateFloatAsState(
+        targetValue = if (isPlaying && hasRenderedFirstFrame) 1f else 0f,
         animationSpec = tween(durationMillis = 300),
-        label = "trailerScrimAlpha"
+        label = "trailerFirstFrameAlpha"
+    )
+    val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
+    var letterboxZoom by remember(trailerUrl) { mutableFloatStateOf(1f) }
+    val letterboxZoomState = animateFloatAsState(
+        targetValue = if (autoCropLetterbox) letterboxZoom else 1f,
+        animationSpec = tween(durationMillis = 400),
+        label = "trailerLetterboxZoom"
     )
 
     // Resolve pool: explicit parameter > CompositionLocal
     val resolvedPool = trailerPlayerPool ?: LocalTrailerPlayerPool.current
 
     // Use standalone player if provided (e.g. cinema pre-show), otherwise acquire from pool
-    val trailerPlayer = remember(standalonePlayer, resolvedPool) {
-        standalonePlayer ?: resolvedPool?.acquire()
+    val trailerPlayer = remember(standalonePlayer, trailerUrl, resolvedPool) {
+        standalonePlayer ?: if (trailerUrl != null) resolvedPool?.acquire() else null
     }
 
     // Configure player settings when acquired
@@ -106,22 +115,15 @@ fun TrailerPlayer(
         player.volume = if (muted) 0f else 1f
         if (isPlaying && trailerUrl != null) {
             hasRenderedFirstFrame = false
-            player.stop()
-            player.clearMediaItems()
-            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-            val isHls = trailerUrl.contains(".m3u8", ignoreCase = true)
-            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
-            if (!isHls && !trailerAudioUrl.isNullOrBlank()) {
+            if (!trailerAudioUrl.isNullOrBlank()) {
+                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerUrl))
                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(trailerAudioUrl))
-                player.setMediaSource(MergingMediaSource(true, true, videoSource, audioSource))
+                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
             } else {
-                player.setMediaSource(videoSource)
+                player.setMediaItem(MediaItem.fromUri(trailerUrl))
             }
             player.prepare()
-            if (player.playbackState == Player.STATE_READY && player.videoSize.height > 0) {
-                hasRenderedFirstFrame = true
-                currentOnFirstFrameRendered()
-            }
             player.playWhenReady = !isPaused
         } else {
             hasRenderedFirstFrame = false
@@ -141,6 +143,27 @@ fun TrailerPlayer(
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
         } else {
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+    }
+
+    LaunchedEffect(autoCropLetterbox, hasRenderedFirstFrame, trailerPlayer) {
+        letterboxZoom = 1f
+        if (!autoCropLetterbox || !hasRenderedFirstFrame) return@LaunchedEffect
+        val player = trailerPlayer ?: return@LaunchedEffect
+        val tracker = LetterboxTracker()
+        val sampler = LetterboxSampler()
+        try {
+            while (true) {
+                delay(LetterboxDetector.SAMPLE_INTERVAL_MS)
+                if (LetterboxDetector.isSampleWindowOver(player.currentPosition, player.duration)) break
+                if (!player.isPlaying) continue
+                val textureView = playerViewRef.value?.videoSurfaceView as? TextureView ?: continue
+                val bar = sampler.sample(textureView) ?: continue
+                letterboxZoom = tracker.onSample(bar) ?: continue
+                break
+            }
+        } finally {
+            sampler.release()
         }
     }
 
@@ -174,22 +197,12 @@ fun TrailerPlayer(
         val player = trailerPlayer ?: return@DisposableEffect onDispose {}
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
+                if (playbackState == Player.STATE_ENDED &&
+                    currentIsPlaying &&
+                    player.playWhenReady
+                ) {
                     currentOnEnded()
-                } else if (playbackState == Player.STATE_READY) {
-                    if (!hasRenderedFirstFrame) {
-                        hasRenderedFirstFrame = true
-                        currentOnFirstFrameRendered()
-                    }
-                }
-            }
-
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                android.util.Log.w("TrailerPlayer", "Trailer playback error: ${error.message}", error)
-            }
-
-            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                if (videoSize.height > 0) {
+                } else if (playbackState == Player.STATE_READY && player.videoSize.height > 0) {
                     if (!hasRenderedFirstFrame) {
                         hasRenderedFirstFrame = true
                         currentOnFirstFrameRendered()
@@ -201,25 +214,36 @@ fun TrailerPlayer(
                 hasRenderedFirstFrame = true
                 currentOnFirstFrameRendered()
             }
+
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.height > 0 && player.playbackState == Player.STATE_READY) {
+                    if (!hasRenderedFirstFrame) {
+                        hasRenderedFirstFrame = true
+                        currentOnFirstFrameRendered()
+                    }
+                }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.w("TrailerPlayer", "Trailer playback error: ${error.message}", error)
+            }
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
                         if (player.currentMediaItem == null) {
-                            val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                            val url = currentTrailerUrl!!
-                            val isHls = url.contains(".m3u8", ignoreCase = true)
-                            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
-                            if (!isHls && !currentTrailerAudioUrl.isNullOrBlank()) {
+                            if (!currentTrailerAudioUrl.isNullOrBlank()) {
+                                val mediaSourceFactory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+                                val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerUrl!!))
                                 val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(currentTrailerAudioUrl!!))
-                                player.setMediaSource(MergingMediaSource(true, true, videoSource, audioSource))
+                                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                             } else {
-                                player.setMediaSource(videoSource)
+                                player.setMediaItem(MediaItem.fromUri(currentTrailerUrl!!))
                             }
                             player.prepare()
                         }
-                        player.playWhenReady = true
+                        player.playWhenReady = !isPaused
                     }
                 }
                 Lifecycle.Event.ON_PAUSE,
@@ -251,50 +275,48 @@ fun TrailerPlayer(
             enter = enter,
             exit = exit
         ) {
-            Box(modifier = modifier.clipToBounds()) {
-                AndroidView(
-                    factory = { ctx ->
-                        (LayoutInflater.from(ctx).inflate(R.layout.trailer_player_view, null) as PlayerView).apply {
-                            player = trailerPlayer
-                            isFocusable = true
-                            isFocusableInTouchMode = true
-                            setOnKeyListener { _, keyCode, event ->
-                                currentOnRemoteKey(keyCode, event.action, event.repeatCount)
-                            }
-                            keepScreenOn = true
-                            resizeMode = if (cropToFill) {
-                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            } else {
-                                AspectRatioFrameLayout.RESIZE_MODE_FIT
-                            }
+            AndroidView(
+                factory = { ctx ->
+                    (LayoutInflater.from(ctx).inflate(R.layout.trailer_player_view, null) as PlayerView).apply {
+                        playerViewRef.value = this
+                        player = trailerPlayer
+                        isFocusable = false
+                        isFocusableInTouchMode = false
+                        setOnKeyListener { _, keyCode, event ->
+                            currentOnRemoteKey(keyCode, event.action, event.repeatCount)
                         }
-                    },
-                    update = { view ->
-                        // Re-attach player in case it was reclaimed after yield
-                        if (view.player !== trailerPlayer) {
-                            view.player = trailerPlayer
-                        }
-                        view.resizeMode = if (cropToFill) {
+                        keepScreenOn = true
+                        resizeMode = if (cropToFill) {
                             AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                         } else {
                             AspectRatioFrameLayout.RESIZE_MODE_FIT
                         }
-                    },
-                    onRelease = { view ->
-                        view.player = null
-                        view.keepScreenOn = false
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Black scrim on top of the SurfaceView, fading out once the first frame renders
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = scrimAlphaState.value }
-                        .background(Color.Black)
-                )
-            }
+                    }
+                },
+                update = { view ->
+                    // Re-attach player in case it was reclaimed after yield
+                    if (view.player !== trailerPlayer) {
+                        view.player = trailerPlayer
+                    }
+                    view.resizeMode = if (cropToFill) {
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    } else {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                },
+                onRelease = { view ->
+                    playerViewRef.value = null
+                    view.player = null
+                    view.keepScreenOn = false
+                },
+                modifier = modifier
+                    .clipToBounds()
+                    .graphicsLayer {
+                        alpha = playerAlphaState.value
+                        scaleX = zoomScale * letterboxZoomState.value
+                        scaleY = zoomScale * letterboxZoomState.value
+                    }
+            )
         }
     }
 }

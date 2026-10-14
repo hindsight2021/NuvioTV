@@ -15,7 +15,8 @@ import androidx.media3.datasource.TransferListener
  * kills) connections that try to download full adaptive streams in one shot,
  * but honours chunked range-param requests at full speed.
  *
- * Only activates for googlevideo.com URLs; all other URLs pass through untouched.
+ * Only activates for googlevideo.com progressive / adaptive stream URLs; all other URLs pass through untouched.
+ * HLS manifests and playlists/segments are explicitly excluded from chunking.
  */
 @UnstableApi
 class YoutubeChunkedDataSourceFactory(
@@ -58,7 +59,14 @@ class YoutubeChunkedDataSourceFactory(
         override fun open(dataSpec: DataSpec): Long {
             val uri = dataSpec.uri
             val host = uri.host.orEmpty()
-            isYouTubeStream = host.contains("googlevideo.com")
+            val path = uri.path.orEmpty()
+            val lowerPath = path.lowercase()
+
+            val isHls = lowerPath.endsWith(".m3u8") ||
+                lowerPath.contains("/hls_variant/") ||
+                lowerPath.contains("/hls_playlist/")
+
+            isYouTubeStream = host.contains("googlevideo.com") && !isHls
 
             if (!isYouTubeStream) {
                 return upstream.open(dataSpec)

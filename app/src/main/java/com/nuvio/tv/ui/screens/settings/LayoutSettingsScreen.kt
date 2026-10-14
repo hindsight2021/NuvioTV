@@ -644,6 +644,36 @@ fun LayoutSettingsContent(
                         )
 
                         if (uiState.detailPageTrailerAutoplayEnabled) {
+                            CompactToggleRow(
+                                title = stringResource(R.string.layout_trailer_play_in_background),
+                                subtitle = stringResource(R.string.layout_trailer_play_in_background_sub),
+                                checked = uiState.detailPageTrailerPlayInBackground,
+                                onToggle = {
+                                    viewModel.onEvent(
+                                        LayoutSettingsEvent.SetDetailPageTrailerPlayInBackground(
+                                            !uiState.detailPageTrailerPlayInBackground
+                                        )
+                                    )
+                                },
+                                onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                            )
+
+                            if (uiState.detailPageTrailerPlayInBackground) {
+                                CompactToggleRow(
+                                    title = stringResource(R.string.layout_trailer_pause_on_scroll),
+                                    subtitle = stringResource(R.string.layout_trailer_pause_on_scroll_sub),
+                                    checked = uiState.detailPageTrailerPauseOnScroll,
+                                    onToggle = {
+                                        viewModel.onEvent(
+                                            LayoutSettingsEvent.SetDetailPageTrailerPauseOnScroll(
+                                                !uiState.detailPageTrailerPauseOnScroll
+                                            )
+                                        )
+                                    },
+                                    onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                                )
+                            }
+
                             SliderSettingsItem(
                                 icon = Icons.Default.Timer,
                                 title = stringResource(R.string.audio_trailer_delay),
@@ -660,6 +690,18 @@ fun LayoutSettingsContent(
                                 onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
                             )
                         }
+
+                        CompactToggleRow(
+                            title = stringResource(R.string.layout_trailer_4k),
+                            subtitle = stringResource(R.string.layout_trailer_4k_sub),
+                            checked = uiState.trailer4kEnabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetTrailer4kEnabled(!uiState.trailer4kEnabled)
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                        )
                     }
 
                     CompactToggleRow(

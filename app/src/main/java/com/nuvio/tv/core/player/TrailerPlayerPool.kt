@@ -9,20 +9,26 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Application-scoped singleton that holds a single ExoPlayer instance dedicated to
- * trailer/preview playback on the home screen.
+ * trailer playback across the entire app (home screen hero, detail page, etc.).
  *
- * Creating and tearing down ExoPlayer for every poster focus is extremely expensive
- * (codec init, hardware decoder allocation). This pool keeps one instance alive and
- * reuses it across focus changes. The player is stopped and cleared between uses but
+ * Creating an ExoPlayer takes ~50-100 ms and allocates decoders; creating/destroying
+ * one every time the user moves focus between posters causes UI jank and can exhaust
+ * MediaCodec instances. This pool keeps a single instance alive and warm, which is
  * never released until the process dies or [release] is explicitly called.
  *
  * When the full-screen player needs hardware decoders, call [yield] to free
@@ -33,30 +39,53 @@ import kotlinx.coroutines.flow.first
 @Singleton
 class TrailerPlayerPool @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val playerSettingsDataStore: PlayerSettingsDataStore
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore
 ) {
     companion object {
         private const val TAG = "TrailerPlayerPool"
+
+        // A trailer plays on top of the home UI and its image caches, so it gets a small byte cap
+        // rather than Media3's default (~144 MB for video + audio). Low-RAM sticks get the smallest.
+        private const val LOW_RAM_TRAILER_BUFFER_MB = 48
+        private const val TRAILER_BUFFER_MB = 100
     }
 
     private var _player: ExoPlayer? = null
     private val yielded = AtomicBoolean(false)
     private val released = AtomicBoolean(false)
     private val _isPlaying = AtomicBoolean(false)
+    private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var cachedForceNative: Boolean = false
 
+    @Volatile
+    private var cachedPlayerSettings: PlayerSettings? = null
+
+    @Volatile
+    private var cachedAllow4k: Boolean = TrailerVideoPolicy.default4kTrailers(context)
+
+    // Height cap currently applied to the player's track selection; reset when the player is rebuilt.
+    private var appliedMaxHeight: Int? = null
+
+    // Kept current so a player rebuilt after [yield] picks up buffer changes made since launch.
     init {
-        Thread {
-            try {
-                cachedForceNative = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                    playerSettingsDataStore.nuvioPerformanceModeEnabled.first()
-                }
-            } catch (_: Exception) {
-                cachedForceNative = false
+        settingsScope.launch {
+            runCatching {
+                trailerSettingsDataStore.settings.collect { cachedAllow4k = it.allow4k }
             }
-        }.start()
+        }
+        settingsScope.launch {
+            runCatching {
+                playerSettingsDataStore.nuvioPerformanceModeEnabled.collect { cachedForceNative = it }
+            }
+        }
+        settingsScope.launch {
+            runCatching {
+                playerSettingsDataStore.playerSettings.collect { cachedPlayerSettings = it }
+            }
+        }
     }
 
     /**
@@ -69,7 +98,24 @@ class TrailerPlayerPool @Inject constructor(
             // Reclaim was not called yet but someone wants the player — rebuild.
             reclaim()
         }
-        return _player ?: createPlayer().also { _player = it }
+        val player = _player ?: createPlayer().also {
+            _player = it
+            appliedMaxHeight = null
+        }
+        applyVideoSizeCap(player)
+        return player
+    }
+
+    // Caps HLS variants; adaptive YouTube streams are already capped by the extractor.
+    private fun applyVideoSizeCap(player: ExoPlayer) {
+        val maxHeight = TrailerVideoPolicy.maxTrailerVideoHeight(cachedAllow4k)
+        if (appliedMaxHeight == maxHeight) return
+        val maxWidth = if (maxHeight == Int.MAX_VALUE) Int.MAX_VALUE else maxHeight * 16 / 9
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setMaxVideoSize(maxWidth, maxHeight)
+            .build()
+        appliedMaxHeight = maxHeight
     }
 
     /**
@@ -139,7 +185,12 @@ class TrailerPlayerPool @Inject constructor(
 
     private fun createPlayer(): ExoPlayer {
         val forceNative = cachedForceNative
-        Log.d(TAG, "Creating shared trailer ExoPlayer instance with forceNativeAllocation = $forceNative")
+        val targetBufferMb = trailerTargetBufferMb(cachedPlayerSettings)
+        Log.d(
+            TAG,
+            "Creating shared trailer ExoPlayer instance with forceNativeAllocation = $forceNative, " +
+                "targetBufferMb = $targetBufferMb"
+        )
         val loadControlBuilder = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs = */ 30_000,
@@ -147,6 +198,10 @@ class TrailerPlayerPool @Inject constructor(
                 /* bufferForPlaybackMs = */ 5_000,
                 /* bufferForPlaybackAfterRebufferMs = */ 10_000
             )
+            .setTargetBufferBytes(targetBufferMb * 1024 * 1024)
+            // The byte cap must hold even before minBufferMs is reached, or a high-bitrate
+            // trailer keeps allocating until the process is killed for low memory.
+            .setPrioritizeTimeOverSizeThresholds(false)
         if (forceNative) {
             val allocator = DefaultAllocator(
                 /* trimOnReset = */ true,
@@ -184,5 +239,15 @@ class TrailerPlayerPool @Inject constructor(
                     }
                 })
             }
+    }
+
+    /** Trailer cap for this device tier, lowered further when the user set a smaller Target Buffer Size. */
+    private fun trailerTargetBufferMb(settings: PlayerSettings?): Int {
+        val tierCapMb = if (MemoryBudget.isLowRamTier) LOW_RAM_TRAILER_BUFFER_MB else TRAILER_BUFFER_MB
+        val userTargetMb = settings
+            ?.takeIf { it.bufferEngineEnabled && !it.bufferBudgetManaged }
+            ?.let { MemoryBudget.effectiveBufferMb(it.bufferSettings.targetBufferSizeMb) }
+            ?: return tierCapMb
+        return userTargetMb.coerceAtMost(tierCapMb)
     }
 }
