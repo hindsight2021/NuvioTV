@@ -95,7 +95,8 @@ internal data class CwMetaSummary(
 ) {
     fun watchableEpisodes(): List<CwVideoSummary> {
         val candidates = videos.filter { it.season != null && it.episode != null && (it.season ?: 0) > 0 }
-        fun isFutureRelease(raw: String?): Boolean = isEpisodeReleaseAired(raw) == false
+        fun isFutureRelease(raw: String?): Boolean =
+            isEpisodeReleaseAired(raw, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == false
         val unavailableSeasons = candidates.groupBy { it.season }
             .filter { (_, eps) ->
                 val first = eps.minByOrNull { it.episode ?: Int.MAX_VALUE } ?: return@filter false

@@ -43,7 +43,7 @@ internal fun isEpisodeReleaseAired(
     raw: String?,
     clock: Clock = Clock.systemDefaultZone(),
     airBufferHours: Long = 0L,
-    postAirBufferHours: Long = POST_BROADCAST_AIR_BUFFER_HOURS
+    postAirBufferHours: Long = 0L
 ): Boolean? {
     val releaseInstant = parseEpisodeReleaseInstant(raw, clock.zone) ?: return null
     val availableInstant = if (postAirBufferHours > 0L) {
