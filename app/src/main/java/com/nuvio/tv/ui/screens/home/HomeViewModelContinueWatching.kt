@@ -86,6 +86,7 @@ internal data class CwMetaSummary(
     val description: String?,
     val genres: List<String>,
     val releaseInfo: String?,
+    val status: String? = null,
     val imdbRating: Float?,
     val language: String?,
     val country: String?,
@@ -172,6 +173,7 @@ private fun Meta.toCwSummary(): CwMetaSummary = CwMetaSummary(
     description = description,
     genres = genres,
     releaseInfo = releaseInfo,
+    status = status,
     imdbRating = imdbRating,
     language = language,
     country = country,
@@ -1459,11 +1461,11 @@ private fun HomeViewModel.isPotentialAiringSeries(contentId: String): Boolean {
     } ?: metaRepository.getCachedMeta("series", contentId)?.toCwSummary()
       ?: metaRepository.getCachedMeta("tv", contentId)?.toCwSummary()
 
-    if (cachedMeta?.releaseInfo?.endsWith("-") == true) return true
+    if (isOngoingSeries(cachedMeta?.releaseInfo, cachedMeta?.status)) return true
     val cached = synchronized(cwEnrichedNextUpOverlay) {
         cwEnrichedNextUpOverlay[contentId]
     }
-    if (cached?.releaseInfo?.endsWith("-") == true) return true
+    if (isOngoingSeries(cached?.releaseInfo)) return true
     return false
 }
 
@@ -2107,7 +2109,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
         // Watching. The cached CW snapshot will keep it visible until the
         // next successful meta resolution.
         if (cachedMeta != null) {
-            val isOngoing = isPotentialAiringSeries(progress.contentId) || cachedMeta.releaseInfo?.endsWith("-") == true
+            val isOngoing = isPotentialAiringSeries(progress.contentId) || isOngoingSeries(cachedMeta.releaseInfo, cachedMeta.status)
             val nextContentMs = cwBadgeNextSeasonMs[progress.contentId]
             val deadline = nextContentMs
                 ?: if (isOngoing) (System.currentTimeMillis() + 2L * 60 * 60 * 1000)
@@ -2121,6 +2123,27 @@ private suspend fun HomeViewModel.buildNextUpItem(
         return null
     }
     val seedMeta = resolveMetaForProgress(progress, cwMetaCache, debug)
+    if (seedMeta != null) {
+        val episodes = seedMeta.watchableEpisodes()
+            .mapNotNull { v -> v.season?.let { s -> v.episode?.let { e -> s to e } } }
+            .toSet()
+        val cacheKey = "series:${progress.contentId}"
+        synchronized(cwBadgeEpisodeCache) {
+            if (!cwBadgeEpisodeCache.containsKey(cacheKey)) {
+                cwBadgeEpisodeCache[cacheKey] = episodes
+            }
+        }
+        seedMeta.earliestRevalidationMs()?.let { ms ->
+            cwBadgeNextSeasonMs[progress.contentId] = ms
+        }
+    }
+    if (nextUp.hasAired) {
+        clearStaleFullyWatchedForAiredNextUp(
+            contentId = progress.contentId,
+            nextSeason = nextUp.season,
+            nextEpisode = nextUp.episode
+        )
+    }
 
     val name = progress.name.trim().takeIf { it.isNotEmpty() }
         ?: seedMeta?.name
@@ -2153,7 +2176,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
         lastWatched = nextUp.lastWatched,
         imdbRating = null,
         genres = emptyList(),
-        releaseInfo = null,
+        releaseInfo = seedMeta?.releaseInfo,
         sortTimestamp = releaseState.sortTimestamp,
         releaseTimestamp = releaseState.releaseTimestamp,
         isReleaseAlert = releaseState.isReleaseAlert,
@@ -3536,7 +3559,7 @@ private fun recalculateCachedReleaseBadge(cached: com.nuvio.tv.data.local.Cached
     val hasAired = if (cached.released != null) {
         hasEpisodeAired(cached.released, fallback = cached.hasAired)
     } else if (releaseTimestamp != null) {
-        nowMs + 18L * 60 * 60 * 1000 >= releaseTimestamp
+        nowMs >= releaseTimestamp
     } else {
         cached.hasAired
     }

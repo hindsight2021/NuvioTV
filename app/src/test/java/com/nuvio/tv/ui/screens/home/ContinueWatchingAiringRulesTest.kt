@@ -441,37 +441,113 @@ class ContinueWatchingAiringRulesTest {
     // --- Specific regressions: South Park & Dragons' Den Canada ---
 
     @Test
-    fun `South Park S29E3 broadcast evening is treated as aired within air buffer`() {
+    fun `South Park S29E3 does not air prematurely and airs at release instant`() {
         val s29e3Released = "2026-10-15T06:00:00.000Z"
-        // 10:00 PM EDT on Oct 14 is 02:00:00Z on Oct 15 (4 hours before release timestamp)
-        val broadcastNight = Instant.parse("2026-10-15T02:00:00.000Z")
-        val clock = Clock.fixed(broadcastNight, ZoneOffset.UTC)
-
-        val hasAired = isEpisodeReleaseAired(s29e3Released, clock, airBufferHours = BROADCAST_AIR_BUFFER_HOURS)
-        assertEquals(true, hasAired)
-
-        // With hasAired = true, isNextUpEpisodeEligible must return true even if showUnairedNextUp is false
-        val today = LocalDate.of(2026, 10, 14)
-        val eligible = isNextUpEpisodeEligible(
-            releaseDate = LocalDate.of(2026, 10, 15),
-            available = true,
-            isSeasonRollover = false,
-            showUnairedNextUp = false,
-            today = today,
-            hasAired = true
-        )
-        assertTrue("Aired episode must be eligible even if releaseDate is nominally tomorrow", eligible)
-
-        // computeNextUpReleaseAlert must return true
         val releaseMs = parseEpisodeReleaseInstant(s29e3Released)!!.toEpochMilli()
-        val lastWatchedMs = broadcastNight.toEpochMilli() - 14L * 24 * 60 * 60 * 1000 // watched S29E2 14 days ago
-        assertTrue(
+
+        // 10:00 PM EDT on Oct 14 is 02:00:00Z on Oct 15 (4 hours before release timestamp)
+        val beforeAirTime = Instant.parse("2026-10-15T02:00:00.000Z")
+        val beforeClock = Clock.fixed(beforeAirTime, ZoneOffset.UTC)
+        val hasAiredBefore = isEpisodeReleaseAired(s29e3Released, beforeClock, airBufferHours = BROADCAST_AIR_BUFFER_HOURS)
+        assertEquals(false, hasAiredBefore)
+
+        val alertBefore = computeNextUpReleaseAlert(
+            hasAired = hasAiredBefore == true,
+            releaseTimestamp = releaseMs,
+            lastWatched = beforeAirTime.toEpochMilli() - 14L * 24 * 60 * 60 * 1000,
+            isNewSeason = false,
+            nowMs = beforeAirTime.toEpochMilli()
+        )
+        assertFalse("Must NOT trigger release alert before streaming release instant", alertBefore)
+
+        // At release instant (06:00:00Z) or next morning (12:00:00Z)
+        val afterAirTime = Instant.parse("2026-10-15T12:00:00.000Z")
+        val afterClock = Clock.fixed(afterAirTime, ZoneOffset.UTC)
+        val hasAiredAfter = isEpisodeReleaseAired(s29e3Released, afterClock, airBufferHours = BROADCAST_AIR_BUFFER_HOURS)
+        assertEquals(true, hasAiredAfter)
+
+        val alertAfter = computeNextUpReleaseAlert(
+            hasAired = hasAiredAfter == true,
+            releaseTimestamp = releaseMs,
+            lastWatched = afterAirTime.toEpochMilli() - 14L * 24 * 60 * 60 * 1000,
+            isNewSeason = false,
+            nowMs = afterAirTime.toEpochMilli()
+        )
+        assertTrue("Must trigger release alert once aired", alertAfter)
+    }
+
+    @Test
+    fun `isOngoingSeries returns true for continuing statuses case-insensitively`() {
+        val ongoingStatuses = listOf(
+            "Continuing",
+            "continuing",
+            "CONTINUING",
+            "returning series",
+            "Returning Series",
+            "RETURNING SERIES",
+            "in production",
+            "In Production",
+            "IN PRODUCTION",
+            "planned",
+            "Planned",
+            "PLANNED"
+        )
+        for (status in ongoingStatuses) {
+            assertTrue(
+                "Expected ongoing for status='$status'",
+                isOngoingSeries(releaseInfo = null, status = status)
+            )
+        }
+    }
+
+    @Test
+    fun `isOngoingSeries returns false for ended or canceled status without trailing dash`() {
+        val endedStatuses = listOf(
+            "Ended",
+            "ended",
+            "ENDED",
+            "Canceled",
+            "canceled",
+            "CANCELED"
+        )
+        for (status in endedStatuses) {
+            assertFalse(
+                "Expected not ongoing for status='$status'",
+                isOngoingSeries(releaseInfo = null, status = status)
+            )
+        }
+    }
+
+    @Test
+    fun `isOngoingSeries handles trailing hyphen en-dash and em-dash`() {
+        assertTrue("Trailing ASCII hyphen", isOngoingSeries(releaseInfo = "2006-"))
+        assertTrue("Trailing Unicode en-dash", isOngoingSeries(releaseInfo = "2006\u2013"))
+        assertTrue("Trailing Unicode em-dash", isOngoingSeries(releaseInfo = "2006\u2014"))
+        assertTrue("Continuing with trailing dash", isOngoingSeries(releaseInfo = "2006\u2013", status = "Continuing"))
+        assertTrue("Trailing dash overrides ended status", isOngoingSeries(releaseInfo = "2006-", status = "Ended"))
+    }
+
+    @Test
+    fun `isOngoingSeries returns false for closed range single year or null`() {
+        assertFalse("Closed range hyphen", isOngoingSeries(releaseInfo = "2006-2024"))
+        assertFalse("Closed range en-dash", isOngoingSeries(releaseInfo = "2006\u20132024"))
+        assertFalse("Single year", isOngoingSeries(releaseInfo = "2020"))
+        assertFalse("Null releaseInfo and status", isOngoingSeries(releaseInfo = null, status = null))
+        assertFalse("Blank strings", isOngoingSeries(releaseInfo = "   ", status = "   "))
+    }
+
+    @Test
+    fun `computeNextUpReleaseAlert never fires before release instant even if hasAired is true`() {
+        val futureReleaseMs = 1792053600000L
+        val beforeMs = futureReleaseMs - 4L * 60 * 60 * 1000
+        assertFalse(
+            "Must not alert before release instant even if hasAired passed as true",
             computeNextUpReleaseAlert(
                 hasAired = true,
-                releaseTimestamp = releaseMs,
-                lastWatched = lastWatchedMs,
+                releaseTimestamp = futureReleaseMs,
+                lastWatched = beforeMs - 10000L,
                 isNewSeason = false,
-                nowMs = broadcastNight.toEpochMilli()
+                nowMs = beforeMs
             )
         )
     }

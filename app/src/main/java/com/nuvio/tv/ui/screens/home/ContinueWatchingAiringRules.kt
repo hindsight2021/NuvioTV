@@ -81,12 +81,45 @@ fun isFullyWatchedAgainstAiredList(
 
 private const val SIXTY_DAYS_MS: Long = 60L * 24 * 60 * 60 * 1000
 private const val ONE_DAY_MS: Long = 24L * 60 * 60 * 1000
-private const val BROADCAST_AIR_BUFFER_MS: Long = 18L * 60 * 60 * 1000
+
+private val ONGOING_STATUSES: Set<String> = setOf(
+    "continuing",
+    "returning series",
+    "in production",
+    "planned"
+)
+
+private val TRAILING_DASHES: Set<Char> = setOf(
+    '-',
+    '\u2013', // en dash
+    '\u2014'  // em dash
+)
+
+/**
+ * Determines whether a series should be considered ongoing (still airing or expected to air more episodes).
+ * Checks status (continuing, returning series, etc.) and releaseInfo trailing dashes (-, \u2013, \u2014).
+ */
+fun isOngoingSeries(releaseInfo: String?, status: String? = null): Boolean {
+    if (!status.isNullOrBlank()) {
+        val normalizedStatus = status.trim().lowercase()
+        if (normalizedStatus in ONGOING_STATUSES) {
+            return true
+        }
+    }
+    val trimmed = releaseInfo?.trim()
+    if (!trimmed.isNullOrEmpty()) {
+        val lastChar = trimmed.last()
+        if (lastChar in TRAILING_DASHES) {
+            return true
+        }
+    }
+    return false
+}
 
 /**
  * Determines whether a next-up TV episode qualifies as a release alert (new episode / new season).
- * Ensures episodes that aired recently (within 60 days) are not dropped even if the previous
- * episode was watched on air day or slightly after release instant.
+ * Ensures episodes that aired recently (within 60 days) are highlighted, while preventing unreleased
+ * future episodes from triggering alerts prematurely.
  */
 fun computeNextUpReleaseAlert(
     hasAired: Boolean,
@@ -97,9 +130,10 @@ fun computeNextUpReleaseAlert(
 ): Boolean {
     if (!hasAired || releaseTimestamp == null) return false
     val age = nowMs - releaseTimestamp
-    if (age !in -BROADCAST_AIR_BUFFER_MS..SIXTY_DAYS_MS) return false
+    if (age !in 0L..SIXTY_DAYS_MS) return false
     return releaseTimestamp > lastWatched ||
         isNewSeason ||
         lastWatched < releaseTimestamp + ONE_DAY_MS
 }
+
 

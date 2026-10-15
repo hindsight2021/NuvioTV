@@ -19,7 +19,7 @@ fun MetaPreviewDto.toDomainOrNull(catalogType: String, sourceAddonBaseUrl: Strin
         background = background,
         logo = logo,
         description = description,
-        releaseInfo = releaseInfo,
+        releaseInfo = releaseInfo ?: year,
         imdbRating = imdbRating?.toFloatOrNull(),
         genres = genres ?: emptyList(),
         runtime = runtime,

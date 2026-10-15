@@ -12,7 +12,7 @@ import java.time.ZonedDateTime
 
 private val ISO_DATE_PATTERN = Regex("(?<!\\d)\\d{4}-\\d{2}-\\d{2}(?!\\d)")
 
-internal const val BROADCAST_AIR_BUFFER_HOURS = 18L
+internal const val BROADCAST_AIR_BUFFER_HOURS = 0L
 
 /**
  * Converts timestamped episode releases into the viewer's local calendar date. Plain dates have
