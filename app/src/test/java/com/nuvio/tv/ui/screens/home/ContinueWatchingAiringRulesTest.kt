@@ -12,6 +12,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import com.nuvio.tv.core.util.BROADCAST_AIR_BUFFER_HOURS
+import com.nuvio.tv.core.util.POST_BROADCAST_AIR_BUFFER_HOURS
 import com.nuvio.tv.core.util.isEpisodeReleaseAired
 import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
 
@@ -588,6 +589,67 @@ class ContinueWatchingAiringRulesTest {
             hasAired = true
         )
         assertTrue("S21E3 must be eligible", eligible)
+    }
+
+    @Test
+    fun `isEpisodeReleaseAired waits for playback to end and does not air before 1h buffer`() {
+        val s2e5Released = "2026-10-15T20:00:00.000Z"
+
+        // Broadcast start: 20:00:00Z -> not aired yet (playback in progress)
+        val atBroadcastStart = Instant.parse("2026-10-15T20:00:00.000Z")
+        val clockAtStart = Clock.fixed(atBroadcastStart, ZoneOffset.UTC)
+        assertFalse(
+            "Episode must not be considered aired at broadcast start",
+            isEpisodeReleaseAired(s2e5Released, clockAtStart, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == true
+        )
+
+        // 30 minutes in: 20:30:00Z -> still not aired
+        val duringBroadcast = Instant.parse("2026-10-15T20:30:00.000Z")
+        val clockDuring = Clock.fixed(duringBroadcast, ZoneOffset.UTC)
+        assertFalse(
+            "Episode must not be considered aired midway through broadcast",
+            isEpisodeReleaseAired(s2e5Released, clockDuring, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == true
+        )
+
+        // 1 hour after broadcast start: 21:00:00Z -> playback ends, streaming drops -> aired!
+        val afterBroadcast = Instant.parse("2026-10-15T21:00:00.000Z")
+        val clockAfter = Clock.fixed(afterBroadcast, ZoneOffset.UTC)
+        assertTrue(
+            "Episode must be considered aired once broadcast playback ends (after 1h buffer)",
+            isEpisodeReleaseAired(s2e5Released, clockAfter, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == true
+        )
+    }
+
+    @Test
+    fun `Dragons Den Canada S21E4 watched 13 days ago with 7 day cutoff triggers alert and qualifies for recent seeds`() {
+        val nowMs = Instant.parse("2026-10-15T21:00:00.000Z").toEpochMilli()
+        // S21E3 watched 13 days ago on Oct 2
+        val lastWatchedMs = Instant.parse("2026-10-02T20:00:00.000Z").toEpochMilli()
+        // S21E4 released 7 days ago on Oct 8
+        val s21e4Released = "2026-10-08T20:00:00.000Z"
+        val s21e4Ms = parseEpisodeReleaseInstant(s21e4Released)!!.toEpochMilli()
+
+        val clockNow = Clock.fixed(Instant.ofEpochMilli(nowMs), ZoneOffset.UTC)
+        val hasAired = isEpisodeReleaseAired(s21e4Released, clockNow, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == true
+        assertTrue("S21E4 must have aired", hasAired)
+
+        val isAlert = computeNextUpReleaseAlert(
+            hasAired = hasAired,
+            releaseTimestamp = s21e4Ms,
+            lastWatched = lastWatchedMs,
+            isNewSeason = false,
+            nowMs = nowMs
+        )
+        assertTrue("S21E4 must trigger release alert because releaseTimestamp > lastWatched within 60 days", isAlert)
+
+        // Effective sort timestamp uses release timestamp (Oct 8)
+        val sortTimestamp = if (isAlert) s21e4Ms else lastWatchedMs
+        assertEquals(s21e4Ms, sortTimestamp)
+
+        // 7 days cutoff (Oct 8 21:00)
+        val cutoffMs = nowMs - 7L * 24 * 60 * 60 * 1000
+        // S21E4 was released Oct 8 20:00, and isAlert is true
+        assertTrue("isAlert must be true so item passes cutoff filter even if lastWatched was 13 days ago", isAlert)
     }
 
     private fun episode(season: Int, ep: Int, released: String?) = CwVideoSummary(

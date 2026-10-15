@@ -13,6 +13,7 @@ import java.time.ZonedDateTime
 private val ISO_DATE_PATTERN = Regex("(?<!\\d)\\d{4}-\\d{2}-\\d{2}(?!\\d)")
 
 internal const val BROADCAST_AIR_BUFFER_HOURS = 0L
+internal const val POST_BROADCAST_AIR_BUFFER_HOURS = 1L
 
 /**
  * Converts timestamped episode releases into the viewer's local calendar date. Plain dates have
@@ -33,20 +34,27 @@ internal fun parseEpisodeReleaseLocalDate(
 /**
  * Returns whether a known release has been reached. Zoned timestamps use their exact instant,
  * while date-only values use UTC midnight. A local timestamp without a zone is interpreted in
- * the viewer's timezone. An 18-hour broadcast air buffer is applied so that episodes airing on
- * broadcast evening (or with UTC morning timestamps like 06:00Z) are recognized as aired on the
- * broadcast day.
+ * the viewer's timezone.
+ *
+ * A post-broadcast buffer (default 1 hour) is applied so that episodes only evaluate as aired
+ * after broadcast playback has ended and the streaming release is available.
  */
 internal fun isEpisodeReleaseAired(
     raw: String?,
     clock: Clock = Clock.systemDefaultZone(),
-    airBufferHours: Long = 0L
+    airBufferHours: Long = 0L,
+    postAirBufferHours: Long = POST_BROADCAST_AIR_BUFFER_HOURS
 ): Boolean? {
     val releaseInstant = parseEpisodeReleaseInstant(raw, clock.zone) ?: return null
-    return if (airBufferHours > 0L) {
-        !releaseInstant.isAfter(clock.instant().plus(Duration.ofHours(airBufferHours)))
+    val availableInstant = if (postAirBufferHours > 0L) {
+        releaseInstant.plus(Duration.ofHours(postAirBufferHours))
     } else {
-        !releaseInstant.isAfter(clock.instant())
+        releaseInstant
+    }
+    return if (airBufferHours > 0L) {
+        !availableInstant.isAfter(clock.instant().plus(Duration.ofHours(airBufferHours)))
+    } else {
+        !clock.instant().isBefore(availableInstant)
     }
 }
 
