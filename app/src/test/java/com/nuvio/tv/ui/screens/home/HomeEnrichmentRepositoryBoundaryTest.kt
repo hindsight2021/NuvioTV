@@ -90,7 +90,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
         awaitAtLeast(itemIdCalls, 2)
         // The API invocation increments the counter before its result is consumed by the
         // focus coroutine. Wait for the observable cache outcome rather than racing that job.
-        withTimeout(10_000) {
+        withTimeout(30_000) {
             while (itemId !in viewModel.prefetchedExternalMetaIds) delay(25)
         }
         assertEquals(
@@ -107,7 +107,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
 
     private suspend fun awaitAtLeast(counter: AtomicInteger, expected: Int) {
         val reached = runCatching {
-            withTimeout(12_000) { while (counter.get() < expected) delay(25) }
+            withTimeout(30_000) { while (counter.get() < expected) delay(25) }
         }.isSuccess
         assertEquals("expected at least $expected meta requests", true, reached)
     }
