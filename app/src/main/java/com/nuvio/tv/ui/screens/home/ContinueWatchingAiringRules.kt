@@ -81,6 +81,7 @@ fun isFullyWatchedAgainstAiredList(
 
 private const val SIXTY_DAYS_MS: Long = 60L * 24 * 60 * 60 * 1000
 private const val ONE_DAY_MS: Long = 24L * 60 * 60 * 1000
+private const val BROADCAST_AIR_BUFFER_MS: Long = 18L * 60 * 60 * 1000
 
 /**
  * Determines whether a next-up TV episode qualifies as a release alert (new episode / new season).
@@ -96,7 +97,7 @@ fun computeNextUpReleaseAlert(
 ): Boolean {
     if (!hasAired || releaseTimestamp == null) return false
     val age = nowMs - releaseTimestamp
-    if (age !in 0..SIXTY_DAYS_MS) return false
+    if (age !in -BROADCAST_AIR_BUFFER_MS..SIXTY_DAYS_MS) return false
     return releaseTimestamp > lastWatched ||
         isNewSeason ||
         lastWatched < releaseTimestamp + ONE_DAY_MS

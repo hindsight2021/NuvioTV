@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.util
 
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -10,6 +11,8 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 private val ISO_DATE_PATTERN = Regex("(?<!\\d)\\d{4}-\\d{2}-\\d{2}(?!\\d)")
+
+internal const val BROADCAST_AIR_BUFFER_HOURS = 18L
 
 /**
  * Converts timestamped episode releases into the viewer's local calendar date. Plain dates have
@@ -30,14 +33,21 @@ internal fun parseEpisodeReleaseLocalDate(
 /**
  * Returns whether a known release has been reached. Zoned timestamps use their exact instant,
  * while date-only values use UTC midnight. A local timestamp without a zone is interpreted in
- * the viewer's timezone.
+ * the viewer's timezone. An 18-hour broadcast air buffer is applied so that episodes airing on
+ * broadcast evening (or with UTC morning timestamps like 06:00Z) are recognized as aired on the
+ * broadcast day.
  */
 internal fun isEpisodeReleaseAired(
     raw: String?,
-    clock: Clock = Clock.systemDefaultZone()
+    clock: Clock = Clock.systemDefaultZone(),
+    airBufferHours: Long = 0L
 ): Boolean? {
     val releaseInstant = parseEpisodeReleaseInstant(raw, clock.zone) ?: return null
-    return !releaseInstant.isAfter(clock.instant())
+    return if (airBufferHours > 0L) {
+        !releaseInstant.isAfter(clock.instant().plus(Duration.ofHours(airBufferHours)))
+    } else {
+        !releaseInstant.isAfter(clock.instant())
+    }
 }
 
 internal fun parseEpisodeReleaseInstant(

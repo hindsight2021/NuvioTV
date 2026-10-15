@@ -6,9 +6,14 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
+import com.nuvio.tv.core.util.BROADCAST_AIR_BUFFER_HOURS
+import com.nuvio.tv.core.util.isEpisodeReleaseAired
+import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
 
 /**
  * Regression tests for currently-airing series leaving Continue Watching on air day.
@@ -431,6 +436,82 @@ class ContinueWatchingAiringRulesTest {
                 today = today
             )
         )
+    }
+
+    // --- Specific regressions: South Park & Dragons' Den Canada ---
+
+    @Test
+    fun `South Park S29E3 broadcast evening is treated as aired within air buffer`() {
+        val s29e3Released = "2026-10-15T06:00:00.000Z"
+        // 10:00 PM EDT on Oct 14 is 02:00:00Z on Oct 15 (4 hours before release timestamp)
+        val broadcastNight = Instant.parse("2026-10-15T02:00:00.000Z")
+        val clock = Clock.fixed(broadcastNight, ZoneOffset.UTC)
+
+        val hasAired = isEpisodeReleaseAired(s29e3Released, clock, airBufferHours = BROADCAST_AIR_BUFFER_HOURS)
+        assertEquals(true, hasAired)
+
+        // With hasAired = true, isNextUpEpisodeEligible must return true even if showUnairedNextUp is false
+        val today = LocalDate.of(2026, 10, 14)
+        val eligible = isNextUpEpisodeEligible(
+            releaseDate = LocalDate.of(2026, 10, 15),
+            available = true,
+            isSeasonRollover = false,
+            showUnairedNextUp = false,
+            today = today,
+            hasAired = true
+        )
+        assertTrue("Aired episode must be eligible even if releaseDate is nominally tomorrow", eligible)
+
+        // computeNextUpReleaseAlert must return true
+        val releaseMs = parseEpisodeReleaseInstant(s29e3Released)!!.toEpochMilli()
+        val lastWatchedMs = broadcastNight.toEpochMilli() - 14L * 24 * 60 * 60 * 1000 // watched S29E2 14 days ago
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                nowMs = broadcastNight.toEpochMilli()
+            )
+        )
+    }
+
+    @Test
+    fun `Dragons Den Canada two episodes behind is eligible and raises release alert`() {
+        val nowMs = Instant.parse("2026-10-15T12:00:00.000Z").toEpochMilli()
+        // S21E2 watched 21 days ago
+        val lastWatchedMs = nowMs - 21L * 24 * 60 * 60 * 1000
+        // S21E3 released 14 days ago
+        val s21e3Released = "2026-10-01T20:00:00.000Z"
+        val s21e3Ms = parseEpisodeReleaseInstant(s21e3Released)!!.toEpochMilli()
+
+        val isAlert = computeNextUpReleaseAlert(
+            hasAired = true,
+            releaseTimestamp = s21e3Ms,
+            lastWatched = lastWatchedMs,
+            isNewSeason = false,
+            nowMs = nowMs
+        )
+        assertTrue("Dragons' Den Canada S21E3 must trigger a release alert", isAlert)
+
+        // Effective sort timestamp should use release timestamp (Oct 1) which is newer than lastWatched (Sep 24)
+        val sortTimestamp = if (isAlert) s21e3Ms else lastWatchedMs
+        assertEquals(s21e3Ms, sortTimestamp)
+
+        // With 14 days cutoff, sortTimestamp (Oct 1) is >= cutoffMs
+        val cutoffMs = nowMs - 14L * 24 * 60 * 60 * 1000
+        assertTrue("Sort timestamp must be >= cutoffMs", sortTimestamp >= cutoffMs)
+
+        // isNextUpEpisodeEligible for S21E3
+        val eligible = isNextUpEpisodeEligible(
+            releaseDate = LocalDate.of(2026, 10, 1),
+            available = true,
+            isSeasonRollover = false,
+            showUnairedNextUp = false,
+            today = LocalDate.of(2026, 10, 15),
+            hasAired = true
+        )
+        assertTrue("S21E3 must be eligible", eligible)
     }
 
     private fun episode(season: Int, ep: Int, released: String?) = CwVideoSummary(
