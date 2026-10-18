@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.poster.PosterProvider
 import com.nuvio.tv.core.tmdb.TmdbEnrichment
 import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -77,7 +78,10 @@ private data class LayoutUiPrefs(
     val focusedBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     val posterCardWidthDp: Int,
     val posterCardHeightDp: Int,
-    val posterCardCornerRadiusDp: Int
+    val posterCardCornerRadiusDp: Int,
+    val posterProvider: PosterProvider,
+    val customPosterPattern: String,
+    val rpdbApiKey: String
 )
 
 private data class ModernHeroSettings(
@@ -177,13 +181,26 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
     }
 
 
+    val posterProviderPrefsFlow = combine(
+        layoutPreferenceDataStore.posterProvider,
+        layoutPreferenceDataStore.customPosterPattern,
+        layoutPreferenceDataStore.rpdbApiKey
+    ) { provider, customPattern, rpdbKey ->
+        Triple(provider, customPattern, rpdbKey)
+    }
+
     val baseLayoutUiPrefsFlow = combine(
-        coreLayoutPrefsFlow,
-        focusedBackdropPrefsFlow,
+        combine(
+            coreLayoutPrefsFlow,
+            focusedBackdropPrefsFlow,
+            posterProviderPrefsFlow
+        ) { corePrefs, focusedBackdropPrefs, posterPrefs ->
+            Triple(corePrefs, focusedBackdropPrefs, posterPrefs)
+        },
         layoutPreferenceDataStore.posterCardWidthDp,
         layoutPreferenceDataStore.posterCardHeightDp,
         layoutPreferenceDataStore.posterCardCornerRadiusDp
-    ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
+    ) { (corePrefs, focusedBackdropPrefs, posterPrefs), posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
         LayoutUiPrefs(
             layout = corePrefs.layout,
             heroCatalogKeys = corePrefs.heroCatalogKeys,
@@ -208,7 +225,10 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             focusedBackdropTrailerPlaybackTarget = focusedBackdropPrefs.trailerPlaybackTarget,
             posterCardWidthDp = posterCardWidthDp,
             posterCardHeightDp = posterCardHeightDp,
-            posterCardCornerRadiusDp = posterCardCornerRadiusDp
+            posterCardCornerRadiusDp = posterCardCornerRadiusDp,
+            posterProvider = posterPrefs.first,
+            customPosterPattern = posterPrefs.second,
+            rpdbApiKey = posterPrefs.third
         )
     }
 
@@ -242,7 +262,10 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         previousState.homeLayout != prefs.layout ||
                         previousState.hideUnreleasedContent != prefs.hideUnreleasedContent ||
                         previousState.posterCardWidthDp != prefs.posterCardWidthDp ||
-                        previousState.homeImdbRatingsVisibility != prefs.homeImdbRatingsVisibility
+                        previousState.homeImdbRatingsVisibility != prefs.homeImdbRatingsVisibility ||
+                        previousState.posterProvider != prefs.posterProvider ||
+                        previousState.customPosterPattern != prefs.customPosterPattern ||
+                        previousState.rpdbApiKey != prefs.rpdbApiKey
                 currentHeroCatalogKeys = prefs.heroCatalogKeys
                 // Reset focus state when layout changes so the outgoing
                 // layout's onDispose doesn't poison the incoming layout
@@ -279,7 +302,10 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         focusedPosterBackdropTrailerPlaybackTarget = prefs.focusedBackdropTrailerPlaybackTarget,
                         posterCardWidthDp = prefs.posterCardWidthDp,
                         posterCardHeightDp = prefs.posterCardHeightDp,
-                        posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp
+                        posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp,
+                        posterProvider = prefs.posterProvider,
+                        customPosterPattern = prefs.customPosterPattern,
+                        rpdbApiKey = prefs.rpdbApiKey
                     )
                 }
                 if (shouldRefreshCatalogPresentation) {
@@ -314,7 +340,10 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                     showFullReleaseDate = state.showFullReleaseDate,
                     showImdbRatings = state.homeImdbRatingsVisibility.showRatings,
-                    localeTag = localeTag
+                    localeTag = localeTag,
+                    posterProvider = state.posterProvider,
+                    customPosterPattern = state.customPosterPattern,
+                    rpdbApiKey = state.rpdbApiKey
                 )
             }
             // Compare by row structure only (keys + item counts), not by
@@ -331,6 +360,9 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     && old.showImdbRatings == new.showImdbRatings
                     && old.localeTag == new.localeTag
                     && old.catalogRows.size == new.catalogRows.size
+                    && old.posterProvider == new.posterProvider
+                    && old.customPosterPattern == new.customPosterPattern
+                    && old.rpdbApiKey == new.rpdbApiKey
             }
             .debounce {
                 // Use a longer debounce while catalogs are still loading to

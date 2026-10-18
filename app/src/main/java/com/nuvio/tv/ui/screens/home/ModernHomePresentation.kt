@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Immutable
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.R
+import com.nuvio.tv.core.poster.PosterProvider
 import com.nuvio.tv.core.util.withAppLocale
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
@@ -23,7 +24,10 @@ internal data class ModernHomePresentationInput(
     val showCatalogTypeSuffix: Boolean,
     val showFullReleaseDate: Boolean,
     val showImdbRatings: Boolean,
-    val localeTag: String
+    val localeTag: String,
+    val posterProvider: PosterProvider = PosterProvider.OFF,
+    val customPosterPattern: String? = null,
+    val rpdbApiKey: String? = null
 )
 
 internal fun buildModernHomePresentation(
@@ -54,7 +58,10 @@ internal fun buildModernHomePresentation(
                     cache.continueWatchingAirsDateTemplate == strAirsDate &&
                     cache.continueWatchingUpcomingLabel == strUpcoming &&
                     cache.continueWatchingUseLandscapePosters == input.useLandscapePosters &&
-                    cache.continueWatchingShowImdbRatings == input.showImdbRatings
+                    cache.continueWatchingShowImdbRatings == input.showImdbRatings &&
+                    cache.continueWatchingPosterProvider == input.posterProvider &&
+                    cache.continueWatchingCustomPosterPattern == input.customPosterPattern &&
+                    cache.continueWatchingRpdbApiKey == input.rpdbApiKey
             val continueWatchingRow = if (reuseContinueWatchingRow) {
                 checkNotNull(cache.continueWatchingRow)
             } else {
@@ -69,7 +76,10 @@ internal fun buildModernHomePresentation(
                             showImdbRatings = input.showImdbRatings,
                             airsDateTemplate = strAirsDate,
                             upcomingLabel = strUpcoming,
-                            context = localizedContext
+                            context = localizedContext,
+                            posterProvider = input.posterProvider,
+                            customPosterPattern = input.customPosterPattern,
+                            rpdbApiKey = input.rpdbApiKey
                         )
                     }.asStable()
                 )
@@ -80,6 +90,9 @@ internal fun buildModernHomePresentation(
             cache.continueWatchingUpcomingLabel = strUpcoming
             cache.continueWatchingUseLandscapePosters = input.useLandscapePosters
             cache.continueWatchingShowImdbRatings = input.showImdbRatings
+            cache.continueWatchingPosterProvider = input.posterProvider
+            cache.continueWatchingCustomPosterPattern = input.customPosterPattern
+            cache.continueWatchingRpdbApiKey = input.rpdbApiKey
             cache.continueWatchingRow = continueWatchingRow
             add(continueWatchingRow)
         } else {
@@ -95,7 +108,10 @@ internal fun buildModernHomePresentation(
                     cache.upcomingItems == input.upcomingItems &&
                     cache.upcomingTitle == strUpcomingSectionTitle &&
                     cache.upcomingUseLandscapePosters == input.useLandscapePosters &&
-                    cache.upcomingShowImdbRatings == input.showImdbRatings
+                    cache.upcomingShowImdbRatings == input.showImdbRatings &&
+                    cache.upcomingPosterProvider == input.posterProvider &&
+                    cache.upcomingCustomPosterPattern == input.customPosterPattern &&
+                    cache.upcomingRpdbApiKey == input.rpdbApiKey
             val upcomingRow = if (reuseUpcomingRow) {
                 checkNotNull(cache.upcomingRow)
             } else {
@@ -110,7 +126,10 @@ internal fun buildModernHomePresentation(
                             showImdbRatings = input.showImdbRatings,
                             airsDateTemplate = strAirsDate,
                             upcomingLabel = strUpcoming,
-                            context = localizedContext
+                            context = localizedContext,
+                            posterProvider = input.posterProvider,
+                            customPosterPattern = input.customPosterPattern,
+                            rpdbApiKey = input.rpdbApiKey
                         )
                     }.asStable()
                 )
@@ -119,6 +138,9 @@ internal fun buildModernHomePresentation(
             cache.upcomingTitle = strUpcomingSectionTitle
             cache.upcomingUseLandscapePosters = input.useLandscapePosters
             cache.upcomingShowImdbRatings = input.showImdbRatings
+            cache.upcomingPosterProvider = input.posterProvider
+            cache.upcomingCustomPosterPattern = input.customPosterPattern
+            cache.upcomingRpdbApiKey = input.rpdbApiKey
             cache.upcomingRow = upcomingRow
             add(upcomingRow)
         } else {
@@ -144,6 +166,9 @@ internal fun buildModernHomePresentation(
                             cached.useLandscapePosters == input.useLandscapePosters &&
                             cached.showCatalogTypeSuffix == input.showCatalogTypeSuffix &&
                             cached.showImdbRatings == input.showImdbRatings &&
+                            cached.posterProvider == input.posterProvider &&
+                            cached.customPosterPattern == input.customPosterPattern &&
+                            cached.rpdbApiKey == input.rpdbApiKey &&
                             cached.localeTag == currentLocaleTag
 
                     val mappedRow = if (canReuseMappedRow) {
@@ -180,7 +205,10 @@ internal fun buildModernHomePresentation(
                                     cachedItem.source == item &&
                                     cachedItem.useLandscapePosters == input.useLandscapePosters &&
                                     cachedItem.showFullReleaseDate == input.showFullReleaseDate &&
-                                    cachedItem.showImdbRatings == input.showImdbRatings
+                                    cachedItem.showImdbRatings == input.showImdbRatings &&
+                                    cachedItem.posterProvider == input.posterProvider &&
+                                    cachedItem.customPosterPattern == input.customPosterPattern &&
+                                    cachedItem.rpdbApiKey == input.rpdbApiKey
                                 ) {
                                     cachedItem.carouselItem.let { cached ->
                                         val stableItemKey = row.stableItemKey(item, occurrence)
@@ -197,13 +225,19 @@ internal fun buildModernHomePresentation(
                                         strTypeSeries = strTypeSeries,
                                         showFullReleaseDate = input.showFullReleaseDate,
                                         showImdbRatings = input.showImdbRatings,
-                                        previousCachedItem = cachedItem?.carouselItem
+                                        previousCachedItem = cachedItem?.carouselItem,
+                                        posterProvider = input.posterProvider,
+                                        customPosterPattern = input.customPosterPattern,
+                                        rpdbApiKey = input.rpdbApiKey
                                     ).copy(key = row.stableItemKey(item, occurrence))
                                     rowItemCache[cacheKey] = CachedCarouselItem(
                                         source = item,
                                         useLandscapePosters = input.useLandscapePosters,
                                         showFullReleaseDate = input.showFullReleaseDate,
                                         showImdbRatings = input.showImdbRatings,
+                                        posterProvider = input.posterProvider,
+                                        customPosterPattern = input.customPosterPattern,
+                                        rpdbApiKey = input.rpdbApiKey,
                                         carouselItem = built
                                     )
                                     built
@@ -218,6 +252,9 @@ internal fun buildModernHomePresentation(
                         showCatalogTypeSuffix = input.showCatalogTypeSuffix,
                         showImdbRatings = input.showImdbRatings,
                         localeTag = currentLocaleTag,
+                        posterProvider = input.posterProvider,
+                        customPosterPattern = input.customPosterPattern,
+                        rpdbApiKey = input.rpdbApiKey,
                         mappedRow = mappedRow
                     )
                     add(mappedRow)

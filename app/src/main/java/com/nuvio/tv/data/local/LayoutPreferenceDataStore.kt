@@ -1,5 +1,6 @@
 package com.nuvio.tv.data.local
 
+import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -7,6 +8,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import coil3.SingletonImageLoader
+import com.nuvio.tv.core.poster.PosterProvider
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.core.profile.ProfileManager
@@ -34,6 +37,7 @@ import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -132,6 +136,9 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val selectedHomeTabKey = stringPreferencesKey("selected_home_tab")
     private val trackChannelShuffleInCwKey = booleanPreferencesKey("track_channel_shuffle_in_cw")
     private val animatedBackgroundModeKey = stringPreferencesKey("animated_background_mode")
+    private val posterProviderKey = stringPreferencesKey("poster_provider")
+    private val customPosterPatternKey = stringPreferencesKey("custom_poster_pattern")
+    private val rpdbApiKeyKey = stringPreferencesKey("rpdb_api_key")
 
     private fun <T> profileFlow(extract: (prefs: androidx.datastore.preferences.core.Preferences) -> T): Flow<T> =
         profileManager.activeProfileId.flatMapLatest { pid ->
@@ -262,6 +269,23 @@ class LayoutPreferenceDataStore @Inject constructor(
     val animatedBackgroundMode: Flow<AnimatedBackdropMode> = profileFlow { prefs ->
         val name = prefs[animatedBackgroundModeKey] ?: AnimatedBackdropMode.KEN_BURNS.name
         AnimatedBackdropMode.fromName(name)
+    }
+
+    val posterProvider: Flow<PosterProvider> = profileFlow { prefs ->
+        val storedId = prefs[posterProviderKey]
+        if (storedId.isNullOrBlank()) {
+            PosterProvider.POSTERS_PLUS
+        } else {
+            PosterProvider.fromId(storedId)
+        }
+    }
+
+    val customPosterPattern: Flow<String> = profileFlow { prefs ->
+        prefs[customPosterPatternKey] ?: ""
+    }
+
+    val rpdbApiKey: Flow<String> = profileFlow { prefs ->
+        prefs[rpdbApiKeyKey] ?: ""
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -593,6 +617,36 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setAnimatedBackgroundMode(mode: AnimatedBackdropMode) {
         store().edit { prefs ->
             prefs[animatedBackgroundModeKey] = mode.name
+        }
+    }
+
+    suspend fun setPosterProvider(provider: PosterProvider) {
+        store().edit { prefs ->
+            prefs[posterProviderKey] = provider.id
+        }
+    }
+
+    suspend fun setCustomPosterPattern(pattern: String) {
+        store().edit { prefs ->
+            prefs[customPosterPatternKey] = pattern
+        }
+    }
+
+    suspend fun setRpdbApiKey(apiKey: String) {
+        store().edit { prefs ->
+            prefs[rpdbApiKeyKey] = apiKey
+        }
+    }
+
+    fun clearArtworkCache(context: Context) {
+        try {
+            val imageLoader = SingletonImageLoader.get(context)
+            imageLoader.memoryCache?.clear()
+            scope.launch(Dispatchers.IO) {
+                runCatching { imageLoader.diskCache?.clear() }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear artwork cache", e)
         }
     }
 

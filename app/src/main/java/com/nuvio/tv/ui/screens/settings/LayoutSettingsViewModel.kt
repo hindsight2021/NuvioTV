@@ -15,6 +15,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.core.poster.PosterProvider
 import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
@@ -93,6 +94,9 @@ data class LayoutSettingsUiState(
     val calendarEnabled: Boolean = true,
     val heroInLandscapeEnabled: Boolean = false,
     val heroPrioritizeNewEpisodes: Boolean = true,
+    val posterProvider: PosterProvider = PosterProvider.POSTERS_PLUS,
+    val customPosterPattern: String = "",
+    val rpdbApiKey: String = "",
 )
 
 data class CatalogInfo(
@@ -159,6 +163,10 @@ sealed class LayoutSettingsEvent {
     data class SetContinueWatchingEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingSortMode(val mode: ContinueWatchingSortMode) : LayoutSettingsEvent()
     data class SetContinueWatchingCardStyle(val style: ContinueWatchingCardStyle) : LayoutSettingsEvent()
+    data class SetPosterProvider(val provider: PosterProvider) : LayoutSettingsEvent()
+    data class SetCustomPosterPattern(val pattern: String) : LayoutSettingsEvent()
+    data class SetRpdbApiKey(val apiKey: String) : LayoutSettingsEvent()
+    data object ClearArtworkCache : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
     data object ResetCardDepthStyle : LayoutSettingsEvent()
 }
@@ -447,6 +455,27 @@ class LayoutSettingsViewModel @Inject constructor(
                     updateUiStateIfChanged { it.copy(continueWatchingCardStyle = style) }
                 }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterProvider
+                .distinctUntilChanged()
+                .collectLatest { provider ->
+                    updateUiStateIfChanged { it.copy(posterProvider = provider) }
+                }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.customPosterPattern
+                .distinctUntilChanged()
+                .collectLatest { pattern ->
+                    updateUiStateIfChanged { it.copy(customPosterPattern = pattern) }
+                }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.rpdbApiKey
+                .distinctUntilChanged()
+                .collectLatest { key ->
+                    updateUiStateIfChanged { it.copy(rpdbApiKey = key) }
+                }
+        }
         loadAvailableCatalogs()
     }
 
@@ -506,6 +535,10 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetContinueWatchingEnabled -> setContinueWatchingEnabled(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingSortMode -> setContinueWatchingSortMode(event.mode)
             is LayoutSettingsEvent.SetContinueWatchingCardStyle -> setContinueWatchingCardStyle(event.style)
+            is LayoutSettingsEvent.SetPosterProvider -> setPosterProvider(event.provider)
+            is LayoutSettingsEvent.SetCustomPosterPattern -> setCustomPosterPattern(event.pattern)
+            is LayoutSettingsEvent.SetRpdbApiKey -> setRpdbApiKey(event.apiKey)
+            LayoutSettingsEvent.ClearArtworkCache -> clearArtworkCache()
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
             LayoutSettingsEvent.ResetCardDepthStyle -> resetCardDepthStyle()
         }
@@ -968,6 +1001,34 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.resetCardDepthStyle()
         }
+    }
+
+    private fun setPosterProvider(provider: PosterProvider) {
+        if (_uiState.value.posterProvider == provider) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPosterProvider(provider)
+            layoutPreferenceDataStore.clearArtworkCache(context)
+        }
+    }
+
+    private fun setCustomPosterPattern(pattern: String) {
+        if (_uiState.value.customPosterPattern == pattern) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCustomPosterPattern(pattern)
+            layoutPreferenceDataStore.clearArtworkCache(context)
+        }
+    }
+
+    private fun setRpdbApiKey(apiKey: String) {
+        if (_uiState.value.rpdbApiKey == apiKey) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setRpdbApiKey(apiKey)
+            layoutPreferenceDataStore.clearArtworkCache(context)
+        }
+    }
+
+    fun clearArtworkCache() {
+        layoutPreferenceDataStore.clearArtworkCache(context)
     }
 
     private fun loadAvailableCatalogs() {

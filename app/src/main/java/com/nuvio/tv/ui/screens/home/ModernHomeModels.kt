@@ -10,6 +10,8 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.CollectionFolder
 import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.core.poster.PosterProvider
+import com.nuvio.tv.core.poster.PosterUrlResolver
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.model.stableKey
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
@@ -178,6 +180,9 @@ internal data class ModernCatalogRowBuildCacheEntry(
     val showCatalogTypeSuffix: Boolean,
     val showImdbRatings: Boolean,
     val localeTag: String,
+    val posterProvider: PosterProvider = PosterProvider.OFF,
+    val customPosterPattern: String? = null,
+    val rpdbApiKey: String? = null,
     val mappedRow: HeroCarouselRow
 )
 
@@ -193,11 +198,17 @@ class ModernCarouselRowBuildCache {
     var continueWatchingUpcomingLabel: String = ""
     var continueWatchingUseLandscapePosters: Boolean = false
     var continueWatchingShowImdbRatings: Boolean = true
+    var continueWatchingPosterProvider: PosterProvider = PosterProvider.OFF
+    var continueWatchingCustomPosterPattern: String? = null
+    var continueWatchingRpdbApiKey: String? = null
     var continueWatchingRow: HeroCarouselRow? = null
     var upcomingItems: List<ContinueWatchingItem> = emptyList()
     var upcomingTitle: String = ""
     var upcomingUseLandscapePosters: Boolean = false
     var upcomingShowImdbRatings: Boolean = true
+    var upcomingPosterProvider: PosterProvider = PosterProvider.OFF
+    var upcomingCustomPosterPattern: String? = null
+    var upcomingRpdbApiKey: String? = null
     var upcomingRow: HeroCarouselRow? = null
     internal val catalogRows = java.util.concurrent.ConcurrentHashMap<String, ModernCatalogRowBuildCacheEntry>()
     internal val collectionRows = java.util.concurrent.ConcurrentHashMap<String, ModernCollectionRowBuildCacheEntry>()
@@ -210,6 +221,9 @@ internal data class CachedCarouselItem(
     val useLandscapePosters: Boolean,
     val showFullReleaseDate: Boolean,
     val showImdbRatings: Boolean,
+    val posterProvider: PosterProvider = PosterProvider.OFF,
+    val customPosterPattern: String? = null,
+    val rpdbApiKey: String? = null,
     val carouselItem: ModernCarouselItem
 )
 
@@ -291,7 +305,10 @@ internal fun buildContinueWatchingItem(
     showImdbRatings: Boolean,
     airsDateTemplate: String,
     upcomingLabel: String,
-    context: android.content.Context
+    context: android.content.Context,
+    posterProvider: PosterProvider = PosterProvider.OFF,
+    customPosterPattern: String? = null,
+    rpdbApiKey: String? = null
 ): ModernCarouselItem {
     val secondaryHighlightText = when (item) {
         is ContinueWatchingItem.InProgress -> {
@@ -399,7 +416,27 @@ internal fun buildContinueWatchingItem(
         }
     }
 
-    val imageUrl = when (item) {
+    val cwStremioId = when (item) {
+        is ContinueWatchingItem.InProgress -> item.progress.contentId
+        is ContinueWatchingItem.NextUp -> item.info.contentId
+    }
+    val cwType = when (item) {
+        is ContinueWatchingItem.InProgress -> item.progress.contentType
+        is ContinueWatchingItem.NextUp -> item.info.contentType
+    }
+    val providerArtworkUrl = PosterUrlResolver.resolvePosterUrl(
+        provider = posterProvider,
+        stremioId = cwStremioId,
+        imdbId = null,
+        tmdbId = null,
+        type = cwType,
+        shape = if (useLandscapePosters) PosterShape.LANDSCAPE else PosterShape.POSTER,
+        preferLandscape = useLandscapePosters,
+        customPattern = customPosterPattern,
+        rpdbApiKey = rpdbApiKey
+    )
+
+    val baseImageUrl = when (item) {
         is ContinueWatchingItem.InProgress -> if (useLandscapePosters) {
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(item.episodeThumbnail, item.progress.poster, item.progress.backdrop)
@@ -423,6 +460,7 @@ internal fun buildContinueWatchingItem(
             firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
         }
     }
+    val imageUrl = providerArtworkUrl ?: baseImageUrl
 
     return ModernCarouselItem(
         key = continueWatchingItemKey(item),
@@ -468,15 +506,30 @@ internal fun buildCatalogItem(
     strTypeSeries: String = "",
     showFullReleaseDate: Boolean = true,
     showImdbRatings: Boolean = true,
-    previousCachedItem: ModernCarouselItem? = null
+    previousCachedItem: ModernCarouselItem? = null,
+    posterProvider: PosterProvider = PosterProvider.OFF,
+    customPosterPattern: String? = null,
+    rpdbApiKey: String? = null
 ): ModernCarouselItem {
+    val providerArtworkUrl = PosterUrlResolver.resolvePosterUrl(
+        provider = posterProvider,
+        stremioId = item.id,
+        imdbId = item.imdbId,
+        tmdbId = null,
+        type = item.apiType,
+        shape = if (useLandscapePosters) PosterShape.LANDSCAPE else item.posterShape,
+        preferLandscape = useLandscapePosters,
+        customPattern = customPosterPattern,
+        rpdbApiKey = rpdbApiKey
+    )
+
     // Carry forward the frozen URLs from the previous cache entry so that
     // TMDB enrichment never changes the image shown on landscape cards,
     // even after the composable remember-state is lost (e.g. navigation).
     val carriedBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl
     val carriedLogo = previousCachedItem?.heroPreview?.frozenLogoUrl
 
-    val currentBackdrop = item.backdropUrl
+    val currentBackdrop = providerArtworkUrl ?: item.backdropUrl
     val currentLogo = item.logo
 
     // First non-blank value wins and is never replaced.
@@ -484,6 +537,13 @@ internal fun buildCatalogItem(
         ?: currentBackdrop
     val frozenLogo = carriedLogo?.takeIf { it.isNotBlank() }
         ?: currentLogo
+
+    val defaultImageUrl = if (useLandscapePosters) {
+        item.backdropUrl ?: item.poster
+    } else {
+        item.poster ?: item.backdropUrl
+    }
+    val effectiveImageUrl = providerArtworkUrl ?: defaultImageUrl
 
     val heroPreview = HeroPreview(
         title = item.name,
@@ -507,11 +567,7 @@ internal fun buildCatalogItem(
         genres = item.genres.take(3).asStable(),
         poster = item.poster,
         backdrop = item.backdropUrl,
-        imageUrl = if (useLandscapePosters) {
-            item.backdropUrl ?: item.poster
-        } else {
-            item.poster ?: item.backdropUrl
-        },
+        imageUrl = effectiveImageUrl,
         frozenBackdropUrl = frozenBackdrop,
         frozenLogoUrl = frozenLogo
     )
@@ -520,11 +576,7 @@ internal fun buildCatalogItem(
         key = "catalog_${row.key()}_${item.id}_${occurrence}",
         title = item.name,
         subtitle = item.releaseInfo,
-        imageUrl = if (useLandscapePosters) {
-            item.backdropUrl ?: item.poster
-        } else {
-            item.poster ?: item.backdropUrl
-        },
+        imageUrl = effectiveImageUrl,
         heroPreview = heroPreview,
         payload = ModernPayload.Catalog(
             focusKey = "${row.key()}::${item.id}",

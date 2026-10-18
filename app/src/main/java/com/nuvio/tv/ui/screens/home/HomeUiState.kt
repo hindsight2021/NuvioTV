@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.runtime.Immutable
+import com.nuvio.tv.core.poster.PosterProvider
 import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
 import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.domain.model.AnimatedBackdropMode
@@ -41,6 +42,9 @@ data class HomeUiState(
     val heroPrioritizeNewEpisodes: Boolean = true,
     val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
+    val posterProvider: PosterProvider = PosterProvider.POSTERS_PLUS,
+    val customPosterPattern: String = "",
+    val rpdbApiKey: String = "",
     val heroItems: List<MetaPreview> = emptyList(),
     val trendingHeroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),

@@ -1139,7 +1139,7 @@ private fun ModernCarouselCard(
             item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
         }
     } else if (useLandscapeOverlayTreatment && !isCollectionFolder) {
-        effectiveBackdropUrl ?: item.heroPreview.poster
+        effectiveBackdropUrl ?: item.imageUrl ?: item.heroPreview.poster
     } else if (isCollectionFolder && !payload?.coverEmoji.isNullOrBlank()) {
         // Emoji cover folders: never fall back to backdrop for the card poster
         item.imageUrl
@@ -1151,6 +1151,17 @@ private fun ModernCarouselCard(
         !payload.focusGifEnabled -> baseImageUrl
         else -> baseImageUrl
     }
+    val originalFallbackUrl = remember(item.key, useLandscapeOverlayTreatment) {
+        if (useLandscapeOverlayTreatment) {
+            item.metaPreview?.backdropUrl ?: item.heroPreview.backdrop ?: item.heroPreview.poster
+        } else {
+            item.metaPreview?.poster ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+        }
+    }
+    var activeImageUrl by remember(imageUrl) { mutableStateOf(imageUrl) }
+    var isFallbackActive by remember(imageUrl) { mutableStateOf(false) }
+    val isPostersPlusActive = !isFallbackActive && activeImageUrl?.contains("postersplus.slokker.cc") == true
+
     // GIF overlay: shown on top of the base image only when focused and loaded
     val focusGifUrl = when {
         payload == null -> null
@@ -1176,9 +1187,9 @@ private fun ModernCarouselCard(
         with(density) { cardHeight.roundToPx() }.coerceAtLeast(1)
     }
 
-    val revalidationKey = com.nuvio.tv.core.image.rememberImageRevalidationKey(imageUrl)
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx, revalidationKey) {
-        imageUrl?.let {
+    val revalidationKey = com.nuvio.tv.core.image.rememberImageRevalidationKey(activeImageUrl)
+    val imageModel = remember(context, activeImageUrl, requestWidthPx, requestHeightPx, revalidationKey) {
+        activeImageUrl?.let {
             val builder = ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(true)
@@ -1371,7 +1382,13 @@ private fun ModernCarouselCard(
                             placeholder = backgroundPainter,
                             error = backgroundPainter,
                             fallback = backgroundPainter,
-                            contentScale = imageContentScale
+                            contentScale = imageContentScale,
+                            onError = {
+                                if (!isFallbackActive && !originalFallbackUrl.isNullOrBlank() && activeImageUrl != originalFallbackUrl) {
+                                    activeImageUrl = originalFallbackUrl
+                                    isFallbackActive = true
+                                }
+                            }
                         )
                     } else if (isCollectionFolder && !payload?.coverEmoji.isNullOrBlank()) {
                         Box(
@@ -1442,7 +1459,7 @@ private fun ModernCarouselCard(
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart
                     )
-                } else if (useLandscapeOverlayTreatment || isBackdropExpanded) {
+                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isPostersPlusActive) {
                     Text(
                         text = item.title,
                         style = titleStyle,

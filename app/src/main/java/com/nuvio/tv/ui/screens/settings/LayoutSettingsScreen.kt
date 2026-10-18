@@ -4,9 +4,19 @@ package com.nuvio.tv.ui.screens.settings
 
 import com.nuvio.tv.ui.theme.NuvioTheme
 
+import android.view.KeyEvent as AndroidKeyEvent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import com.nuvio.tv.core.poster.DEFAULT_POSTERS_PLUS_PATTERN
+import com.nuvio.tv.core.poster.PosterProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -142,6 +152,9 @@ fun LayoutSettingsContent(
     var showEpisodeRatingsDialog by rememberSaveable { mutableStateOf(false) }
     var showEpisodeOptionsOverlayStyleDialog by rememberSaveable { mutableStateOf(false) }
     var showAnimatedBackdropModeDialog by rememberSaveable { mutableStateOf(false) }
+    var showPosterProviderDialog by rememberSaveable { mutableStateOf(false) }
+    var showRpdbApiKeyDialog by rememberSaveable { mutableStateOf(false) }
+    var showCustomPosterPatternDialog by rememberSaveable { mutableStateOf(false) }
 
     val defaultHomeLayoutHeaderFocus = remember { FocusRequester() }
     val homeContentHeaderFocus = remember { FocusRequester() }
@@ -324,6 +337,45 @@ fun LayoutSettingsContent(
                         subtitle = "Cinematic Ken Burns pan & zoom drift across high-res artwork.",
                         value = uiState.animatedBackgroundMode.displayName,
                         onClick = { showAnimatedBackdropModeDialog = true },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
+                    SettingsActionRow(
+                        title = "Poster Artwork Provider",
+                        subtitle = "Posters+ (Slokker), RatingPosterDB (RPDB), or Custom URL pattern.",
+                        value = uiState.posterProvider.displayName,
+                        onClick = { showPosterProviderDialog = true },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                    )
+
+                    if (uiState.posterProvider == PosterProvider.RPDB) {
+                        SettingsActionRow(
+                            title = "RPDB API Key",
+                            subtitle = "API key from ratingposterdb.com for rating badges on posters.",
+                            value = if (uiState.rpdbApiKey.isNotBlank()) "••••••••" else "Not set",
+                            onClick = { showRpdbApiKeyDialog = true },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                        )
+                    }
+
+                    if (uiState.posterProvider == PosterProvider.CUSTOM) {
+                        SettingsActionRow(
+                            title = "Custom Poster URL Pattern",
+                            subtitle = "Supports {id}, {stremio_id}, {imdb_id}, {tmdb_id}, {type}, {shape}",
+                            value = if (uiState.customPosterPattern.isNotBlank()) uiState.customPosterPattern else "Not set",
+                            onClick = { showCustomPosterPatternDialog = true },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                        )
+                    }
+
+                    SettingsActionRow(
+                        title = "Clear Artwork Cache",
+                        subtitle = "Clears memory and disk image cache to re-fetch artwork.",
+                        value = "Clear",
+                        onClick = {
+                            viewModel.onEvent(LayoutSettingsEvent.ClearArtworkCache)
+                            Toast.makeText(context, "Artwork cache cleared", Toast.LENGTH_SHORT).show()
+                        },
                         onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                     )
 
@@ -1184,6 +1236,42 @@ fun LayoutSettingsContent(
                     )
                 },
                 onDismiss = { showCardDepthFineTuneDialog = false }
+            )
+        }
+
+        if (showPosterProviderDialog) {
+            PosterProviderDialog(
+                currentProvider = uiState.posterProvider,
+                onProviderSelected = { provider ->
+                    viewModel.onEvent(LayoutSettingsEvent.SetPosterProvider(provider))
+                    showPosterProviderDialog = false
+                },
+                onDismiss = { showPosterProviderDialog = false }
+            )
+        }
+
+        if (showRpdbApiKeyDialog) {
+            RpdbApiKeyDialog(
+                currentKey = uiState.rpdbApiKey,
+                onSave = { key ->
+                    viewModel.onEvent(LayoutSettingsEvent.SetRpdbApiKey(key))
+                    showRpdbApiKeyDialog = false
+                },
+                onDismiss = { showRpdbApiKeyDialog = false }
+            )
+        }
+
+        if (showCustomPosterPatternDialog) {
+            CustomPosterPatternDialog(
+                currentPattern = uiState.customPosterPattern,
+                onSave = { pattern ->
+                    viewModel.onEvent(LayoutSettingsEvent.SetCustomPosterPattern(pattern))
+                    showCustomPosterPatternDialog = false
+                },
+                onResetDefault = {
+                    viewModel.onEvent(LayoutSettingsEvent.SetCustomPosterPattern(DEFAULT_POSTERS_PLUS_PATTERN))
+                },
+                onDismiss = { showCustomPosterPatternDialog = false }
             )
         }
 
@@ -2184,4 +2272,264 @@ private fun AnimatedBackdropModeDialog(
         }
     }
 }
+
+@Composable
+private fun PosterProviderDialog(
+    currentProvider: PosterProvider,
+    onProviderSelected: (PosterProvider) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = PosterProvider.entries.map { provider ->
+        SettingsPickerOption(
+            value = provider,
+            title = provider.displayName,
+            description = provider.description
+        )
+    }
+
+    SettingsSingleChoiceDialog(
+        title = "Poster Artwork Provider",
+        subtitle = "Choose the source used to resolve poster and landscape artwork.",
+        options = options,
+        selectedValue = currentProvider,
+        onOptionSelected = onProviderSelected,
+        onDismiss = onDismiss,
+        width = 480.dp,
+        maxHeight = 360.dp
+    )
+}
+
+@Composable
+private fun RpdbApiKeyDialog(
+    currentKey: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember(currentKey) { mutableStateOf(currentKey) }
+    var isInputFocused by remember { mutableStateOf(false) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = "RPDB API Key",
+        subtitle = "Enter your RatingPosterDB API key to unlock rating posters.",
+        width = 600.dp
+    ) {
+        Card(
+            onClick = { inputFocusRequester.requestFocus() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
+            colors = CardDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundElevated,
+                focusedContainerColor = NuvioTheme.colors.BackgroundElevated
+            ),
+            border = CardDefaults.border(
+                border = Border(
+                    border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
+                    shape = RoundedCornerShape(10.dp)
+                ),
+                focusedBorder = Border(
+                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                    shape = RoundedCornerShape(10.dp)
+                )
+            ),
+            shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+            scale = CardDefaults.scale(focusedScale = 1f)
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = NuvioTheme.spacing.md)) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(inputFocusRequester)
+                        .onKeyEvent { event ->
+                            event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER &&
+                                event.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN
+                        },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = { keyboardController?.hide() }
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    cursorBrush = SolidColor(
+                        if (isInputFocused) NuvioTheme.colors.Primary
+                        else Color.Transparent
+                    ),
+                    decorationBox = { innerTextField ->
+                        if (value.isBlank()) {
+                            Text(
+                                text = "Paste or enter RPDB API key...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioTheme.colors.TextTertiary
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundElevated,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.action_cancel))
+            }
+            Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
+            Button(
+                onClick = { value = "" },
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundElevated,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.action_clear))
+            }
+            Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
+            Button(
+                onClick = {
+                    keyboardController?.hide()
+                    onSave(value.trim())
+                },
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.action_save))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomPosterPatternDialog(
+    currentPattern: String,
+    onSave: (String) -> Unit,
+    onResetDefault: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember(currentPattern) { mutableStateOf(currentPattern) }
+    var isInputFocused by remember { mutableStateOf(false) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = "Custom Poster URL Pattern",
+        subtitle = "Supports {id}, {stremio_id}, {imdb_id}, {tmdb_id}, {type}, {shape}",
+        width = 680.dp
+    ) {
+        Card(
+            onClick = { inputFocusRequester.requestFocus() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
+            colors = CardDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundElevated,
+                focusedContainerColor = NuvioTheme.colors.BackgroundElevated
+            ),
+            border = CardDefaults.border(
+                border = Border(
+                    border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
+                    shape = RoundedCornerShape(10.dp)
+                ),
+                focusedBorder = Border(
+                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                    shape = RoundedCornerShape(10.dp)
+                )
+            ),
+            shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+            scale = CardDefaults.scale(focusedScale = 1f)
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = NuvioTheme.spacing.md)) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(inputFocusRequester)
+                        .onKeyEvent { event ->
+                            event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER &&
+                                event.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN
+                        },
+                    singleLine = false,
+                    maxLines = 3,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = { keyboardController?.hide() }
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    cursorBrush = SolidColor(
+                        if (isInputFocused) NuvioTheme.colors.Primary
+                        else Color.Transparent
+                    ),
+                    decorationBox = { innerTextField ->
+                        if (value.isBlank()) {
+                            Text(
+                                text = "https://example.com/poster?id={id}&type={type}&shape={shape}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioTheme.colors.TextTertiary
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundElevated,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.action_cancel))
+            }
+            Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
+            Button(
+                onClick = {
+                    value = DEFAULT_POSTERS_PLUS_PATTERN
+                    onResetDefault()
+                },
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundElevated,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text("Reset Default")
+            }
+            Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
+            Button(
+                onClick = {
+                    keyboardController?.hide()
+                    onSave(value.trim())
+                },
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.action_save))
+            }
+        }
+    }
+}
+
 
