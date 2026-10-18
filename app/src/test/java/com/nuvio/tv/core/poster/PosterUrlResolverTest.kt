@@ -81,6 +81,27 @@ class PosterUrlResolverTest {
     }
 
     @Test
+    fun `POSTERS_PLUS includes fti=1 by default and replaces with textless when enabled`() {
+        val normal = PosterUrlResolver.resolvePosterUrl(
+            provider = PosterProvider.POSTERS_PLUS,
+            stremioId = "tt0903747",
+            postersPlusTextless = false
+        )
+        assertNotNull(normal)
+        assertTrue(normal!!.contains("fti=1"))
+        assertTrue(!normal.contains("textless=true"))
+
+        val textless = PosterUrlResolver.resolvePosterUrl(
+            provider = PosterProvider.POSTERS_PLUS,
+            stremioId = "tt0903747",
+            postersPlusTextless = true
+        )
+        assertNotNull(textless)
+        assertTrue(textless!!.contains("fti=0&textless=true"))
+        assertTrue(!textless.contains("fti=1"))
+    }
+
+    @Test
     fun `RPDB returns correct poster url when key and imdbId are provided`() {
         val result = PosterUrlResolver.resolvePosterUrl(
             provider = PosterProvider.RPDB,

@@ -1161,6 +1161,7 @@ private fun ModernCarouselCard(
     var activeImageUrl by remember(imageUrl) { mutableStateOf(imageUrl) }
     var isFallbackActive by remember(imageUrl) { mutableStateOf(false) }
     val isPostersPlusActive = !isFallbackActive && activeImageUrl?.contains("postersplus.slokker.cc") == true
+    val isPostersPlusWithTitle = isPostersPlusActive && activeImageUrl?.contains("textless=true") != true
 
     // GIF overlay: shown on top of the base image only when focused and loaded
     val focusGifUrl = when {
@@ -1229,7 +1230,8 @@ private fun ModernCarouselCard(
         (useLandscapeOverlayTreatment || isBackdropExpanded) &&
             !isCollectionFolder &&
             !effectiveLogoUrl.isNullOrBlank() &&
-            !landscapeLogoLoadFailed
+            !landscapeLogoLoadFailed &&
+            !isPostersPlusWithTitle
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
     val backgroundCardColor = NuvioTheme.colors.BackgroundCard
@@ -1459,7 +1461,7 @@ private fun ModernCarouselCard(
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart
                     )
-                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isPostersPlusActive) {
+                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isPostersPlusWithTitle) {
                     Text(
                         text = item.title,
                         style = titleStyle,

@@ -95,6 +95,7 @@ data class LayoutSettingsUiState(
     val heroInLandscapeEnabled: Boolean = false,
     val heroPrioritizeNewEpisodes: Boolean = true,
     val posterProvider: PosterProvider = PosterProvider.POSTERS_PLUS,
+    val postersPlusTextless: Boolean = false,
     val customPosterPattern: String = "",
     val rpdbApiKey: String = "",
 )
@@ -164,6 +165,7 @@ sealed class LayoutSettingsEvent {
     data class SetContinueWatchingSortMode(val mode: ContinueWatchingSortMode) : LayoutSettingsEvent()
     data class SetContinueWatchingCardStyle(val style: ContinueWatchingCardStyle) : LayoutSettingsEvent()
     data class SetPosterProvider(val provider: PosterProvider) : LayoutSettingsEvent()
+    data class SetPostersPlusTextless(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetCustomPosterPattern(val pattern: String) : LayoutSettingsEvent()
     data class SetRpdbApiKey(val apiKey: String) : LayoutSettingsEvent()
     data object ClearArtworkCache : LayoutSettingsEvent()
@@ -463,6 +465,13 @@ class LayoutSettingsViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.postersPlusTextless
+                .distinctUntilChanged()
+                .collectLatest { textless ->
+                    updateUiStateIfChanged { it.copy(postersPlusTextless = textless) }
+                }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.customPosterPattern
                 .distinctUntilChanged()
                 .collectLatest { pattern ->
@@ -536,6 +545,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetContinueWatchingSortMode -> setContinueWatchingSortMode(event.mode)
             is LayoutSettingsEvent.SetContinueWatchingCardStyle -> setContinueWatchingCardStyle(event.style)
             is LayoutSettingsEvent.SetPosterProvider -> setPosterProvider(event.provider)
+            is LayoutSettingsEvent.SetPostersPlusTextless -> setPostersPlusTextless(event.enabled)
             is LayoutSettingsEvent.SetCustomPosterPattern -> setCustomPosterPattern(event.pattern)
             is LayoutSettingsEvent.SetRpdbApiKey -> setRpdbApiKey(event.apiKey)
             LayoutSettingsEvent.ClearArtworkCache -> clearArtworkCache()
@@ -1007,6 +1017,14 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.posterProvider == provider) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setPosterProvider(provider)
+            layoutPreferenceDataStore.clearArtworkCache(context)
+        }
+    }
+
+    private fun setPostersPlusTextless(enabled: Boolean) {
+        if (_uiState.value.postersPlusTextless == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPostersPlusTextless(enabled)
             layoutPreferenceDataStore.clearArtworkCache(context)
         }
     }

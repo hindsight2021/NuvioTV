@@ -90,7 +90,8 @@ object PosterUrlResolver {
         shape: PosterShape = PosterShape.POSTER,
         preferLandscape: Boolean = false,
         customPattern: String? = null,
-        rpdbApiKey: String? = null
+        rpdbApiKey: String? = null,
+        postersPlusTextless: Boolean = false
     ): String? {
         if (provider == PosterProvider.OFF) return null
         if (stremioId.isNullOrBlank()) return null
@@ -113,7 +114,12 @@ object PosterUrlResolver {
             PosterProvider.OFF -> null
 
             PosterProvider.POSTERS_PLUS -> {
-                DEFAULT_POSTERS_PLUS_PATTERN
+                val pattern = if (postersPlusTextless) {
+                    DEFAULT_POSTERS_PLUS_PATTERN.replace("fti=1", "fti=0&textless=true")
+                } else {
+                    DEFAULT_POSTERS_PLUS_PATTERN
+                }
+                pattern
                     .replace("{tmdb_id?}", effectiveTmdbId.orEmpty())
                     .replace("{imdb_id?}", effectiveImdbId.orEmpty())
                     .replace("{id}", cleanStremioId)

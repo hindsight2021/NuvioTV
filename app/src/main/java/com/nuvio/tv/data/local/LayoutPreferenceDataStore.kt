@@ -137,6 +137,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val trackChannelShuffleInCwKey = booleanPreferencesKey("track_channel_shuffle_in_cw")
     private val animatedBackgroundModeKey = stringPreferencesKey("animated_background_mode")
     private val posterProviderKey = stringPreferencesKey("poster_provider")
+    private val postersPlusTextlessKey = booleanPreferencesKey("posters_plus_textless")
     private val customPosterPatternKey = stringPreferencesKey("custom_poster_pattern")
     private val rpdbApiKeyKey = stringPreferencesKey("rpdb_api_key")
 
@@ -278,6 +279,10 @@ class LayoutPreferenceDataStore @Inject constructor(
         } else {
             PosterProvider.fromId(storedId)
         }
+    }
+
+    val postersPlusTextless: Flow<Boolean> = profileFlow { prefs ->
+        prefs[postersPlusTextlessKey] ?: false
     }
 
     val customPosterPattern: Flow<String> = profileFlow { prefs ->
@@ -623,6 +628,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setPosterProvider(provider: PosterProvider) {
         store().edit { prefs ->
             prefs[posterProviderKey] = provider.id
+        }
+    }
+
+    suspend fun setPostersPlusTextless(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[postersPlusTextlessKey] = enabled
         }
     }
 

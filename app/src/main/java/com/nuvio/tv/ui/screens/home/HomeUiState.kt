@@ -43,6 +43,7 @@ data class HomeUiState(
     val animatedBackgroundMode: AnimatedBackdropMode = AnimatedBackdropMode.KEN_BURNS,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
     val posterProvider: PosterProvider = PosterProvider.POSTERS_PLUS,
+    val postersPlusTextless: Boolean = false,
     val customPosterPattern: String = "",
     val rpdbApiKey: String = "",
     val heroItems: List<MetaPreview> = emptyList(),

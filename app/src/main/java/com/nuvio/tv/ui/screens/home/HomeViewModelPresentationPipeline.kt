@@ -80,8 +80,16 @@ private data class LayoutUiPrefs(
     val posterCardHeightDp: Int,
     val posterCardCornerRadiusDp: Int,
     val posterProvider: PosterProvider,
+    val postersPlusTextless: Boolean,
     val customPosterPattern: String,
     val rpdbApiKey: String
+)
+
+private data class PosterPrefs(
+    val provider: PosterProvider,
+    val textless: Boolean,
+    val customPattern: String,
+    val rpdbKey: String
 )
 
 private data class ModernHeroSettings(
@@ -183,10 +191,11 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
 
     val posterProviderPrefsFlow = combine(
         layoutPreferenceDataStore.posterProvider,
+        layoutPreferenceDataStore.postersPlusTextless,
         layoutPreferenceDataStore.customPosterPattern,
         layoutPreferenceDataStore.rpdbApiKey
-    ) { provider, customPattern, rpdbKey ->
-        Triple(provider, customPattern, rpdbKey)
+    ) { provider, textless, customPattern, rpdbKey ->
+        PosterPrefs(provider, textless, customPattern, rpdbKey)
     }
 
     val baseLayoutUiPrefsFlow = combine(
@@ -226,9 +235,10 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             posterCardWidthDp = posterCardWidthDp,
             posterCardHeightDp = posterCardHeightDp,
             posterCardCornerRadiusDp = posterCardCornerRadiusDp,
-            posterProvider = posterPrefs.first,
-            customPosterPattern = posterPrefs.second,
-            rpdbApiKey = posterPrefs.third
+            posterProvider = posterPrefs.provider,
+            postersPlusTextless = posterPrefs.textless,
+            customPosterPattern = posterPrefs.customPattern,
+            rpdbApiKey = posterPrefs.rpdbKey
         )
     }
 
@@ -264,6 +274,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         previousState.posterCardWidthDp != prefs.posterCardWidthDp ||
                         previousState.homeImdbRatingsVisibility != prefs.homeImdbRatingsVisibility ||
                         previousState.posterProvider != prefs.posterProvider ||
+                        previousState.postersPlusTextless != prefs.postersPlusTextless ||
                         previousState.customPosterPattern != prefs.customPosterPattern ||
                         previousState.rpdbApiKey != prefs.rpdbApiKey
                 currentHeroCatalogKeys = prefs.heroCatalogKeys
@@ -304,6 +315,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         posterCardHeightDp = prefs.posterCardHeightDp,
                         posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp,
                         posterProvider = prefs.posterProvider,
+                        postersPlusTextless = prefs.postersPlusTextless,
                         customPosterPattern = prefs.customPosterPattern,
                         rpdbApiKey = prefs.rpdbApiKey
                     )
@@ -342,6 +354,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     showImdbRatings = state.homeImdbRatingsVisibility.showRatings,
                     localeTag = localeTag,
                     posterProvider = state.posterProvider,
+                    postersPlusTextless = state.postersPlusTextless,
                     customPosterPattern = state.customPosterPattern,
                     rpdbApiKey = state.rpdbApiKey
                 )
@@ -361,6 +374,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     && old.localeTag == new.localeTag
                     && old.catalogRows.size == new.catalogRows.size
                     && old.posterProvider == new.posterProvider
+                    && old.postersPlusTextless == new.postersPlusTextless
                     && old.customPosterPattern == new.customPosterPattern
                     && old.rpdbApiKey == new.rpdbApiKey
             }

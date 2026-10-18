@@ -348,6 +348,18 @@ fun LayoutSettingsContent(
                         onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                     )
 
+                    if (uiState.posterProvider == PosterProvider.POSTERS_PLUS) {
+                        SettingsToggleRow(
+                            title = "Posters+ Textless (Badges Only)",
+                            subtitle = "Removes show title from artwork, displaying only award and trending badges.",
+                            checked = uiState.postersPlusTextless,
+                            onToggle = {
+                                viewModel.onEvent(LayoutSettingsEvent.SetPostersPlusTextless(!uiState.postersPlusTextless))
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                        )
+                    }
+
                     if (uiState.posterProvider == PosterProvider.RPDB) {
                         SettingsActionRow(
                             title = "RPDB API Key",

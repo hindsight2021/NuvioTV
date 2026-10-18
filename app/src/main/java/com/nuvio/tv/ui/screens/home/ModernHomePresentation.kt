@@ -26,6 +26,7 @@ internal data class ModernHomePresentationInput(
     val showImdbRatings: Boolean,
     val localeTag: String,
     val posterProvider: PosterProvider = PosterProvider.OFF,
+    val postersPlusTextless: Boolean = false,
     val customPosterPattern: String? = null,
     val rpdbApiKey: String? = null
 )
@@ -60,6 +61,7 @@ internal fun buildModernHomePresentation(
                     cache.continueWatchingUseLandscapePosters == input.useLandscapePosters &&
                     cache.continueWatchingShowImdbRatings == input.showImdbRatings &&
                     cache.continueWatchingPosterProvider == input.posterProvider &&
+                    cache.continueWatchingPostersPlusTextless == input.postersPlusTextless &&
                     cache.continueWatchingCustomPosterPattern == input.customPosterPattern &&
                     cache.continueWatchingRpdbApiKey == input.rpdbApiKey
             val continueWatchingRow = if (reuseContinueWatchingRow) {
@@ -78,6 +80,7 @@ internal fun buildModernHomePresentation(
                             upcomingLabel = strUpcoming,
                             context = localizedContext,
                             posterProvider = input.posterProvider,
+                            postersPlusTextless = input.postersPlusTextless,
                             customPosterPattern = input.customPosterPattern,
                             rpdbApiKey = input.rpdbApiKey
                         )
@@ -91,6 +94,7 @@ internal fun buildModernHomePresentation(
             cache.continueWatchingUseLandscapePosters = input.useLandscapePosters
             cache.continueWatchingShowImdbRatings = input.showImdbRatings
             cache.continueWatchingPosterProvider = input.posterProvider
+            cache.continueWatchingPostersPlusTextless = input.postersPlusTextless
             cache.continueWatchingCustomPosterPattern = input.customPosterPattern
             cache.continueWatchingRpdbApiKey = input.rpdbApiKey
             cache.continueWatchingRow = continueWatchingRow
@@ -110,6 +114,7 @@ internal fun buildModernHomePresentation(
                     cache.upcomingUseLandscapePosters == input.useLandscapePosters &&
                     cache.upcomingShowImdbRatings == input.showImdbRatings &&
                     cache.upcomingPosterProvider == input.posterProvider &&
+                    cache.upcomingPostersPlusTextless == input.postersPlusTextless &&
                     cache.upcomingCustomPosterPattern == input.customPosterPattern &&
                     cache.upcomingRpdbApiKey == input.rpdbApiKey
             val upcomingRow = if (reuseUpcomingRow) {
@@ -128,6 +133,7 @@ internal fun buildModernHomePresentation(
                             upcomingLabel = strUpcoming,
                             context = localizedContext,
                             posterProvider = input.posterProvider,
+                            postersPlusTextless = input.postersPlusTextless,
                             customPosterPattern = input.customPosterPattern,
                             rpdbApiKey = input.rpdbApiKey
                         )
@@ -139,6 +145,7 @@ internal fun buildModernHomePresentation(
             cache.upcomingUseLandscapePosters = input.useLandscapePosters
             cache.upcomingShowImdbRatings = input.showImdbRatings
             cache.upcomingPosterProvider = input.posterProvider
+            cache.upcomingPostersPlusTextless = input.postersPlusTextless
             cache.upcomingCustomPosterPattern = input.customPosterPattern
             cache.upcomingRpdbApiKey = input.rpdbApiKey
             cache.upcomingRow = upcomingRow
@@ -167,6 +174,7 @@ internal fun buildModernHomePresentation(
                             cached.showCatalogTypeSuffix == input.showCatalogTypeSuffix &&
                             cached.showImdbRatings == input.showImdbRatings &&
                             cached.posterProvider == input.posterProvider &&
+                            cached.postersPlusTextless == input.postersPlusTextless &&
                             cached.customPosterPattern == input.customPosterPattern &&
                             cached.rpdbApiKey == input.rpdbApiKey &&
                             cached.localeTag == currentLocaleTag
@@ -207,6 +215,7 @@ internal fun buildModernHomePresentation(
                                     cachedItem.showFullReleaseDate == input.showFullReleaseDate &&
                                     cachedItem.showImdbRatings == input.showImdbRatings &&
                                     cachedItem.posterProvider == input.posterProvider &&
+                                    cachedItem.postersPlusTextless == input.postersPlusTextless &&
                                     cachedItem.customPosterPattern == input.customPosterPattern &&
                                     cachedItem.rpdbApiKey == input.rpdbApiKey
                                 ) {
@@ -227,6 +236,7 @@ internal fun buildModernHomePresentation(
                                         showImdbRatings = input.showImdbRatings,
                                         previousCachedItem = cachedItem?.carouselItem,
                                         posterProvider = input.posterProvider,
+                                        postersPlusTextless = input.postersPlusTextless,
                                         customPosterPattern = input.customPosterPattern,
                                         rpdbApiKey = input.rpdbApiKey
                                     ).copy(key = row.stableItemKey(item, occurrence))
@@ -236,6 +246,7 @@ internal fun buildModernHomePresentation(
                                         showFullReleaseDate = input.showFullReleaseDate,
                                         showImdbRatings = input.showImdbRatings,
                                         posterProvider = input.posterProvider,
+                                        postersPlusTextless = input.postersPlusTextless,
                                         customPosterPattern = input.customPosterPattern,
                                         rpdbApiKey = input.rpdbApiKey,
                                         carouselItem = built
@@ -253,6 +264,7 @@ internal fun buildModernHomePresentation(
                         showImdbRatings = input.showImdbRatings,
                         localeTag = currentLocaleTag,
                         posterProvider = input.posterProvider,
+                        postersPlusTextless = input.postersPlusTextless,
                         customPosterPattern = input.customPosterPattern,
                         rpdbApiKey = input.rpdbApiKey,
                         mappedRow = mappedRow

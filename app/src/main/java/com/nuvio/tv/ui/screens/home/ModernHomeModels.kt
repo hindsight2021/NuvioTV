@@ -181,6 +181,7 @@ internal data class ModernCatalogRowBuildCacheEntry(
     val showImdbRatings: Boolean,
     val localeTag: String,
     val posterProvider: PosterProvider = PosterProvider.OFF,
+    val postersPlusTextless: Boolean = false,
     val customPosterPattern: String? = null,
     val rpdbApiKey: String? = null,
     val mappedRow: HeroCarouselRow
@@ -199,6 +200,7 @@ class ModernCarouselRowBuildCache {
     var continueWatchingUseLandscapePosters: Boolean = false
     var continueWatchingShowImdbRatings: Boolean = true
     var continueWatchingPosterProvider: PosterProvider = PosterProvider.OFF
+    var continueWatchingPostersPlusTextless: Boolean = false
     var continueWatchingCustomPosterPattern: String? = null
     var continueWatchingRpdbApiKey: String? = null
     var continueWatchingRow: HeroCarouselRow? = null
@@ -207,6 +209,7 @@ class ModernCarouselRowBuildCache {
     var upcomingUseLandscapePosters: Boolean = false
     var upcomingShowImdbRatings: Boolean = true
     var upcomingPosterProvider: PosterProvider = PosterProvider.OFF
+    var upcomingPostersPlusTextless: Boolean = false
     var upcomingCustomPosterPattern: String? = null
     var upcomingRpdbApiKey: String? = null
     var upcomingRow: HeroCarouselRow? = null
@@ -222,6 +225,7 @@ internal data class CachedCarouselItem(
     val showFullReleaseDate: Boolean,
     val showImdbRatings: Boolean,
     val posterProvider: PosterProvider = PosterProvider.OFF,
+    val postersPlusTextless: Boolean = false,
     val customPosterPattern: String? = null,
     val rpdbApiKey: String? = null,
     val carouselItem: ModernCarouselItem
@@ -307,6 +311,7 @@ internal fun buildContinueWatchingItem(
     upcomingLabel: String,
     context: android.content.Context,
     posterProvider: PosterProvider = PosterProvider.OFF,
+    postersPlusTextless: Boolean = false,
     customPosterPattern: String? = null,
     rpdbApiKey: String? = null
 ): ModernCarouselItem {
@@ -433,7 +438,8 @@ internal fun buildContinueWatchingItem(
         shape = if (useLandscapePosters) PosterShape.LANDSCAPE else PosterShape.POSTER,
         preferLandscape = useLandscapePosters,
         customPattern = customPosterPattern,
-        rpdbApiKey = rpdbApiKey
+        rpdbApiKey = rpdbApiKey,
+        postersPlusTextless = postersPlusTextless
     )
 
     val baseImageUrl = when (item) {
@@ -508,6 +514,7 @@ internal fun buildCatalogItem(
     showImdbRatings: Boolean = true,
     previousCachedItem: ModernCarouselItem? = null,
     posterProvider: PosterProvider = PosterProvider.OFF,
+    postersPlusTextless: Boolean = false,
     customPosterPattern: String? = null,
     rpdbApiKey: String? = null
 ): ModernCarouselItem {
@@ -520,7 +527,8 @@ internal fun buildCatalogItem(
         shape = if (useLandscapePosters) PosterShape.LANDSCAPE else item.posterShape,
         preferLandscape = useLandscapePosters,
         customPattern = customPosterPattern,
-        rpdbApiKey = rpdbApiKey
+        rpdbApiKey = rpdbApiKey,
+        postersPlusTextless = postersPlusTextless
     )
 
     // Carry forward the frozen URLs from the previous cache entry so that
