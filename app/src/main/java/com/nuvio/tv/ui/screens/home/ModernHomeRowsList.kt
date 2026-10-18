@@ -53,6 +53,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import coil3.imageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -186,8 +187,8 @@ internal fun ModernHomeRowsList(
         landscapeCatalogCardWidth,
         landscapeCatalogCardHeight
     ) {
-        val prefetchAheadRows = 1
-        val prefetchItemsPerRow = 1
+        val prefetchAheadRows = 2
+        val prefetchItemsPerRow = 4
         snapshotFlow {
             verticalRowListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
         }
@@ -212,11 +213,13 @@ internal fun ModernHomeRowsList(
                             val wPx = with(density) { metrics.width.roundToPx() }
                             val hPx = with(density) { metrics.height.roundToPx() }
                             if (wPx <= 0 || hPx <= 0) continue
-                            val cacheKey = "${url}_${wPx}x${hPx}"
+                            val cacheKey = modernCardMemoryCacheKey(url, wPx, hPx, 0)
                             if (verticalPrefetchImageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) continue
                             verticalPrefetchImageLoader.enqueue(
                                 ImageRequest.Builder(context)
                                     .data(url)
+                                    .crossfade(false)
+                                    .precision(coil3.size.Precision.EXACT)
                                     .memoryCacheKey(cacheKey)
                                     .size(width = wPx, height = hPx)
                                     .build()

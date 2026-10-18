@@ -596,7 +596,8 @@ fun ContinueWatchingCard(
     val imageRequest = remember(effectiveImageModel, requestWidthPx, requestHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(effectiveImageModel)
-            .crossfade(true)
+            .crossfade(false)
+            .precision(coil3.size.Precision.EXACT)
             .memoryCacheKey(
                 continueWatchingImageCacheKey(
                     effectiveImageModel, requestWidthPx, requestHeightPx, shouldBlur

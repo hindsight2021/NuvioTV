@@ -302,6 +302,16 @@ internal fun ModernCarouselItem.catalogCardRequestMetrics(
     return base.copy(width = maxOf(base.width, expandedWidth))
 }
 
+internal fun modernCardMemoryCacheKey(
+    url: String,
+    widthPx: Int,
+    heightPx: Int,
+    revalidationKey: Int = 0
+): String = if (revalidationKey > 0) {
+    "${url}_${widthPx}x${heightPx}_v$revalidationKey"
+} else {
+    "${url}_${widthPx}x${heightPx}"
+}
 
 internal fun buildContinueWatchingItem(
     item: ContinueWatchingItem,

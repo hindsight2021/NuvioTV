@@ -133,8 +133,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.debounce
 
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
-private const val POSTER_PREFETCH_DISTANCE = 1
-private const val NESTED_PREFETCH_COUNT = 2
+private const val POSTER_PREFETCH_DISTANCE = 4
+private const val NESTED_PREFETCH_COUNT = 4
 
 internal val LocalVerticalRowsScrolling = compositionLocalOf<State<Boolean>> { mutableStateOf(false) }
 
@@ -663,29 +663,31 @@ internal fun ModernRowSection(
                 return when (val payload = item.payload) {
                     is ModernPayload.Catalog -> {
                         val url = item.imageUrl ?: return null
-                        val metrics = item.catalogCardMetrics(
+                        val metrics = item.catalogCardRequestMetrics(
                             useLandscapePosters = useLandscapePosters,
                             portraitCardWidth = portraitCatalogCardWidth,
                             portraitCardHeight = portraitCatalogCardHeight,
                             landscapeCardWidth = landscapeCatalogCardWidth,
-                            landscapeCardHeight = landscapeCatalogCardHeight
+                            landscapeCardHeight = landscapeCatalogCardHeight,
+                            expandEnabled = effectiveExpandEnabled
                         )
-                        val widthPx = with(density) { metrics.width.roundToPx() }
-                        val heightPx = with(density) { metrics.height.roundToPx() }
-                        url to "${url}_${widthPx}x${heightPx}"
+                        val widthPx = with(density) { metrics.width.roundToPx() }.coerceAtLeast(1)
+                        val heightPx = with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
+                        url to modernCardMemoryCacheKey(url, widthPx, heightPx, 0)
                     }
                     is ModernPayload.CollectionFolder -> {
                         val url = item.imageUrl ?: return null
-                        val metrics = item.catalogCardMetrics(
+                        val metrics = item.catalogCardRequestMetrics(
                             useLandscapePosters = useLandscapePosters,
                             portraitCardWidth = portraitCatalogCardWidth,
                             portraitCardHeight = portraitCatalogCardHeight,
                             landscapeCardWidth = landscapeCatalogCardWidth,
-                            landscapeCardHeight = landscapeCatalogCardHeight
+                            landscapeCardHeight = landscapeCatalogCardHeight,
+                            expandEnabled = effectiveExpandEnabled
                         )
-                        val widthPx = with(density) { metrics.width.roundToPx() }
-                        val heightPx = with(density) { metrics.height.roundToPx() }
-                        url to "${url}_${widthPx}x${heightPx}"
+                        val widthPx = with(density) { metrics.width.roundToPx() }.coerceAtLeast(1)
+                        val heightPx = with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
+                        url to modernCardMemoryCacheKey(url, widthPx, heightPx, 0)
                     }
                     is ModernPayload.ContinueWatching -> {
                         // Use the same model and cache key the card computes so the prefetch warms the entry the card actually reads.
@@ -714,6 +716,8 @@ internal fun ModernRowSection(
                 imageLoader.enqueue(
                     ImageRequest.Builder(context)
                         .data(url)
+                        .crossfade(false)
+                        .precision(coil3.size.Precision.EXACT)
                         .memoryCacheKey(cacheKey)
                         .size(width = widthPx, height = heightPx)
                         .apply {
@@ -725,28 +729,20 @@ internal fun ModernRowSection(
             // Prefetch initial visible + ahead items immediately when row appears
             val items = currentRowState.value.items.list
             withContext(Dispatchers.IO) {
-                for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE, items.size)) {
+                for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE + 4, items.size)) {
                     val item = items.getOrNull(i) ?: continue
                     val (wPx, hPx) = when (item.payload) {
-                        is ModernPayload.Catalog -> {
-                            val metrics = item.catalogCardMetrics(
+                        is ModernPayload.Catalog, is ModernPayload.CollectionFolder -> {
+                            val metrics = item.catalogCardRequestMetrics(
                                 useLandscapePosters = useLandscapePosters,
                                 portraitCardWidth = portraitCatalogCardWidth,
                                 portraitCardHeight = portraitCatalogCardHeight,
                                 landscapeCardWidth = landscapeCatalogCardWidth,
-                                landscapeCardHeight = landscapeCatalogCardHeight
+                                landscapeCardHeight = landscapeCatalogCardHeight,
+                                expandEnabled = effectiveExpandEnabled
                             )
-                            with(density) { metrics.width.roundToPx() } to with(density) { metrics.height.roundToPx() }
-                        }
-                        is ModernPayload.CollectionFolder -> {
-                            val metrics = item.catalogCardMetrics(
-                                useLandscapePosters = useLandscapePosters,
-                                portraitCardWidth = portraitCatalogCardWidth,
-                                portraitCardHeight = portraitCatalogCardHeight,
-                                landscapeCardWidth = landscapeCatalogCardWidth,
-                                landscapeCardHeight = landscapeCatalogCardHeight
-                            )
-                            with(density) { metrics.width.roundToPx() } to with(density) { metrics.height.roundToPx() }
+                            with(density) { metrics.width.roundToPx() }.coerceAtLeast(1) to
+                                with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
                         }
                         is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
                     }
@@ -764,25 +760,17 @@ internal fun ModernRowSection(
                         for (i in (lastVisibleIndex + 1)..(lastVisibleIndex + POSTER_PREFETCH_DISTANCE)) {
                             val item = currentItems.getOrNull(i) ?: continue
                             val (wPx, hPx) = when (item.payload) {
-                                is ModernPayload.Catalog -> {
-                                    val metrics = item.catalogCardMetrics(
+                                is ModernPayload.Catalog, is ModernPayload.CollectionFolder -> {
+                                    val metrics = item.catalogCardRequestMetrics(
                                         useLandscapePosters = useLandscapePosters,
                                         portraitCardWidth = portraitCatalogCardWidth,
                                         portraitCardHeight = portraitCatalogCardHeight,
                                         landscapeCardWidth = landscapeCatalogCardWidth,
-                                        landscapeCardHeight = landscapeCatalogCardHeight
+                                        landscapeCardHeight = landscapeCatalogCardHeight,
+                                        expandEnabled = effectiveExpandEnabled
                                     )
-                                    with(density) { metrics.width.roundToPx() } to with(density) { metrics.height.roundToPx() }
-                                }
-                                is ModernPayload.CollectionFolder -> {
-                                    val metrics = item.catalogCardMetrics(
-                                        useLandscapePosters = useLandscapePosters,
-                                        portraitCardWidth = portraitCatalogCardWidth,
-                                        portraitCardHeight = portraitCatalogCardHeight,
-                                        landscapeCardWidth = landscapeCatalogCardWidth,
-                                        landscapeCardHeight = landscapeCatalogCardHeight
-                                    )
-                                    with(density) { metrics.width.roundToPx() } to with(density) { metrics.height.roundToPx() }
+                                    with(density) { metrics.width.roundToPx() }.coerceAtLeast(1) to
+                                        with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
                                 }
                                 is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
                             }
@@ -1191,13 +1179,15 @@ private fun ModernCarouselCard(
     val revalidationKey = com.nuvio.tv.core.image.rememberImageRevalidationKey(activeImageUrl)
     val imageModel = remember(context, activeImageUrl, requestWidthPx, requestHeightPx, revalidationKey) {
         activeImageUrl?.let {
+            val cacheKey = modernCardMemoryCacheKey(it, requestWidthPx, requestHeightPx, revalidationKey)
             val builder = ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(true)
-                .memoryCacheKey("${it}_${requestWidthPx}x${requestHeightPx}_v$revalidationKey")
+                .crossfade(false)
+                .precision(coil3.size.Precision.EXACT)
+                .memoryCacheKey(cacheKey)
                 .size(width = requestWidthPx, height = requestHeightPx)
             if (revalidationKey > 0) {
-                builder.placeholderMemoryCacheKey("${it}_${requestWidthPx}x${requestHeightPx}_v${revalidationKey - 1}")
+                builder.placeholderMemoryCacheKey(modernCardMemoryCacheKey(it, requestWidthPx, requestHeightPx, revalidationKey - 1))
             }
             builder.build()
         }
@@ -1214,7 +1204,8 @@ private fun ModernCarouselCard(
         effectiveLogoUrl?.let {
             ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(true)
+                .crossfade(false)
+                .precision(coil3.size.Precision.EXACT)
                 .memoryCacheKey("${it}_${maxLogoWidthPx}x${logoHeightPx}")
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
