@@ -191,3 +191,64 @@ fun findNextEpisodeCandidateAfterSeed(
         season > seedSeason || (season == seedSeason && episode > seedEpisode)
     }
 }
+
+/** Content types that are treated as series for Continue Watching rules. */
+fun isSeriesTypeCW(contentType: String?): Boolean {
+    val t = contentType?.trim()?.lowercase() ?: return false
+    return t == "series" || t == "tv"
+}
+
+/**
+ * Lightweight reference for deriving sibling clusters across watch-progress seeds.
+ */
+data class WatchProgressSeedRef(
+    val contentId: String,
+    val name: String? = null,
+    val videoId: String? = null,
+    val contentType: String? = null
+)
+
+/**
+ * Derives and augments sibling mappings across content IDs from watch-progress seeds.
+ *
+ * 1. Groups seeds by normalized name (lowercased, trimmed) for series items, linking
+ *    distinct contentIds (e.g. tmdb:234613 and tt28251824 both for "The Traitors Canada").
+ * 2. Links contentId to any IMDb ID extracted from videoId (e.g. videoId "tt28251824:4:4").
+ */
+fun buildShowIdSiblingsFromSeeds(
+    seeds: List<WatchProgressSeedRef>,
+    existingSiblings: Map<String, Set<String>> = emptyMap()
+): Map<String, Set<String>> {
+    val siblings = mutableMapOf<String, MutableSet<String>>()
+    for ((id, related) in existingSiblings) {
+        siblings.getOrPut(id) { mutableSetOf() }.addAll(related)
+    }
+
+    fun link(a: String, b: String) {
+        if (a.isBlank() || b.isBlank() || a == b) return
+        siblings.getOrPut(a) { mutableSetOf() }.add(b)
+        siblings.getOrPut(b) { mutableSetOf() }.add(a)
+    }
+
+    val groupsByName = seeds
+        .filter { !it.name.isNullOrBlank() && isSeriesTypeCW(it.contentType) }
+        .groupBy { it.name!!.trim().lowercase() }
+
+    for ((_, group) in groupsByName) {
+        val distinctIds = group.map { it.contentId }.filter { it.isNotBlank() }.distinct()
+        for (i in distinctIds.indices) {
+            for (j in i + 1 until distinctIds.size) {
+                link(distinctIds[i], distinctIds[j])
+            }
+        }
+    }
+
+    for (seed in seeds) {
+        val imdb = extractImdbIdFromVideoId(seed.videoId)
+        if (imdb != null && imdb != seed.contentId) {
+            link(seed.contentId, imdb)
+        }
+    }
+
+    return siblings.mapValues { (_, set) -> set.toSet() }
+}

@@ -848,4 +848,48 @@ class ContinueWatchingAiringRulesTest {
         )
     }
 
+
+    // ---------------------------------------------------------------------
+    // buildShowIdSiblingsFromSeeds
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `buildShowIdSiblingsFromSeeds clusters distinct content IDs with same normalized show name`() {
+        val seeds = listOf(
+            WatchProgressSeedRef(contentId = "tmdb:234613", name = "The Traitors Canada", contentType = "series"),
+            WatchProgressSeedRef(contentId = "tt28251824", name = "The Traitors Canada ", contentType = "tv"),
+            WatchProgressSeedRef(contentId = "tt12345", name = "Another Show", contentType = "series")
+        )
+        val siblings = buildShowIdSiblingsFromSeeds(seeds)
+        assertTrue(siblings["tmdb:234613"]?.contains("tt28251824") == true)
+        assertTrue(siblings["tt28251824"]?.contains("tmdb:234613") == true)
+        assertFalse(siblings["tmdb:234613"]?.contains("tt12345") == true)
+    }
+
+    @Test
+    fun `buildShowIdSiblingsFromSeeds extracts IMDb ID from videoId when different from contentId`() {
+        val seeds = listOf(
+            WatchProgressSeedRef(
+                contentId = "tmdb:234613",
+                name = "The Traitors Canada",
+                videoId = "tt28251824:4:4",
+                contentType = "series"
+            )
+        )
+        val siblings = buildShowIdSiblingsFromSeeds(seeds)
+        assertTrue(siblings["tmdb:234613"]?.contains("tt28251824") == true)
+        assertTrue(siblings["tt28251824"]?.contains("tmdb:234613") == true)
+    }
+
+    @Test
+    fun `buildShowIdSiblingsFromSeeds preserves and extends existing siblings`() {
+        val existing = mapOf("tmdb:100" to setOf("trakt:200"))
+        val seeds = listOf(
+            WatchProgressSeedRef(contentId = "tmdb:100", name = "My Show", contentType = "series"),
+            WatchProgressSeedRef(contentId = "tt300", name = "My Show", contentType = "series")
+        )
+        val siblings = buildShowIdSiblingsFromSeeds(seeds, existing)
+        assertEquals(setOf("trakt:200", "tt300"), siblings["tmdb:100"])
+        assertEquals(setOf("tmdb:100"), siblings["tt300"])
+    }
 }

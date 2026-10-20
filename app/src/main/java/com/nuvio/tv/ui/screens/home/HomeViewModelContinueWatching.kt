@@ -327,10 +327,16 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 )
 
                 // Refresh show ID siblings early so seed grouping and metadata resolution have fresh mappings
-                val currentSiblings = runCatching { watchProgressRepository.getShowIdSiblings() }.getOrDefault(emptyMap())
-                if (currentSiblings.isNotEmpty()) {
-                    cwLastShowIdSiblings = currentSiblings
+                val initialSiblings = runCatching { watchProgressRepository.getShowIdSiblings() }.getOrDefault(emptyMap())
+                val allSeedRefs = (nextUpSeeds + items).map {
+                    WatchProgressSeedRef(
+                        contentId = it.contentId,
+                        name = it.name,
+                        videoId = it.videoId,
+                        contentType = it.contentType
+                    )
                 }
+                cwLastShowIdSiblings = buildShowIdSiblingsFromSeeds(allSeedRefs, initialSiblings)
 
                 // Load cached CW snapshots for instant render before Trakt responds
                 val (cachedNextUp, cachedInProgress) = coroutineScope {
@@ -709,7 +715,15 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     cwLastBadgeEpisodeKeys = currentKeys.toSet()
 
                     val showIdSiblings = watchProgressRepository.getShowIdSiblings()
-                    cwLastShowIdSiblings = showIdSiblings
+                    val allSeedRefs = (nextUpSeeds + items).map {
+                        WatchProgressSeedRef(
+                            contentId = it.contentId,
+                            name = it.name,
+                            videoId = it.videoId,
+                            contentType = it.contentType
+                        )
+                    }
+                    cwLastShowIdSiblings = buildShowIdSiblingsFromSeeds(allSeedRefs, showIdSiblings)
 
                     // Deduplicate IDs using Trakt's sibling mapping (IMDB ↔ TMDB from
                     // the same show). Resolve meta once per show, then cross-cache the
@@ -2761,13 +2775,6 @@ private fun resolveNextUpVideoFromMeta(
         }
     }
 
-    if (watchedIndex < 0) {
-        logNextUpDecision(
-            "drop contentId=${progress.contentId} name=${progress.name} reason=seed-not-found-in-meta seed=${seedSeason}x${seedEpisode}"
-        )
-        return null
-    }
-
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
     val candidateVideos: List<CwVideoSummary>
     val watchedEpisodeSeason: Int?
@@ -3220,10 +3227,6 @@ private fun NextUpInfo.toProgressSeed(): WatchProgress {
         duration = 1L,
         lastWatched = lastWatched
     )
-}
-
-private fun isSeriesTypeCW(type: String?): Boolean {
-    return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
 }
 
 /** Applies enriched overlay from the previous enrichment cycle to avoid
