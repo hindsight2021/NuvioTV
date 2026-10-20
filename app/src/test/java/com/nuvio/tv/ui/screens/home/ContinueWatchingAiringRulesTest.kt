@@ -661,4 +661,191 @@ class ContinueWatchingAiringRulesTest {
         episode = ep,
         overview = null,
     )
+
+
+    // ---------------------------------------------------------------------
+    // extractImdbIdFromVideoId
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `extractImdbIdFromVideoId extracts id from season-episode suffixed video id`() {
+        assertEquals("tt28251824", extractImdbIdFromVideoId("tt28251824:4:4"))
+    }
+
+    @Test
+    fun `extractImdbIdFromVideoId extracts id from bare imdb video id`() {
+        assertEquals("tt1234567", extractImdbIdFromVideoId("tt1234567"))
+    }
+
+    @Test
+    fun `extractImdbIdFromVideoId returns null for non-imdb ids`() {
+        assertNull(extractImdbIdFromVideoId("tmdb:234613"))
+        assertNull(extractImdbIdFromVideoId("trakt:123"))
+    }
+
+    @Test
+    fun `extractImdbIdFromVideoId returns null for null or empty input`() {
+        assertNull(extractImdbIdFromVideoId(null))
+        assertNull(extractImdbIdFromVideoId(""))
+    }
+
+    // ---------------------------------------------------------------------
+    // resolveCanonicalClusterKey
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `resolveCanonicalClusterKey resolves via sibling mapping containing imdb id`() {
+        val siblings = mapOf(
+            "tmdb:234613" to setOf("tt28251824", "trakt:209213")
+        )
+        assertEquals(
+            "tt28251824",
+            resolveCanonicalClusterKey("tmdb:234613", siblings)
+        )
+    }
+
+    @Test
+    fun `resolveCanonicalClusterKey resolves when id itself maps to imdb id`() {
+        val siblings = mapOf(
+            "tt28251824" to setOf("tmdb:234613", "trakt:209213")
+        )
+        assertEquals(
+            "tt28251824",
+            resolveCanonicalClusterKey("tt28251824", siblings)
+        )
+    }
+
+    @Test
+    fun `resolveCanonicalClusterKey returns contentId unchanged when siblings empty or missing`() {
+        assertEquals(
+            "tmdb:234613",
+            resolveCanonicalClusterKey("tmdb:234613", emptyMap())
+        )
+        assertEquals(
+            "tmdb:234613",
+            resolveCanonicalClusterKey(
+                "tmdb:234613",
+                mapOf("trakt:209213" to setOf("tt28251824"))
+            )
+        )
+    }
+
+    @Test
+    fun `resolveCanonicalClusterKey returns contentId unchanged when ambiguous marker present`() {
+        val siblings = mapOf(
+            "tmdb:234613" to setOf("tt28251824", "trakt:209213", "__ambiguous__")
+        )
+        assertEquals(
+            "tmdb:234613",
+            resolveCanonicalClusterKey("tmdb:234613", siblings)
+        )
+    }
+
+    // ---------------------------------------------------------------------
+    // findNextEpisodeCandidateAfterSeed
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `findNextEpisodeCandidateAfterSeed returns next episode in normal case`() {
+        val episodes = listOf(
+            4 to 1, 4 to 2, 4 to 3, 4 to 4, 4 to 5
+        )
+        assertEquals(
+            4 to 5,
+            findNextEpisodeCandidateAfterSeed(episodes, seedSeason = 4, seedEpisode = 4)
+        )
+    }
+
+    @Test
+    fun `findNextEpisodeCandidateAfterSeed returns first upcoming when seed not in partial list`() {
+        // The Traitors Canada bug: only upcoming episodes are present.
+        val episodes = listOf(
+            4 to 5, 4 to 6, 4 to 7, 4 to 8
+        )
+        assertEquals(
+            4 to 5,
+            findNextEpisodeCandidateAfterSeed(episodes, seedSeason = 4, seedEpisode = 4)
+        )
+    }
+
+    @Test
+    fun `findNextEpisodeCandidateAfterSeed handles season rollover in partial list`() {
+        val episodes = listOf(
+            5 to 1, 5 to 2
+        )
+        assertEquals(
+            5 to 1,
+            findNextEpisodeCandidateAfterSeed(episodes, seedSeason = 4, seedEpisode = 10)
+        )
+    }
+
+    @Test
+    fun `findNextEpisodeCandidateAfterSeed returns null when seed is last available episode`() {
+        val episodes = listOf(
+            4 to 1, 4 to 2, 4 to 3, 4 to 4
+        )
+        assertNull(findNextEpisodeCandidateAfterSeed(episodes, seedSeason = 4, seedEpisode = 4))
+    }
+
+    @Test
+    fun `findNextEpisodeCandidateAfterSeed returns null when seed is past all available episodes`() {
+        val episodes = listOf(
+            4 to 1, 4 to 2, 4 to 3
+        )
+        assertNull(findNextEpisodeCandidateAfterSeed(episodes, seedSeason = 4, seedEpisode = 4))
+    }
+
+    // ---------------------------------------------------------------------
+    // Comprehensive Traitors Canada scenario test
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `traitorsCanadaMultiIdSeedWithPartialMetadataAirsEpisode5AndSortsToFront`() {
+        val nowMs = 1759359600000L
+        val oneDayMs = 24L * 60 * 60 * 1000
+
+        // 1. Sibling mapping tmdb:234613 and tt28251824 resolve to the canonical IMDb key
+        val siblings = mapOf(
+            "tmdb:234613" to setOf("tt28251824", "trakt:209213"),
+            "tt28251824" to setOf("tmdb:234613", "trakt:209213")
+        )
+        val canonicalFromTmdb = resolveCanonicalClusterKey("tmdb:234613", siblings)
+        val canonicalFromImdb = resolveCanonicalClusterKey("tt28251824", siblings)
+        assertEquals("tt28251824", canonicalFromTmdb)
+        assertEquals("tt28251824", canonicalFromImdb)
+        assertEquals(canonicalFromTmdb, canonicalFromImdb)
+
+        // 2. Given seed is S4E4 (watched under tmdb:234613), and MyTrakt metadata returns
+        // only upcoming episodes [4 to 5, 4 to 6, 4 to 7], findNextEpisodeCandidateAfterSeed finds 4 to 5
+        val partialEpisodes = listOf(4 to 5, 4 to 6, 4 to 7)
+        val nextCandidate = findNextEpisodeCandidateAfterSeed(
+            episodes = partialEpisodes,
+            seedSeason = 4,
+            seedEpisode = 4
+        )
+        assertEquals(4 to 5, nextCandidate)
+
+        // 3. S4E5 released yesterday (nowMs - 1 day) and S4E4 was watched 3 days ago:
+        val lastWatchedMs = nowMs - (3 * oneDayMs)
+        val releaseTimestampMs = nowMs - (1 * oneDayMs)
+        val shouldAlert = computeNextUpReleaseAlert(
+            hasAired = true,
+            releaseTimestamp = releaseTimestampMs,
+            lastWatched = lastWatchedMs,
+            isNewSeason = false,
+            nowMs = nowMs
+        )
+        assertTrue("Expected release alert for S4E5", shouldAlert)
+
+        // 4. Effective sort timestamp: with release alert, sort timestamp is the release timestamp
+        val traitorsSortTs = if (shouldAlert && releaseTimestampMs > 0) releaseTimestampMs else lastWatchedMs
+        // An older show watched 2 days ago without a new release
+        val staleShowSortTs = nowMs - (2 * oneDayMs)
+
+        assertTrue(
+            "Traitors Canada released yesterday should sort ahead of a show watched 2 days ago",
+            traitorsSortTs > staleShowSortTs
+        )
+    }
+
 }

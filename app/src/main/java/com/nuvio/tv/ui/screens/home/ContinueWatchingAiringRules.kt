@@ -136,4 +136,58 @@ fun computeNextUpReleaseAlert(
         lastWatched < releaseTimestamp + ONE_DAY_MS
 }
 
+/** Matches an IMDb id: 'tt' followed by one or more digits. */
+private val IMDB_ID_REGEX = Regex("tt\\d+")
 
+/**
+ * Extracts an IMDb id ('tt' followed by digits) from a video id or compound string.
+ * e.g. "tt28251824:4:4" -> "tt28251824", "tt28251824" -> "tt28251824".
+ */
+fun extractImdbIdFromVideoId(videoId: String?): String? {
+    if (videoId.isNullOrBlank()) return null
+    return IMDB_ID_REGEX.find(videoId)?.value
+}
+
+/**
+ * Resolves a canonical cluster key for a contentId using a siblings mapping (e.g. from Trakt or multi-source).
+ * Resolves IMDB <-> TMDB siblings for the same show into a single canonical identifier.
+ * Deterministic preference:
+ * 1. The first IMDb ID (starting with "tt") in the cluster
+ * 2. The first TMDB ID (starting with "tmdb:")
+ * 3. Alphabetically first ID
+ */
+fun resolveCanonicalClusterKey(
+    contentId: String,
+    siblingsMap: Map<String, Set<String>>
+): String {
+    val siblings = siblingsMap[contentId]
+    if (siblings.isNullOrEmpty() || "__ambiguous__" in siblings) {
+        return contentId
+    }
+    val cluster = siblings + contentId
+    return cluster.filter { it.startsWith("tt") }.minOrNull()
+        ?: cluster.filter { it.startsWith("tmdb:") }.minOrNull()
+        ?: cluster.minOrNull()
+        ?: contentId
+}
+
+/**
+ * Finds the next episode candidate that comes after a seed episode.
+ *
+ * If the seed (season, episode) is present in [episodes] at index i, returns episodes[i + 1].
+ * If the seed is NOT present (e.g. metadata provider returned partial upcoming episodes like
+ * S4E5..S4E10 while the seed was S4E4), finds the first episode strictly greater than the seed.
+ */
+fun findNextEpisodeCandidateAfterSeed(
+    episodes: List<Pair<Int, Int>>,
+    seedSeason: Int,
+    seedEpisode: Int
+): Pair<Int, Int>? {
+    val seedIndex = episodes.indexOfFirst { it.first == seedSeason && it.second == seedEpisode }
+    if (seedIndex >= 0) {
+        return episodes.getOrNull(seedIndex + 1)
+    }
+    return episodes.firstOrNull { (season, episode) ->
+        season > seedSeason || (season == seedSeason && episode > seedEpisode)
+    }
+}

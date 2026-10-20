@@ -326,6 +326,12 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     nowEpochMs = System.currentTimeMillis()
                 )
 
+                // Refresh show ID siblings early so seed grouping and metadata resolution have fresh mappings
+                val currentSiblings = runCatching { watchProgressRepository.getShowIdSiblings() }.getOrDefault(emptyMap())
+                if (currentSiblings.isNotEmpty()) {
+                    cwLastShowIdSiblings = currentSiblings
+                }
+
                 // Load cached CW snapshots for instant render before Trakt responds
                 val (cachedNextUp, cachedInProgress) = coroutineScope {
                     val nextUpDeferred = async(Dispatchers.IO) {
@@ -823,7 +829,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             )
                         }
                     val allOlderCandidateSeeds = (candidateOlderSeedsFromNextUp + candidateOlderSeedsFromWatched)
-                        .groupBy { it.contentId }
+                        .groupBy { resolveCanonicalClusterKey(it.contentId, cwLastShowIdSiblings) }
                         .mapNotNull { (_, items) -> choosePreferredNextUpSeed(items, nextUpFromFurthestEpisode) }
                         .sortedByDescending { computeSeedEffectiveSortTimestamp(it, cachedNextUp) }
 
@@ -831,8 +837,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     // 1) seeds already having a positive in-memory next-up resolution (0 network calls)
                     // 2) seeds needing async network resolution
                     val (cachedPositiveOlderSeeds, remainingOlderSeeds) = allOlderCandidateSeeds.partition { seed ->
+                        val canonical = resolveCanonicalClusterKey(seed.contentId, cwLastShowIdSiblings)
                         synchronized(cwNextUpResolutionCache) {
-                            cwNextUpResolutionCache.entries.any { (k, v) -> k.startsWith("${seed.contentId}|") && v != null }
+                            cwNextUpResolutionCache.entries.any { (k, v) ->
+                                (k.startsWith("${seed.contentId}|") || k.startsWith("$canonical|")) && v != null
+                            }
                         }
                     }
 
@@ -1579,14 +1588,28 @@ private fun HomeViewModel.computeSeedEffectiveSortTimestamp(
         effective = fromNextSeason
     }
 
-    // 4. Check cached meta videos for recent aired episode after seed
+    // 4. Check cached meta videos for recent aired episode after seed (including siblings)
+    val seedSiblings = cwLastShowIdSiblings[seed.contentId].orEmpty()
+    val seedImdbSibling = seedSiblings.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
+        ?: extractImdbIdFromVideoId(seed.videoId)
+
     val cachedMeta = synchronized(cwMetaCache) {
         cwMetaCache["${seed.contentType}:${seed.contentId}"]
             ?: cwMetaCache["series:${seed.contentId}"]
             ?: cwMetaCache["tv:${seed.contentId}"]
+            ?: seedImdbSibling?.let { imdb ->
+                cwMetaCache["${seed.contentType}:$imdb"]
+                    ?: cwMetaCache["series:$imdb"]
+                    ?: cwMetaCache["tv:$imdb"]
+            }
     } ?: metaRepository.getCachedMeta(seed.contentType, seed.contentId)?.toCwSummary()
       ?: metaRepository.getCachedMeta("series", seed.contentId)?.toCwSummary()
       ?: metaRepository.getCachedMeta("tv", seed.contentId)?.toCwSummary()
+      ?: seedImdbSibling?.let { imdb ->
+          metaRepository.getCachedMeta(seed.contentType, imdb)?.toCwSummary()
+              ?: metaRepository.getCachedMeta("series", imdb)?.toCwSummary()
+              ?: metaRepository.getCachedMeta("tv", imdb)?.toCwSummary()
+      }
 
     if (cachedMeta != null) {
         val seedS = seed.season ?: 1
@@ -1648,6 +1671,8 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
             .map { it.contentId }
             .toSet()
 
+        val ipClusterKeys = ipIds.map { resolveCanonicalClusterKey(it, cwLastShowIdSiblings) }.toSet()
+
         val seedsCandidates = nextUpSeeds
             .filter { progress ->
                 isSeriesTypeCW(progress.contentType) &&
@@ -1656,7 +1681,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                     progress.season != 0 &&
                     shouldUseAsCompletedSeed(progress)
             }
-            .groupBy { it.contentId }
+            .groupBy { resolveCanonicalClusterKey(it.contentId, cwLastShowIdSiblings) }
             .mapNotNull { (_, items) ->
                 if (items.any(::shouldTraceNextUpSeries)) {
                     val candidates = items
@@ -1677,7 +1702,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                 }
                 chosen
             }
-            .filter { it.contentId !in ipIds }
+            .filter { it.contentId !in ipIds && resolveCanonicalClusterKey(it.contentId, cwLastShowIdSiblings) !in ipClusterKeys }
             .filter { progress ->
                 nextUpDismissKey(progress.contentId, progress.season, progress.episode) !in dismissedNextUp
             }
@@ -2463,10 +2488,19 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
     if (nextVideo == null && isSeriesTypeCW(progress.contentType)) {
         val supplemented = withTimeoutOrNull(6000L) {
             try {
+                val lookupId = currentMeta.id.takeIf { it.startsWith("tt") }
+                    ?: cwLastShowIdSiblings[progress.contentId]?.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
+                    ?: extractImdbIdFromVideoId(progress.videoId)
+                    ?: progress.contentId
+
                 val primary = (metaRepository.getMetaFromPrimaryAddon(
                     type = progress.contentType,
-                    id = progress.contentId
+                    id = lookupId
                 ).firstOrNull { it !is NetworkResult.Loading } as? NetworkResult.Success<Meta>)?.data
+                    ?: (metaRepository.getMetaFromPrimaryAddon(
+                        type = progress.contentType,
+                        id = progress.contentId
+                    ).firstOrNull { it !is NetworkResult.Loading } as? NetworkResult.Success<Meta>)?.data
                     ?: return@withTimeoutOrNull null
 
                 val resolvedTmdbId = resolveTmdbIdForNextUp(progress, currentMeta, debug)
@@ -2735,8 +2769,31 @@ private fun resolveNextUpVideoFromMeta(
     }
 
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
-    val watchedEpisodeSeason = episodes[watchedIndex].season
-    val nextVideo = episodes.drop(watchedIndex + 1).firstOrNull { video ->
+    val candidateVideos: List<CwVideoSummary>
+    val watchedEpisodeSeason: Int?
+
+    if (watchedIndex >= 0) {
+        watchedEpisodeSeason = episodes[watchedIndex].season
+        candidateVideos = episodes.drop(watchedIndex + 1)
+    } else {
+        // Fallback for partial episode lists (e.g. MyTrakt returning only upcoming episodes S4E5..S4E10
+        // while the seed was S4E4). Look for episodes strictly greater than the seed.
+        candidateVideos = episodes.filter { video ->
+            val s = video.season ?: return@filter false
+            val e = video.episode ?: return@filter false
+            s > seedSeason || (s == seedSeason && e > seedEpisode)
+        }
+        watchedEpisodeSeason = seedSeason
+    }
+
+    if (watchedIndex < 0 && candidateVideos.isEmpty()) {
+        logNextUpDecision(
+            "drop contentId=${progress.contentId} name=${progress.name} reason=seed-not-found-in-meta seed=${seedSeason}x${seedEpisode}"
+        )
+        return null
+    }
+
+    val nextVideo = candidateVideos.firstOrNull { video ->
         val aired = isEpisodeReleaseAired(
             video.released,
             airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
@@ -2787,7 +2844,28 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         }
     }
 
+    val siblings = cwLastShowIdSiblings[progress.contentId].orEmpty()
+    val imdbSibling = siblings.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
+        ?: extractImdbIdFromVideoId(progress.videoId)
+        ?: if (progress.contentId.startsWith("tmdb:")) {
+            val numericId = progress.contentId.substringAfter(':').toIntOrNull()
+            if (numericId != null) {
+                val tmdbCacheKey = "imdb_for_${progress.contentId}"
+                val cached = synchronized(cwTmdbIdCache) { cwTmdbIdCache[tmdbCacheKey] }
+                if (cached != null) {
+                    cached
+                } else {
+                    val resolvedImdb = runCatching { tmdbService.tmdbToImdb(numericId, "tv") }.getOrNull()
+                    if (resolvedImdb != null) {
+                        synchronized(cwTmdbIdCache) { cwTmdbIdCache[tmdbCacheKey] = resolvedImdb }
+                    }
+                    resolvedImdb
+                }
+            } else null
+        } else null
+
     val idCandidates = buildList {
+        imdbSibling?.let { add(it) }
         add(progress.contentId)
         if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
         synchronized(cwTmdbIdCache) {
@@ -2795,6 +2873,11 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         }?.let { tmdbId ->
             add("tmdb:$tmdbId")
             add(tmdbId)
+        }
+        for (sib in siblings) {
+            if (sib != "__ambiguous__" && !sib.startsWith("trakt:")) {
+                add(sib)
+            }
         }
     }.distinct()
 
@@ -2890,6 +2973,22 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         if (resolved == null) {
             cwMetaNegativeCacheTimestamps[cacheKey] = SystemClock.elapsedRealtime()
         } else {
+            metaCache["series:${progress.contentId}"] = resolved
+            metaCache["tv:${progress.contentId}"] = resolved
+            imdbSibling?.let { imdb ->
+                metaCache["${progress.contentType}:$imdb"] = resolved
+                metaCache["series:$imdb"] = resolved
+                metaCache["tv:$imdb"] = resolved
+                cwMetaNegativeCacheTimestamps.remove("${progress.contentType}:$imdb")
+            }
+            for (sib in siblings) {
+                if (sib != "__ambiguous__") {
+                    metaCache["${progress.contentType}:$sib"] = resolved
+                    metaCache["series:$sib"] = resolved
+                    metaCache["tv:$sib"] = resolved
+                    cwMetaNegativeCacheTimestamps.remove("${progress.contentType}:$sib")
+                }
+            }
             cwMetaNegativeCacheTimestamps.remove(cacheKey)
         }
     }
