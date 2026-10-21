@@ -219,6 +219,42 @@ private suspend fun PlayerRuntimeController.enrichDescriptionFromTmdb(id: String
 }
 
 internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boolean) {
+    if (com.nuvio.tv.core.playlist.PlaylistManager.hasQueuedItem()) {
+        val queued = com.nuvio.tv.core.playlist.PlaylistManager.peekNext()
+        if (queued != null) {
+            val resolvedVideoId = queued.videoId ?: if (queued.season != null && queued.episode != null) {
+                "${queued.contentId}:${queued.season}:${queued.episode}"
+            } else {
+                queued.contentId
+            }
+            val titleText = if (queued.seriesTitle != null) "${queued.seriesTitle}: ${queued.title}" else queued.title
+            val nextVideo = com.nuvio.tv.domain.model.Video(
+                id = resolvedVideoId,
+                title = titleText,
+                released = null,
+                thumbnail = queued.thumbnail,
+                season = queued.season,
+                episode = queued.episode,
+                overview = null
+            )
+            nextEpisodeVideo = nextVideo
+            val nextInfo = NextEpisodeInfo(
+                videoId = resolvedVideoId,
+                season = queued.season ?: 1,
+                episode = queued.episode ?: 1,
+                title = titleText,
+                thumbnail = queued.thumbnail,
+                overview = null,
+                released = null,
+                hasAired = true,
+                unairedMessage = null,
+                isOtherType = queued.mediaType !in listOf("series", "tv")
+            )
+            applyRecomputedNextEpisode(nextInfo, resetVisibility)
+            return
+        }
+    }
+
     val normalizedType = contentType?.lowercase()
     if (normalizedType !in listOf("series", "tv", "other", "cloud")) {
         nextEpisodeVideo = null

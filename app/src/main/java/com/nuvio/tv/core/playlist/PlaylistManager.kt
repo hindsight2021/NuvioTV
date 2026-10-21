@@ -33,6 +33,9 @@ object PlaylistManager {
     private const val TAG = "PlaylistManager"
     private val json = Json { ignoreUnknownKeys = true }
 
+    // Lock used to make queue mutations thread-safe
+    private val lock = Any()
+
     private val _queue = MutableStateFlow<List<PlaylistItem>>(emptyList())
     val queue: StateFlow<List<PlaylistItem>> = _queue.asStateFlow()
 
@@ -51,17 +54,21 @@ object PlaylistManager {
     }
 
     fun playNext(item: PlaylistItem) {
-        val current = _queue.value.toMutableList()
-        val insertIndex = (_currentIndex.value + 1).coerceAtMost(current.size)
-        current.add(insertIndex, item)
-        _queue.value = current
-        Log.d(TAG, "Added to Play Next: ${item.title} at index $insertIndex")
+        synchronized(lock) {
+            val current = _queue.value.toMutableList()
+            val insertIndex = if (_currentIndex.value < 0) 0 else (_currentIndex.value + 1).coerceAtMost(current.size)
+            current.add(insertIndex, item)
+            _queue.value = current
+        }
+        Log.d(TAG, "Added to Play Next: ${item.title}")
     }
 
     fun addToQueue(item: PlaylistItem) {
-        val current = _queue.value.toMutableList()
-        current.add(item)
-        _queue.value = current
+        synchronized(lock) {
+            val current = _queue.value.toMutableList()
+            current.add(item)
+            _queue.value = current
+        }
         Log.d(TAG, "Added to queue: ${item.title}")
     }
 
@@ -120,39 +127,45 @@ object PlaylistManager {
             }
         }
 
-        this.isRandomEpisode = isRandomEpisode
-        _channelMode.value = if (shuffle) ChannelMode.RANDOM_SHUFFLE else ChannelMode.BINGE_ORDER
-        _queue.value = finalQueue
-        _currentIndex.value = 0
+        synchronized(lock) {
+            this.isRandomEpisode = isRandomEpisode
+            _channelMode.value = if (shuffle) ChannelMode.RANDOM_SHUFFLE else ChannelMode.BINGE_ORDER
+            _queue.value = finalQueue
+            _currentIndex.value = 0
+        }
         Log.d(TAG, "Started channel mode ${_channelMode.value} with ${finalQueue.size} episodes (isRandomEpisode=$isRandomEpisode)")
         return finalQueue.firstOrNull()
     }
 
     fun startThematicChannel(items: List<PlaylistItem>): PlaylistItem? {
         if (items.isEmpty()) return null
-        isRandomEpisode = false
-        _channelMode.value = ChannelMode.BINGE_ORDER
-        _queue.value = items
-        _currentIndex.value = 0
+        synchronized(lock) {
+            isRandomEpisode = false
+            _channelMode.value = ChannelMode.BINGE_ORDER
+            _queue.value = items
+            _currentIndex.value = 0
+        }
         Log.d(TAG, "Started thematic channel with ${items.size} items")
         return items.firstOrNull()
     }
 
     fun next(): PlaylistItem? {
-        val items = _queue.value
-        if (items.isEmpty()) return null
-        val nextIdx = _currentIndex.value + 1
-        if (nextIdx in items.indices) {
-            _currentIndex.value = nextIdx
-            return items[nextIdx]
+        synchronized(lock) {
+            val items = _queue.value
+            if (items.isEmpty()) return null
+            val nextIdx = _currentIndex.value + 1
+            if (nextIdx in items.indices) {
+                _currentIndex.value = nextIdx
+                return items[nextIdx]
+            }
+            if (_channelMode.value == ChannelMode.RANDOM_SHUFFLE && items.isNotEmpty()) {
+                val reshuffled = items.shuffled()
+                _queue.value = reshuffled
+                _currentIndex.value = 0
+                return reshuffled.firstOrNull()
+            }
+            return null
         }
-        if (_channelMode.value == ChannelMode.RANDOM_SHUFFLE && items.isNotEmpty()) {
-            val reshuffled = items.shuffled()
-            _queue.value = reshuffled
-            _currentIndex.value = 0
-            return reshuffled.firstOrNull()
-        }
-        return null
     }
 
     fun hasNext(): Boolean {
@@ -163,30 +176,36 @@ object PlaylistManager {
     }
 
     fun removeAt(index: Int) {
-        val current = _queue.value.toMutableList()
-        if (index in current.indices) {
-            current.removeAt(index)
-            _queue.value = current
-            if (_currentIndex.value >= index && _currentIndex.value > 0) {
-                _currentIndex.value -= 1
+        synchronized(lock) {
+            val current = _queue.value.toMutableList()
+            if (index in current.indices) {
+                current.removeAt(index)
+                _queue.value = current
+                if (_currentIndex.value >= index && _currentIndex.value > 0) {
+                    _currentIndex.value -= 1
+                }
             }
         }
     }
 
     fun move(fromIndex: Int, toIndex: Int) {
-        val current = _queue.value.toMutableList()
-        if (fromIndex in current.indices && toIndex in current.indices) {
-            val item = current.removeAt(fromIndex)
-            current.add(toIndex, item)
-            _queue.value = current
+        synchronized(lock) {
+            val current = _queue.value.toMutableList()
+            if (fromIndex in current.indices && toIndex in current.indices) {
+                val item = current.removeAt(fromIndex)
+                current.add(toIndex, item)
+                _queue.value = current
+            }
         }
     }
 
     fun clear() {
-        _queue.value = emptyList()
-        _currentIndex.value = -1
-        _channelMode.value = ChannelMode.NONE
-        isRandomEpisode = false
+        synchronized(lock) {
+            _queue.value = emptyList()
+            _currentIndex.value = -1
+            _channelMode.value = ChannelMode.NONE
+            isRandomEpisode = false
+        }
     }
 
     /**
@@ -245,14 +264,97 @@ object PlaylistManager {
             val file = File(File(context.filesDir, "playlists"), "$name.json")
             if (!file.exists()) return false
             val items = json.decodeFromString<List<PlaylistItem>>(file.readText())
-            _queue.value = items
-            _currentIndex.value = 0
-            _channelMode.value = ChannelMode.NONE
-            isRandomEpisode = false
+            synchronized(lock) {
+                _queue.value = items
+                _currentIndex.value = 0
+                _channelMode.value = ChannelMode.NONE
+                isRandomEpisode = false
+            }
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load playlist", e)
             false
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Temporary queue support methods
+    // ---------------------------------------------------------------------
+
+    /**
+     * Returns true if there is any item in the queue waiting to be played.
+     *
+     * - When no channel mode is active, this simply checks whether the queue is non-empty.
+     * - When a channel mode is active, it delegates to [hasNext] (which also accounts for
+     *   random-shuffle wrap-around).
+     */
+    fun hasQueuedItem(): Boolean {
+        return if (_channelMode.value == ChannelMode.NONE) {
+            _queue.value.isNotEmpty()
+        } else {
+            hasNext()
+        }
+    }
+
+    /**
+     * Peeks the next item in the queue without removing it.
+     *
+     * - If [currentIndex] < 0, index 0 is peeked (when the queue is not empty).
+     * - Otherwise, [currentIndex] + 1 is peeked if it is within bounds.
+     */
+    fun peekNext(): PlaylistItem? {
+        synchronized(lock) {
+            val items = _queue.value
+            if (items.isEmpty()) return null
+            val idx = _currentIndex.value
+            return if (idx < 0) {
+                items.firstOrNull()
+            } else {
+                val nextIdx = idx + 1
+                if (nextIdx in items.indices) items[nextIdx] else null
+            }
+        }
+    }
+
+    /**
+     * Removes and returns the next item from the temporary queue.
+     *
+     * - When [channelMode] == [ChannelMode.NONE]: the next item is removed from the queue
+     *   and returned (index 0 if [currentIndex] < 0, otherwise [currentIndex] + 1).
+     * - When a channel mode is active: advances via [next] and returns the advanced item.
+     */
+    fun popNext(): PlaylistItem? {
+        synchronized(lock) {
+            if (_channelMode.value != ChannelMode.NONE) {
+                return next()
+            }
+
+            val items = _queue.value
+            if (items.isEmpty()) return null
+
+            val idx = _currentIndex.value
+            val popIndex = if (idx < 0) 0 else idx + 1
+            if (popIndex !in items.indices) return null
+
+            val current = items.toMutableList()
+            val popped = current.removeAt(popIndex)
+            _queue.value = current
+
+            if (idx < 0) {
+                _currentIndex.value = -1
+            } else {
+                _currentIndex.value = idx.coerceAtMost(current.size - 1)
+            }
+
+            Log.d(TAG, "Popped from queue: ${popped.title} at index $popIndex")
+            return popped
+        }
+    }
+
+    /**
+     * Clears the temporary queue. Alias for [clear].
+     */
+    fun clearQueue() {
+        clear()
     }
 }

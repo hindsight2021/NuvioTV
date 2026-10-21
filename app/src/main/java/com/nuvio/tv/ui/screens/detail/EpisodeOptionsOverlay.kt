@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -262,15 +263,6 @@ internal fun EpisodeOptionsOverlay(
             onPlayRandomEpisode?.let {
                 add(EpisodeOverlayAction(label = "🎲 Play Random Episode", onClick = it))
             }
-            onStartChannelShuffle?.let {
-                add(EpisodeOverlayAction(label = "📺 Create Show Channel (Shuffle)", onClick = it))
-            }
-            onStartChannelOrder?.let {
-                add(EpisodeOverlayAction(label = "🎬 Create Show Channel (In Order)", onClick = it))
-            }
-            onChicReview?.let {
-                add(EpisodeOverlayAction(label = "🍸 Chic AI Review", onClick = it))
-            }
         }
         onToggleWatchlist?.let {
             add(
@@ -474,7 +466,7 @@ internal fun EpisodeOptionsOverlay(
                         .fillMaxHeight()
                         .verticalScroll(actionsScrollState)
                         .focusGroup(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     actions.forEachIndexed { index, action ->
                         Button(
@@ -482,6 +474,7 @@ internal fun EpisodeOptionsOverlay(
                             enabled = action.enabled,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = 38.dp)
                                 .then(
                                     if (isNoneStyle) {
                                         Modifier
@@ -507,7 +500,7 @@ internal fun EpisodeOptionsOverlay(
                                 contentColor = NuvioTheme.colors.TextPrimary
                             )
                         ) {
-                            Text(action.label)
+                            Text(action.label, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))

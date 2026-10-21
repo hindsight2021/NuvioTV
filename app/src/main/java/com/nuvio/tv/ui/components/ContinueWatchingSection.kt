@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -1125,6 +1126,8 @@ fun ContinueWatchingOptionsDialog(
     onStartFromBeginning: () -> Unit = {},
     showPlayManually: Boolean = false,
     onPlayManually: () -> Unit = {},
+    onWatchlistClick: (() -> Unit)? = null,
+    onQueueClick: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onPlayRandomEpisode: (() -> Unit)? = null,
@@ -1150,25 +1153,48 @@ fun ContinueWatchingOptionsDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = title,
-        subtitle = stringResource(R.string.cw_dialog_subtitle)
+        subtitle = stringResource(R.string.cw_dialog_subtitle),
+        width = 440.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Button(
                 onClick = onDetails,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 38.dp)
                     .focusRequester(detailsFocusRequester),
                 colors = ButtonDefaults.colors(
                     containerColor = NuvioTheme.colors.BackgroundCard,
                     contentColor = NuvioTheme.colors.TextPrimary
                 )
             ) {
-                Text(stringResource(R.string.cw_action_go_to_details))
+                Text(
+                    text = stringResource(R.string.cw_action_go_to_details),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            if (onWatchlistClick != null) {
+                Button(
+                    onClick = onWatchlistClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        text = "Watchlist (Trakt / Simkl)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
 
             if (showPlayManually && isPlayEnabled) {
@@ -1178,9 +1204,14 @@ fun ContinueWatchingOptionsDialog(
                         containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp)
                 ) {
-                    Text(stringResource(R.string.play_manually))
+                    Text(
+                        text = stringResource(R.string.play_manually),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
 
@@ -1191,102 +1222,86 @@ fun ContinueWatchingOptionsDialog(
                         containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp)
                 ) {
-                    Text(stringResource(R.string.cw_action_start_from_beginning))
+                    Text(
+                        text = stringResource(R.string.cw_action_start_from_beginning),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
 
-            if (isPlayEnabled && onPlayNext != null) {
+            if (isPlayEnabled && onQueueClick != null) {
                 Button(
-                    onClick = onPlayNext,
+                    onClick = onQueueClick,
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp)
                 ) {
-                    Text("Play Next")
+                    Text(
+                        text = "Queue...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
-            }
-
-            if (isPlayEnabled && onAddToQueue != null) {
-                Button(
-                    onClick = onAddToQueue,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioTheme.colors.BackgroundCard,
-                        contentColor = NuvioTheme.colors.TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Add to Playlist Queue")
-                }
-            }
-
-            if (isSeries) {
-                if (onPlayRandomEpisode != null) {
+            } else {
+                if (isPlayEnabled && onPlayNext != null) {
                     Button(
-                        onClick = onPlayRandomEpisode,
+                        onClick = onPlayNext,
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundCard,
                             contentColor = NuvioTheme.colors.TextPrimary
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 38.dp)
                     ) {
-                        Text("🎲 Play Random Episode")
+                        Text(
+                            text = "Play Next",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
 
-                if (onStartChannelShuffle != null) {
+                if (isPlayEnabled && onAddToQueue != null) {
                     Button(
-                        onClick = onStartChannelShuffle,
+                        onClick = onAddToQueue,
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundCard,
                             contentColor = NuvioTheme.colors.TextPrimary
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 38.dp)
                     ) {
-                        Text("📺 Create Show Channel (Shuffle)")
-                    }
-                }
-
-                if (onStartChannelOrder != null) {
-                    Button(
-                        onClick = onStartChannelOrder,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundCard,
-                            contentColor = NuvioTheme.colors.TextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("🎬 Create Show Channel (In Order)")
+                        Text(
+                            text = "Add to Playlist Queue",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             }
 
-            if (onChicReview != null) {
+            if (isSeries && onPlayRandomEpisode != null) {
                 Button(
-                    onClick = onChicReview,
+                    onClick = onPlayRandomEpisode,
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp)
                 ) {
-                    Text("🍸 Chic AI Review")
-                }
-            }
-
-            if (onStartThematicChannel != null) {
-                Button(
-                    onClick = onStartThematicChannel,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioTheme.colors.BackgroundCard,
-                        contentColor = NuvioTheme.colors.TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("✨ AI Thematic Channels")
+                    Text(
+                        text = "🎲 Play Random Episode",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
 
@@ -1296,9 +1311,14 @@ fun ContinueWatchingOptionsDialog(
                     containerColor = NuvioTheme.colors.BackgroundCard,
                     contentColor = NuvioTheme.colors.TextPrimary
                 ),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 38.dp)
             ) {
-                Text(stringResource(R.string.cw_action_remove))
+                Text(
+                    text = stringResource(R.string.cw_action_remove),
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }

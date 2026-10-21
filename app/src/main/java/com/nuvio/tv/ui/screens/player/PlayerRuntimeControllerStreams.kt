@@ -1652,6 +1652,10 @@ internal suspend fun PlayerRuntimeController.resolveDirectDebridStreamIfNeeded(
 }
 
 internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = false) {
+    if (com.nuvio.tv.core.playlist.PlaylistManager.hasQueuedItem()) {
+        _uiState.update { it.copy(playbackEnded = true) }
+        return
+    }
     val nextVideo = nextEpisodeVideo ?: return
     val type = contentType ?: return
 

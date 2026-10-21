@@ -1,5 +1,9 @@
 package com.nuvio.tv.ui.components.posteroptions
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.playlist.PlaylistManager
@@ -47,10 +51,75 @@ class PosterOptionsController @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val metaRepository: MetaRepository,
     private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
-    private val tmdbService: TmdbService
+    private val tmdbService: TmdbService,
+    private val watchlistManager: com.nuvio.tv.ui.components.watchlist.WatchlistManager? = null
 ) {
     private val _state = MutableStateFlow(PosterOptionsState())
     val state: StateFlow<PosterOptionsState> = _state.asStateFlow()
+
+    var watchlistDialogTarget by mutableStateOf<LibraryEntryInput?>(null)
+    var isTraktConnected by mutableStateOf(false)
+    var isSimklConnected by mutableStateOf(false)
+    var isInTraktWatchlist by mutableStateOf(false)
+    var isInSimklWatchlist by mutableStateOf(false)
+    var isWatchlistPending by mutableStateOf(false)
+
+    fun openWatchlistDialog(input: LibraryEntryInput) {
+        watchlistDialogTarget = input
+        scope?.launch {
+            val manager = watchlistManager ?: return@launch
+            isTraktConnected = manager.isTraktConnected()
+            isSimklConnected = manager.isSimklConnected()
+            isInTraktWatchlist = manager.isInTraktWatchlist(input.itemId, input.itemType)
+            isInSimklWatchlist = manager.isInSimklWatchlist(input.itemId, input.itemType)
+        }
+    }
+
+    fun toggleTraktWatchlist() {
+        val input = watchlistDialogTarget ?: return
+        scope?.launch {
+            isWatchlistPending = true
+            watchlistManager?.setTraktWatchlist(input, !isInTraktWatchlist)
+            isInTraktWatchlist = watchlistManager?.isInTraktWatchlist(input.itemId, input.itemType) == true
+            isWatchlistPending = false
+        }
+    }
+
+    fun toggleSimklWatchlist() {
+        val input = watchlistDialogTarget ?: return
+        scope?.launch {
+            isWatchlistPending = true
+            watchlistManager?.setSimklWatchlist(input, !isInSimklWatchlist)
+            isInSimklWatchlist = watchlistManager?.isInSimklWatchlist(input.itemId, input.itemType) == true
+            isWatchlistPending = false
+        }
+    }
+
+    fun addBothWatchlists() {
+        val input = watchlistDialogTarget ?: return
+        scope?.launch {
+            isWatchlistPending = true
+            watchlistManager?.setBothWatchlists(input, true)
+            isInTraktWatchlist = watchlistManager?.isInTraktWatchlist(input.itemId, input.itemType) == true
+            isInSimklWatchlist = watchlistManager?.isInSimklWatchlist(input.itemId, input.itemType) == true
+            isWatchlistPending = false
+        }
+    }
+
+    fun removeBothWatchlists() {
+        val input = watchlistDialogTarget ?: return
+        scope?.launch {
+            isWatchlistPending = true
+            watchlistManager?.setBothWatchlists(input, false)
+            isInTraktWatchlist = watchlistManager?.isInTraktWatchlist(input.itemId, input.itemType) == true
+            isInSimklWatchlist = watchlistManager?.isInSimklWatchlist(input.itemId, input.itemType) == true
+            isWatchlistPending = false
+        }
+    }
+
+    fun dismissWatchlistDialog() {
+        watchlistDialogTarget = null
+    }
 
     private val targetFlow = MutableStateFlow<MetaPreview?>(null)
 

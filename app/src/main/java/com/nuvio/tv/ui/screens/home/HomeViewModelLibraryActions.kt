@@ -554,7 +554,22 @@ fun HomeViewModel.startChannel(
     )
 }
 
-private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntryInput {
+fun ContinueWatchingItem.toLibraryEntryInput(): LibraryEntryInput {
+    val id = contentId()
+    val parsedIds = parseContentIds(id)
+    return LibraryEntryInput(
+        itemId = id,
+        itemType = contentType(),
+        title = title(),
+        traktId = parsedIds.trakt,
+        simklId = parsedIds.simkl,
+        imdbId = parsedIds.imdb,
+        tmdbId = parsedIds.tmdb,
+        poster = thumbnail()
+    )
+}
+
+fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntryInput {
     val year = Regex("(\\d{4})").find(releaseInfo ?: "")
         ?.groupValues
         ?.getOrNull(1)

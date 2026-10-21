@@ -244,7 +244,9 @@ private fun PlaybackNavHost(
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@onContinueWatchingClick
                     }
-                    com.nuvio.tv.core.playlist.PlaylistManager.clear()
+                    if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+                        com.nuvio.tv.core.playlist.PlaylistManager.clear()
+                    }
                     navController.navigate(createContinueWatchingRoute(item))
                 },
                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning@{ item ->
@@ -252,7 +254,9 @@ private fun PlaybackNavHost(
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@onContinueWatchingStartFromBeginning
                     }
-                    com.nuvio.tv.core.playlist.PlaylistManager.clear()
+                    if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+                        com.nuvio.tv.core.playlist.PlaylistManager.clear()
+                    }
                     navController.navigate(
                         createContinueWatchingRoute(item, startFromBeginning = true)
                     )
@@ -262,7 +266,9 @@ private fun PlaybackNavHost(
                         Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
                         return@onContinueWatchingPlayManually
                     }
-                    com.nuvio.tv.core.playlist.PlaylistManager.clear()
+                    if (com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value != com.nuvio.tv.core.playlist.ChannelMode.NONE) {
+                        com.nuvio.tv.core.playlist.PlaylistManager.clear()
+                    }
                     navController.navigate(
                         createContinueWatchingRoute(item, manualSelection = true)
                     )
@@ -1013,7 +1019,41 @@ private fun PlaybackNavHost(
                         ?.toBooleanStrictOrNull() == true
                     val returnToHomeOnBack = args?.getString("returnToHomeOnBack")
                         ?.toBooleanStrictOrNull() == true
-                    if (nextVideoId != null && nextSeason != null && nextEpisode != null) {
+                    if (exitReason != PlayerExitReason.StillWatchingPrompt && com.nuvio.tv.core.playlist.PlaylistManager.hasQueuedItem()) {
+                        val queued = com.nuvio.tv.core.playlist.PlaylistManager.popNext()
+                        if (queued != null) {
+                            val resolvedVideoId = queued.videoId ?: if (queued.season != null && queued.episode != null) {
+                                "${queued.contentId}:${queued.season}:${queued.episode}"
+                            } else {
+                                queued.contentId
+                            }
+                            val resolvedContentType = if (queued.mediaType.isNotBlank()) queued.mediaType else "series"
+                            val resolvedTitle = queued.seriesTitle ?: queued.title
+                            val resolvedEpisodeName = if (queued.seriesTitle != null) queued.title else null
+                            val route = Screen.Stream.createRoute(
+                                videoId = resolvedVideoId,
+                                contentType = resolvedContentType,
+                                title = resolvedTitle,
+                                poster = queued.thumbnail,
+                                backdrop = queued.thumbnail,
+                                logo = null,
+                                season = queued.season,
+                                episode = queued.episode,
+                                episodeName = resolvedEpisodeName,
+                                genres = null,
+                                year = null,
+                                contentId = queued.contentId.takeIf { it.isNotBlank() },
+                                contentName = resolvedTitle,
+                                runtime = null,
+                                returnToDetailOnBack = false,
+                                returnToHomeOnBack = true,
+                                profileId = args?.getString("profileId")?.toIntOrNull()
+                            )
+                            navController.navigate(route) {
+                                popUpTo(Screen.Player.route) { inclusive = true }
+                            }
+                        }
+                    } else if (nextVideoId != null && nextSeason != null && nextEpisode != null) {
                         val route = Screen.Stream.createRoute(
                             videoId = nextVideoId,
                             contentType = contentType,
