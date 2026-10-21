@@ -36,6 +36,16 @@ final class MatroskaZlibSampleDecompressor {
     }
   }
 
+  @Override
+  @SuppressWarnings("deprecation")
+  protected void finalize() throws Throwable {
+    try {
+      release();
+    } finally {
+      super.finalize();
+    }
+  }
+
   ParsableByteArray decompress(ExtractorInput input, int compressedSize) throws IOException {
     ensureCompressedCapacity(compressedSize);
     input.readFully(compressedBuffer, 0, compressedSize);

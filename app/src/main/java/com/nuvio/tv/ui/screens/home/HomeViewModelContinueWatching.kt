@@ -268,7 +268,7 @@ private class CwDebugSession {
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     cwPipelineJob?.cancel()
-    cwPipelineJob = viewModelScope.launch {
+    cwPipelineJob = viewModelScope.launch(Dispatchers.IO) {
         combine(
             combine(
                 watchProgressRepository.allProgress,
@@ -918,8 +918,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         (!fullyWatchedSeriesIds.isSeriesValidationFresh(seed.contentId) || isPotentialAiringSeries(seed.contentId)) &&
                             seed.contentId !in cwProcessedOlderSeedContentIds
                     }
+                        .sortedByDescending { it.lastWatched }
+                        .take(24)
                     if (uncachedSeeds.isNotEmpty()) {
                         launch(Dispatchers.IO) {
+                            delay(1200L) // Wait for initial UI rendering to settle before background scan
                             // Seed discoveredNextUpItems from discoveredOlderNextUpItems so cached older
                             // items are never dropped when applyConclusiveOlderNextUpResults reconciles!
                             val discoveredNextUpItems = synchronized(discoveredOlderNextUpItems) {
@@ -972,7 +975,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     discoveredNextUpItems.removeAll { it.info.contentId == item.info.contentId }
                                     discoveredNextUpItems.add(item)
                                     resolvedSinceLastEmit++
-                                    if (resolvedSinceLastEmit >= 3) {
+                                    if (resolvedSinceLastEmit >= 6) {
                                         resolvedSinceLastEmit = 0
                                         // Partial emit: inject discovered items into UI.
                                         val partialToInject = if (cutoffMs != null) {
@@ -1010,27 +1013,30 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     } != null
                                     if (metaWasResolved) {
                                         conclusivelyProcessedOlderContentIds += seed.contentId
-                                        synchronized(discoveredOlderNextUpItems) {
+                                        val hadDiscovered = synchronized(discoveredOlderNextUpItems) {
                                             discoveredOlderNextUpItems.removeAll { it.info.contentId == seed.contentId }
                                         }
                                         discoveredNextUpItems.removeAll { it.info.contentId == seed.contentId }
-                                        val resolvedItemsToRetain = if (cutoffMs != null) {
-                                            discoveredNextUpItems.filter { resolvedItem ->
-                                                resolvedItem.info.sortTimestamp >= cutoffMs ||
-                                                    resolvedItem.info.isReleaseAlert
+                                        // Only re-emit if a previously visible next-up item was removed
+                                        if (hadDiscovered) {
+                                            val resolvedItemsToRetain = if (cutoffMs != null) {
+                                                discoveredNextUpItems.filter { resolvedItem ->
+                                                    resolvedItem.info.sortTimestamp >= cutoffMs ||
+                                                        resolvedItem.info.isReleaseAlert
+                                                }
+                                            } else {
+                                                discoveredNextUpItems.toList()
                                             }
-                                        } else {
-                                            discoveredNextUpItems.toList()
+                                            applyConclusiveOlderNextUpResults(
+                                                resolvedItems = resolvedItemsToRetain,
+                                                conclusivelyProcessedContentIds =
+                                                    conclusivelyProcessedOlderContentIds.toSet(),
+                                                dismissedNextUpKeys = dismissedNextUp,
+                                                sortMode = continueWatchingSortMode,
+                                                pipelineProfileId = pipelineProfileId,
+                                                persistSnapshot = false
+                                            )
                                         }
-                                        applyConclusiveOlderNextUpResults(
-                                            resolvedItems = resolvedItemsToRetain,
-                                            conclusivelyProcessedContentIds =
-                                                conclusivelyProcessedOlderContentIds.toSet(),
-                                            dismissedNextUpKeys = dismissedNextUp,
-                                            sortMode = continueWatchingSortMode,
-                                            pipelineProfileId = pipelineProfileId,
-                                            persistSnapshot = false
-                                        )
                                         val isOngoing = isPotentialAiringSeries(seed.contentId)
                                         val nextContentMs = cwBadgeNextSeasonMs[seed.contentId]
                                         val deadline = nextContentMs
@@ -1661,7 +1667,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
     cachedNextUp: List<com.nuvio.tv.data.local.CachedNextUpItem> = emptyList(),
     debug: CwDebugSession? = null,
     onPartialUpdate: suspend (List<ContinueWatchingItem.NextUp>) -> Unit = {}
-): List<ContinueWatchingItem.NextUp> = coroutineScope {
+): List<ContinueWatchingItem.NextUp> = withContext(Dispatchers.IO) {
     // Move seed filtering/grouping/sorting off the main thread.
     val (latestCompletedBySeries, inProgressIds) = withContext(Dispatchers.Default) {
         val latestCompletedByContent = allProgress
@@ -1772,7 +1778,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
     )
 
     if (latestCompletedBySeries.isEmpty()) {
-        return@coroutineScope emptyList()
+        return@withContext emptyList()
     }
 
     val lookupSemaphore = Semaphore(CW_MAX_NEXT_UP_CONCURRENCY)
@@ -2860,11 +2866,11 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
                 val tmdbCacheKey = "imdb_for_${progress.contentId}"
                 val cached = synchronized(cwTmdbIdCache) { cwTmdbIdCache[tmdbCacheKey] }
                 if (cached != null) {
-                    cached
+                    cached.takeIf { it.isNotEmpty() }
                 } else {
                     val resolvedImdb = runCatching { tmdbService.tmdbToImdb(numericId, "tv") }.getOrNull()
-                    if (resolvedImdb != null) {
-                        synchronized(cwTmdbIdCache) { cwTmdbIdCache[tmdbCacheKey] = resolvedImdb }
+                    synchronized(cwTmdbIdCache) {
+                        cwTmdbIdCache[tmdbCacheKey] = resolvedImdb ?: ""
                     }
                     resolvedImdb
                 }
