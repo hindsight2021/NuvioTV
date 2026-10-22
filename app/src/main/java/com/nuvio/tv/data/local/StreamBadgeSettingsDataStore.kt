@@ -10,11 +10,16 @@ import com.nuvio.tv.core.streams.StreamBadgeImport
 import com.nuvio.tv.core.streams.StreamBadgePlacement
 import com.nuvio.tv.core.streams.StreamBadgeRules
 import com.nuvio.tv.core.streams.StreamBadgeSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -52,6 +57,10 @@ class StreamBadgeSettingsDataStore @Inject constructor(
     private val streamBadgePlacementKey = stringPreferencesKey("stream_badge_placement")
     private val legacyDebridStreamBadgeRulesKey = stringPreferencesKey("debrid_stream_badge_rules")
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Shared so the badge rules JSON is decoded once per change, not on every
+    // read: the stream screens read these settings for each batch of streams.
     val settings: Flow<StreamBadgeSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.onStart { migrateProfile(pid) }
     }.map { prefs ->
@@ -61,7 +70,7 @@ class StreamBadgeSettingsDataStore @Inject constructor(
             showAddonLogo = prefs[showAddonLogoKey] ?: true,
             badgePlacement = prefs[streamBadgePlacementKey].toStreamBadgePlacement()
         )
-    }
+    }.shareIn(scope, SharingStarted.Eagerly, replay = 1)
 
     suspend fun setStreamBadgeRules(rules: StreamBadgeRules) {
         store().edit {
