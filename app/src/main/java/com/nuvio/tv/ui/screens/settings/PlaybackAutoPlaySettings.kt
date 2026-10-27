@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.runtime.Composable
@@ -87,6 +88,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetPostPlayRecommendationsEnabled: (Boolean) -> Unit,
     onSetPostPlayMovieThresholdPercent: (Int) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
+    onSetAutopilotEnabled: (Boolean) -> Unit = {},
+    onSetAutopilotMode: (com.nuvio.tv.core.autopilot.AutopilotMode) -> Unit = {},
     onSetStreamAutoPlayNextEpisodeFallbackEnabled: (Boolean) -> Unit,
     onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
     onSetStreamAutoPlayReuseBingeGroup: (Boolean) -> Unit,
@@ -226,6 +229,44 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 maxValue = PlayerSettings.MAX_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
                 step = 1,
                 onValueChange = onSetPostPlayMovieThresholdPercent,
+                onFocused = onItemFocused
+            )
+        }
+    }
+
+    item(key = "autopilot_toggle") {
+        ToggleSettingsItem(
+            icon = Icons.Default.FlightTakeoff,
+            title = stringResource(R.string.autopilot_title),
+            subtitle = stringResource(R.string.autopilot_sub),
+            isChecked = playerSettings.autopilotEnabled,
+            onCheckedChange = onSetAutopilotEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    if (playerSettings.autopilotEnabled) {
+        item(key = "autopilot_mode") {
+            val modeTitle = when (playerSettings.autopilotMode) {
+                com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT -> stringResource(R.string.autopilot_mode_default)
+                com.nuvio.tv.core.autopilot.AutopilotMode.AI_CURATED -> stringResource(R.string.autopilot_mode_ai)
+            }
+            val modeSub = when (playerSettings.autopilotMode) {
+                com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT -> stringResource(R.string.autopilot_mode_default_sub)
+                com.nuvio.tv.core.autopilot.AutopilotMode.AI_CURATED -> stringResource(R.string.autopilot_mode_ai_sub)
+            }
+            NavigationSettingsItem(
+                icon = Icons.Default.Tune,
+                title = stringResource(R.string.autopilot_mode_title),
+                subtitle = "$modeTitle • $modeSub",
+                onClick = {
+                    val nextMode = if (playerSettings.autopilotMode == com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT) {
+                        com.nuvio.tv.core.autopilot.AutopilotMode.AI_CURATED
+                    } else {
+                        com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT
+                    }
+                    onSetAutopilotMode(nextMode)
+                },
                 onFocused = onItemFocused
             )
         }

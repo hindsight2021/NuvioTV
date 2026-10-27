@@ -1801,6 +1801,15 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         PlayerEvent.OnStillWatchingContinue -> onStillWatchingContinue()
         PlayerEvent.OnDismissStillWatchingPrompt -> onDismissStillWatchingPrompt()
+        PlayerEvent.OnToggleAutopilot -> onToggleAutopilot()
+        is PlayerEvent.OnSetAutopilotMode -> onSetAutopilotMode(event.mode)
+        PlayerEvent.OnAutopilotPlayNow -> {
+            val candidate = _uiState.value.autopilotCandidate
+            if (candidate != null) {
+                triggerAutopilotPlayback(candidate, userInitiated = true)
+            }
+        }
+        PlayerEvent.OnDismissAutopilot -> dismissAutopilot()
         is PlayerEvent.OnSetSubtitleSize -> {
             scope.launch { playerSettingsDataStore.setSubtitleSize(event.size) }
         }

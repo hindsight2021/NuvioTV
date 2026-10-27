@@ -452,8 +452,21 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
     if (!_uiState.value.error.isNullOrBlank()) return
 
     val state = _uiState.value
-    if (state.nextEpisode == null || nextEpisodeVideo == null) {
-        if (state.postPlayMode != null) {
+    if (state.nextEpisode == null || nextEpisodeVideo == null || state.nextEpisode.hasAired == false) {
+        if (autopilotEnabledSetting) {
+            val effectiveDuration = effectiveDurationEarly
+            val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
+                positionMs = positionMs,
+                durationMs = effectiveDuration,
+                skipIntervals = skipIntervals,
+                thresholdMode = nextEpisodeThresholdModeSetting,
+                thresholdPercent = nextEpisodeThresholdPercentSetting,
+                thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+            )
+            if (shouldShow) {
+                checkAndTriggerAutopilotIfNeeded()
+            }
+        } else if (state.postPlayMode != null) {
             _uiState.update { it.copy(postPlayMode = null) }
         }
         return

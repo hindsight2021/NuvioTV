@@ -269,6 +269,8 @@ data class PlayerSettings(
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
+    val autopilotEnabled: Boolean = false,
+    val autopilotMode: com.nuvio.tv.core.autopilot.AutopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT,
     val postPlayRecommendationsEnabled: Boolean = true,
     val postPlayMovieThresholdPercent: Int = DEFAULT_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
@@ -545,6 +547,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val postPlayMovieThresholdPercentKey = intPreferencesKey("post_play_movie_threshold_percent")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
     private val streamAutoPlayNextEpisodeFallbackEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_fallback_enabled")
+    private val autopilotEnabledKey = booleanPreferencesKey("autopilot_enabled")
+    private val autopilotModeKey = stringPreferencesKey("autopilot_mode")
     private val streamAutoPlayPreferBingeGroupForNextEpisodeKey = booleanPreferencesKey("stream_auto_play_prefer_bingegroup_next_episode")
     private val streamAutoPlayReuseBingeGroupKey = booleanPreferencesKey("stream_auto_play_reuse_binge_group")
     private val streamAutoPlayTimeoutSecondsKey = intPreferencesKey("stream_auto_play_timeout_seconds")
@@ -943,6 +947,10 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
                 streamAutoPlayNextEpisodeFallbackEnabled = prefs[streamAutoPlayNextEpisodeFallbackEnabledKey] ?: true,
+                autopilotEnabled = prefs[autopilotEnabledKey] ?: false,
+                autopilotMode = prefs[autopilotModeKey]?.let {
+                    runCatching { com.nuvio.tv.core.autopilot.AutopilotMode.valueOf(it) }.getOrDefault(com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT)
+                } ?: com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT,
                 streamAutoPlayPreferBingeGroupForNextEpisode =
                     prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: true,
                 streamAutoPlayReuseBingeGroup =
@@ -1332,6 +1340,18 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayNextEpisodeFallbackEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[streamAutoPlayNextEpisodeFallbackEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setAutopilotEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[autopilotEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setAutopilotMode(mode: com.nuvio.tv.core.autopilot.AutopilotMode) {
+        store().edit { prefs ->
+            prefs[autopilotModeKey] = mode.name
         }
     }
 

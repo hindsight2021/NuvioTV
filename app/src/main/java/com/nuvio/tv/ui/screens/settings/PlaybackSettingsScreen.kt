@@ -230,6 +230,12 @@ fun PlaybackSettingsContent(
                 onSetPostPlayMovieThresholdPercent = { percent ->
                     coroutineScope.launch { viewModel.setPostPlayMovieThresholdPercent(percent) }
                 },
+                onSetAutopilotEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setAutopilotEnabled(enabled) }
+                },
+                onSetAutopilotMode = { mode ->
+                    coroutineScope.launch { viewModel.setAutopilotMode(mode) }
+                },
                 onSetStreamAutoPlayNextEpisodeEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStreamAutoPlayNextEpisodeEnabled(enabled) }
                 },

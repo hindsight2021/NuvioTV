@@ -100,6 +100,7 @@ class PlayerViewModel @Inject constructor(
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     private val playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge,
     private val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator,
+    private val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -152,7 +153,8 @@ class PlayerViewModel @Inject constructor(
             ?: profileManager.activeProfileId.value,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope,
-        continueWatchingPreScrapeCoordinator = continueWatchingPreScrapeCoordinator
+        continueWatchingPreScrapeCoordinator = continueWatchingPreScrapeCoordinator,
+        autopilotDecisionEngine = autopilotDecisionEngine
     )
 
     private val postPlayRecommendationController = PostPlayRecommendationController(

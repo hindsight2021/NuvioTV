@@ -63,6 +63,7 @@ import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -158,7 +159,8 @@ fun PlayerScreen(
     onPlaybackErrorBack: () -> Unit = { onBackPress(null, null, null, false, false) },
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?, exitReason: PlayerExitReason?) -> Unit)? = null,
     onPlayRecommendation: (PostPlayRecommendation, manualSelection: Boolean) -> Unit = { _, _ -> },
-    onOpenRecommendationDetails: (PostPlayRecommendation) -> Unit = {}
+    onOpenRecommendationDetails: (PostPlayRecommendation) -> Unit = {},
+    onAutopilotPlay: ((candidate: com.nuvio.tv.core.autopilot.AutopilotCandidate) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val postPlayRecommendationState by viewModel.postPlayRecommendationUiState.collectAsState()
@@ -220,6 +222,18 @@ fun PlayerScreen(
     val currentOnBackPress by rememberUpdatedState(onBackPress)
     val currentOnPlayRecommendation by rememberUpdatedState(onPlayRecommendation)
     val currentOnOpenRecommendationDetails by rememberUpdatedState(onOpenRecommendationDetails)
+    val currentOnAutopilotPlay by rememberUpdatedState(onAutopilotPlay)
+
+    DisposableEffect(viewModel) {
+        viewModel.controller.onAutopilotPlayCallback = { candidate ->
+            viewModel.markCurrentPlaybackCompleted()
+            viewModel.stopAndRelease()
+            currentOnAutopilotPlay?.invoke(candidate)
+        }
+        onDispose {
+            viewModel.controller.onAutopilotPlayCallback = null
+        }
+    }
     val nextEpisodeForEndPrompt = uiState.nextEpisode?.takeIf { it.hasAired }
     val shouldConfirmNextEpisodeOnEnd =
         uiState.playbackEnded &&
@@ -318,6 +332,8 @@ fun PlayerScreen(
             if (skipButtonActuallyVisible) {
                 runCatching { skipIntroFocusRequester.requestFocus() }
             }
+        } else if (uiState.postPlayMode is PostPlayMode.Autopilot) {
+            viewModel.onEvent(PlayerEvent.OnDismissAutopilot)
         } else if (skipButtonActuallyVisible && !uiState.showControls) {
             viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
         } else if (uiState.postPlayMode is PostPlayMode.StillWatching) {
@@ -1186,7 +1202,7 @@ fun PlayerScreen(
             } else {
                 null
             },
-            rightFocusRequester = if (uiState.postPlayMode is PostPlayMode.AutoPlay) nextEpisodeFocusRequester else null,
+            rightFocusRequester = if (uiState.postPlayMode is PostPlayMode.AutoPlay || uiState.postPlayMode is PostPlayMode.Autopilot) nextEpisodeFocusRequester else null,
             onHideControls = {
                 if (uiState.showControls) viewModel.hideControls()
                 else viewModel.onEvent(PlayerEvent.OnToggleControls)
@@ -1220,9 +1236,16 @@ fun PlayerScreen(
             nextEpisodeFocusRequester = nextEpisodeFocusRequester,
             progressBarFocusRequester = if (uiState.showControls) progressBarFocusRequester else null,
             leftFocusRequester = if (skipButtonActuallyVisible) skipIntroFocusRequester else null,
-            onPlayNext = { viewModel.onEvent(PlayerEvent.OnPlayNextEpisode) },
+            onPlayNext = {
+                if (uiState.postPlayMode is PostPlayMode.Autopilot) {
+                    viewModel.onEvent(PlayerEvent.OnAutopilotPlayNow)
+                } else {
+                    viewModel.onEvent(PlayerEvent.OnPlayNextEpisode)
+                }
+            },
             onContinueStillWatching = { viewModel.onEvent(PlayerEvent.OnStillWatchingContinue) },
             onDismissStillWatching = { viewModel.onEvent(PlayerEvent.OnDismissStillWatchingPrompt) },
+            onDismissAutopilot = { viewModel.onEvent(PlayerEvent.OnDismissAutopilot) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 26.dp, bottom = if (uiState.showControls) 122.dp else 30.dp)
@@ -1356,11 +1379,12 @@ fun PlayerScreen(
                 reportCodeVisible = reportCodeVisible,
                 progressBarUpFocusRequester = when {
                     skipButtonActuallyVisible -> skipIntroFocusRequester
-                    uiState.postPlayMode is PostPlayMode.AutoPlay -> nextEpisodeFocusRequester
+                    uiState.postPlayMode is PostPlayMode.AutoPlay || uiState.postPlayMode is PostPlayMode.Autopilot -> nextEpisodeFocusRequester
                     else -> null
                 },
                 onPlayPause = { viewModel.onEvent(PlayerEvent.OnPlayPause) },
                 onPlayNextEpisode = { viewModel.onEvent(PlayerEvent.OnPlayNextEpisode) },
+                onToggleAutopilot = { viewModel.onEvent(PlayerEvent.OnToggleAutopilot) },
                 onSeekForward = { viewModel.onEvent(PlayerEvent.OnSeekForward) },
                 onSeekBackward = { viewModel.onEvent(PlayerEvent.OnSeekBackward) },
                 onSeekTo = { viewModel.onEvent(PlayerEvent.OnSeekTo(it)) },
@@ -1440,6 +1464,17 @@ fun PlayerScreen(
                 .padding(top = 128.dp)
         ) {
             StreamSourceIndicator(text = uiState.streamSourceIndicatorText)
+        }
+
+        AnimatedVisibility(
+            visible = uiState.showAutopilotIndicator,
+            enter = fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
+            exit = fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 128.dp)
+        ) {
+            StreamSourceIndicator(text = uiState.autopilotIndicatorText)
         }
 
         AnimatedVisibility(
@@ -2170,6 +2205,7 @@ private fun PlayerControlsOverlay(
     progressBarUpFocusRequester: FocusRequester? = null,
     onPlayPause: () -> Unit,
     onPlayNextEpisode: () -> Unit,
+    onToggleAutopilot: () -> Unit = {},
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -2437,6 +2473,15 @@ private fun PlayerControlsOverlay(
                             onDownKey = onHideControls,
                             onFocused = onResetHideTimer
                         )
+                        ControlButton(
+                            icon = Icons.Default.Flight,
+                            contentDescription = stringResource(R.string.cd_autopilot),
+                            onClick = onToggleAutopilot,
+                            isActive = uiState.autopilotEnabled,
+                            upFocusRequester = progressUpTarget,
+                            onDownKey = onHideControls,
+                            onFocused = onResetHideTimer
+                        )
                     }
 
                     AnimatedVisibility(
@@ -2504,6 +2549,17 @@ private fun PlayerControlsOverlay(
                                 onDownKey = onHideControls,
                                 onFocused = onResetHideTimer
                             )
+                            if (!hasEpisodeContext) {
+                                ControlButton(
+                                    icon = Icons.Default.Flight,
+                                    contentDescription = stringResource(R.string.cd_autopilot),
+                                    onClick = onToggleAutopilot,
+                                    isActive = uiState.autopilotEnabled,
+                                    upFocusRequester = progressUpTarget,
+                                    onDownKey = onHideControls,
+                                    onFocused = onResetHideTimer
+                                )
+                            }
                             if (uiState.playbackIssueReportsEnabled) {
                                 ReportControlButton(
                                     reportId = uiState.playbackIssueReportId,
@@ -2652,6 +2708,7 @@ private fun ControlButton(
     focusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
     enabled: Boolean = true,
+    isActive: Boolean = false,
     onDownKey: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null
 ) {
@@ -2700,9 +2757,9 @@ private fun ControlButton(
                 if (it.isFocused) onFocused?.invoke()
             },
         colors = IconButtonDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White,
-            contentColor = Color.White,
+            containerColor = if (isActive) Color(0xFF00B4D8).copy(alpha = 0.35f) else Color.Transparent,
+            focusedContainerColor = if (isActive) Color(0xFF90E0EF) else Color.White,
+            contentColor = if (isActive) Color(0xFF90E0EF) else Color.White,
             focusedContentColor = Color.Black
         ),
         shape = IconButtonDefaults.shape(shape = CircleShape)

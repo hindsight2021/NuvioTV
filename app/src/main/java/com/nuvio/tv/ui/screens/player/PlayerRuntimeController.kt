@@ -104,7 +104,8 @@ class PlayerRuntimeController(
     internal val scope: CoroutineScope,
     internal val cinemaLightingController: com.nuvio.tv.core.ha.CinemaLightingController = com.nuvio.tv.core.ha.CinemaLightingController(),
     internal val fourDCinemaAnalyzer: com.nuvio.tv.core.ha.FourDCinemaAnalyzer = com.nuvio.tv.core.ha.FourDCinemaAnalyzer(cinemaLightingController),
-    internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null
+    internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
+    internal val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine? = null
 ) {
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
@@ -481,6 +482,12 @@ class PlayerRuntimeController(
     internal var runtimeInternalPlayerEngineOverride: InternalPlayerEngine? = null
     internal var resolvedAutoPlayerEngine: InternalPlayerEngine? = null
     internal var currentInternalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER
+    internal var autopilotEnabledSetting: Boolean = false
+    internal var autopilotModeSetting: com.nuvio.tv.core.autopilot.AutopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT
+    internal var autopilotJob: kotlinx.coroutines.Job? = null
+    internal var autopilotCountdownJob: kotlinx.coroutines.Job? = null
+    internal var hideAutopilotIndicatorJob: kotlinx.coroutines.Job? = null
+    internal var onAutopilotPlayCallback: ((com.nuvio.tv.core.autopilot.AutopilotCandidate) -> Unit)? = null
     internal var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL
     internal var streamAutoPlayNextEpisodeEnabledSetting: Boolean = false
     internal var streamAutoPlayPreferBingeGroupForNextEpisodeSetting: Boolean = false

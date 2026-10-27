@@ -1169,6 +1169,33 @@ private fun PlaybackNavHost(
                         playOnLoad = false
                     )
                 },
+                onAutopilotPlay = { candidate ->
+                    val resolvedVideoId = candidate.videoId
+                    val resolvedContentType = candidate.contentType.ifBlank { "series" }
+                    val resolvedTitle = candidate.title
+                    val route = Screen.Stream.createRoute(
+                        videoId = resolvedVideoId,
+                        contentType = resolvedContentType,
+                        title = resolvedTitle,
+                        poster = candidate.poster,
+                        backdrop = candidate.thumbnail ?: candidate.poster,
+                        logo = null,
+                        season = candidate.season,
+                        episode = candidate.episode,
+                        episodeName = candidate.episodeTitle,
+                        genres = candidate.genres?.joinToString(","),
+                        year = null,
+                        contentId = candidate.contentId.takeIf { it.isNotBlank() },
+                        contentName = resolvedTitle,
+                        runtime = null,
+                        returnToDetailOnBack = false,
+                        returnToHomeOnBack = true,
+                        profileId = backStackEntry.arguments?.getString("profileId")?.toIntOrNull()
+                    )
+                    navController.navigate(route) {
+                        popUpTo(Screen.Player.route) { inclusive = true }
+                    }
+                },
                 onPlaybackErrorBack = {
                     val returnedToStream = popBackToStream()
                     if (!returnedToStream) {

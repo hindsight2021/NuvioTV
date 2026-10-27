@@ -43,17 +43,29 @@ sealed interface PostPlayMode {
         val countdownSec: Int? = null,
     ) : PostPlayMode
 
+    data class Autopilot(
+        override val nextEpisode: NextEpisodeInfo,
+        val candidate: com.nuvio.tv.core.autopilot.AutopilotCandidate,
+        val autopilotMode: com.nuvio.tv.core.autopilot.AutopilotMode,
+        val aiRationale: String? = null,
+        val countdownSec: Int? = null,
+        val searching: Boolean = false,
+        val sourceName: String? = null,
+    ) : PostPlayMode
+
     fun copyWithNextEpisode(nextEpisode: NextEpisodeInfo): PostPlayMode {
         if (nextEpisode == this.nextEpisode) return this
         return when (this) {
             is AutoPlay -> copy(nextEpisode = nextEpisode)
             is StillWatching -> copy(nextEpisode = nextEpisode)
+            is Autopilot -> copy(nextEpisode = nextEpisode)
         }
     }
 
     fun blocksNaturalCompletion(): Boolean = when (this) {
         is StillWatching -> true
         is AutoPlay -> searching || countdownSec != null
+        is Autopilot -> searching || countdownSec != null
     }
 }
 
@@ -185,11 +197,17 @@ data class PlayerUiState(
     val postPlayDismissedForCurrentEpisode: Boolean = false,
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
+    val autopilotEnabled: Boolean = false,
+    val autopilotMode: com.nuvio.tv.core.autopilot.AutopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT,
+    val autopilotCandidate: com.nuvio.tv.core.autopilot.AutopilotCandidate? = null,
+    val autopilotAiRationale: String? = null,
     val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = false,
     val enableEndCreditsNextEpisodePrompt: Boolean = false,
     // Stream source badge
     val showStreamSourceIndicator: Boolean = false,
     val streamSourceIndicatorText: String = "",
+    val showAutopilotIndicator: Boolean = false,
+    val autopilotIndicatorText: String = "",
     val showPlayerEngineSwitchInfo: Boolean = false,
     val playerEngineSwitchInfoText: String = "",
     // Frame rate matching
@@ -334,6 +352,10 @@ sealed class PlayerEvent {
     data object OnDismissNextEpisodeCard : PlayerEvent()
     data object OnStillWatchingContinue : PlayerEvent()
     data object OnDismissStillWatchingPrompt : PlayerEvent()
+    data object OnToggleAutopilot : PlayerEvent()
+    data class OnSetAutopilotMode(val mode: com.nuvio.tv.core.autopilot.AutopilotMode) : PlayerEvent()
+    data object OnAutopilotPlayNow : PlayerEvent()
+    data object OnDismissAutopilot : PlayerEvent()
 
     // Subtitle style events (for in-player style tab)
     data class OnSetSubtitleSize(val size: Int) : PlayerEvent()

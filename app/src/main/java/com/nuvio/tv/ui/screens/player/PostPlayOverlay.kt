@@ -79,6 +79,7 @@ fun PostPlayOverlay(
     onPlayNext: () -> Unit,
     onContinueStillWatching: () -> Unit,
     onDismissStillWatching: () -> Unit,
+    onDismissAutopilot: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val isAutoPlay = mode is PostPlayMode.AutoPlay
@@ -99,6 +100,7 @@ fun PostPlayOverlay(
         val onCardClick: () -> Unit = when {
             isAutoPlay && isAutoPlayPlayable -> onPlayNext
             mode is PostPlayMode.StillWatching -> onContinueStillWatching
+            mode is PostPlayMode.Autopilot -> onPlayNext
             else -> ({})
         }
         Card(
@@ -156,6 +158,12 @@ fun PostPlayOverlay(
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                         onContinue = onContinueStillWatching,
                         onDismiss = onDismissStillWatching,
+                    )
+                    is PostPlayMode.Autopilot -> AutopilotBody(
+                        mode = current,
+                        blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                        onDismiss = onDismissAutopilot,
+                        onPlay = onPlayNext,
                     )
                     null -> Unit
                 }
@@ -440,4 +448,166 @@ private fun nextEpisodeDisplayLabel(nextEpisode: NextEpisodeInfo): String {
     )
     val localizedTitle = nextEpisode.title.localizeEpisodeTitle(context)
     return "$code • $localizedTitle"
+}
+
+
+@Composable
+private fun AutopilotBody(
+    mode: PostPlayMode.Autopilot,
+    blurUnwatchedEpisodes: Boolean,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit
+) {
+    val candidate = mode.candidate
+    val isAi = mode.autopilotMode == com.nuvio.tv.core.autopilot.AutopilotMode.AI_CURATED
+
+    // Formatted episode code, e.g. "S01E02", when both season and episode are available.
+    val code: String? = if (candidate.season != null && candidate.episode != null) {
+        "S%02dE%02d".format(candidate.season, candidate.episode)
+    } else {
+        null
+    }
+    val displayTitle = if (code != null) "${candidate.title} • $code" else candidate.title
+
+    // Focus management for the action buttons.
+    val playFocusRequester = remember { FocusRequester() }
+    val cancelFocusRequester = remember { FocusRequester() }
+    var playFocused by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        NextEpisodeThumbnail(
+            thumbnail = candidate.thumbnail ?: candidate.poster,
+            contentDescription = stringResource(R.string.autopilot_badge),
+            blurred = blurUnwatchedEpisodes
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Badges row: autopilot pill + mode pill.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF00B4D8).copy(alpha = 0.25f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "✈ " + stringResource(R.string.autopilot_badge).uppercase(),
+                        color = Color(0xFF90E0EF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (isAi) Color(0xFFFFD166).copy(alpha = 0.22f)
+                            else Color.White.copy(alpha = 0.12f)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (isAi) {
+                            "✨ " + stringResource(R.string.autopilot_ai_badge).uppercase()
+                        } else {
+                            stringResource(R.string.autopilot_default_badge).uppercase()
+                        },
+                        color = if (isAi) Color(0xFFFFD166) else Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = displayTitle,
+                color = Color.White,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            if (!candidate.episodeTitle.isNullOrBlank()) {
+                Text(
+                    text = candidate.episodeTitle,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (!mode.aiRationale.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "✨ " + mode.aiRationale,
+                    color = Color(0xFFE0E1DD),
+                    fontSize = 11.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Status line: source search or countdown.
+            val statusText = when {
+                mode.searching -> stringResource(R.string.next_episode_finding_source)
+                mode.countdownSec != null -> "Auto-playing in ${mode.countdownSec}s..."
+                else -> null
+            }
+            if (statusText != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                NextEpisodeStatusLine(text = statusText)
+            }
+        }
+
+        // Action buttons.
+        Row(
+            modifier = Modifier.padding(start = NuvioTheme.spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PostPlayPillButton(
+                icon = Icons.Default.PlayArrow,
+                iconTint = Color.White,
+                label = stringResource(R.string.autopilot_play_now),
+                textColor = Color.White,
+                onClick = onPlay,
+                focusRequester = playFocusRequester,
+                modifier = Modifier
+                    .onPlaced {
+                        if (!playFocused) {
+                            playFocused = true
+                            runCatching { playFocusRequester.requestFocus() }
+                        }
+                    }
+                    .focusProperties { right = cancelFocusRequester }
+            )
+
+            PostPlayPillButton(
+                icon = Icons.Default.Close,
+                iconTint = Color.White.copy(alpha = 0.65f),
+                label = stringResource(R.string.autopilot_cancel),
+                textColor = Color.White.copy(alpha = 0.72f),
+                onClick = onDismiss,
+                focusRequester = cancelFocusRequester,
+                modifier = Modifier.focusProperties { left = playFocusRequester }
+            )
+        }
+    }
 }

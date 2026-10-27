@@ -476,6 +476,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
     }
 
+    suspend fun setAutopilotEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setAutopilotEnabled(enabled)
+    }
+
+    suspend fun setAutopilotMode(mode: com.nuvio.tv.core.autopilot.AutopilotMode) {
+        playerSettingsDataStore.setAutopilotMode(mode)
+    }
+
     suspend fun setStreamAutoPlayNextEpisodeFallbackEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeFallbackEnabled(enabled)
     }

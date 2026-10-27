@@ -88,4 +88,65 @@ class PostPlayModeTest {
     fun `blocksNaturalCompletion is false for passive AutoPlay card`() {
         assertFalse(PostPlayMode.AutoPlay(nextEpisode = episodeA).blocksNaturalCompletion())
     }
+
+    private val dummyCandidate = com.nuvio.tv.core.autopilot.AutopilotCandidate(
+        contentId = "c1",
+        contentType = "series",
+        title = "Show C",
+        videoId = "v3",
+        season = 1,
+        episode = 1
+    )
+
+    @Test
+    fun `copyWithNextEpisode replaces episode on Autopilot variant and preserves other fields`() {
+        val mode = PostPlayMode.Autopilot(
+            nextEpisode = episodeA,
+            candidate = dummyCandidate,
+            autopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.AI_CURATED,
+            aiRationale = "Great follow-up",
+            countdownSec = 5,
+            searching = true,
+            sourceName = "SourceA"
+        )
+
+        val updated = mode.copyWithNextEpisode(episodeAEnriched)
+
+        assertTrue(updated is PostPlayMode.Autopilot)
+        updated as PostPlayMode.Autopilot
+        assertEquals(episodeAEnriched, updated.nextEpisode)
+        assertEquals(dummyCandidate, updated.candidate)
+        assertEquals(com.nuvio.tv.core.autopilot.AutopilotMode.AI_CURATED, updated.autopilotMode)
+        assertEquals("Great follow-up", updated.aiRationale)
+        assertEquals(5, updated.countdownSec)
+        assertEquals(true, updated.searching)
+        assertEquals("SourceA", updated.sourceName)
+    }
+
+    @Test
+    fun `blocksNaturalCompletion is true for Autopilot only while searching or counting down`() {
+        assertTrue(
+            PostPlayMode.Autopilot(
+                nextEpisode = episodeA,
+                candidate = dummyCandidate,
+                autopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT,
+                searching = true
+            ).blocksNaturalCompletion()
+        )
+        assertTrue(
+            PostPlayMode.Autopilot(
+                nextEpisode = episodeA,
+                candidate = dummyCandidate,
+                autopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT,
+                countdownSec = 3
+            ).blocksNaturalCompletion()
+        )
+        assertFalse(
+            PostPlayMode.Autopilot(
+                nextEpisode = episodeA,
+                candidate = dummyCandidate,
+                autopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT
+            ).blocksNaturalCompletion()
+        )
+    }
 }

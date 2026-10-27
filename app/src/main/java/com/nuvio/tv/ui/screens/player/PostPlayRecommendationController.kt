@@ -136,8 +136,9 @@ internal class PostPlayRecommendationController(
                     playbackEnded = playerState.playbackEnded,
                     positionMs = timeline.currentPosition,
                     durationMs = timeline.duration,
-                    hasActiveAutoPlay = playerState.postPlayMode is PostPlayMode.AutoPlay &&
-                        playerState.nextEpisode?.hasAired == true
+                    hasActiveAutoPlay = (playerState.postPlayMode is PostPlayMode.AutoPlay &&
+                        playerState.nextEpisode?.hasAired == true) ||
+                        playerState.postPlayMode is PostPlayMode.Autopilot
                 )
             }
                 .distinctUntilChanged()
