@@ -159,8 +159,40 @@ object NetworkModule {
             .cache(Cache(File(context.cacheDir, "addon_http_cache"), 50L * 1024 * 1024))
             .sslSocketFactory(sslContext.socketFactory, trustAllManager)
             .hostnameVerifier { _, _ -> true }
+            .addNetworkInterceptor(AddonPermissiveCacheInterceptor())
             .build()
     }
+
+private class AddonPermissiveCacheInterceptor : okhttp3.Interceptor {
+    override fun intercept(chain: okhttp3.Interceptor.Chain): okhttp3.Response {
+        val request = chain.request()
+        if (!request.method.equals("GET", ignoreCase = true)) {
+            return chain.proceed(request)
+        }
+
+        val path = request.url.encodedPath
+        if (!path.contains("/catalog/") && !path.endsWith("/manifest.json")) {
+            return chain.proceed(request)
+        }
+
+        val response = chain.proceed(request)
+        if (!response.isSuccessful) {
+            return response
+        }
+
+        val originCacheControl = response.header("Cache-Control")
+        if (!originCacheControl.isNullOrBlank()) {
+            val lower = originCacheControl.lowercase()
+            if (lower.contains("max-age") || lower.contains("no-store")) {
+                return response
+            }
+        }
+
+        return response.newBuilder()
+            .header("Cache-Control", "public, max-age=600, stale-while-revalidate=1800")
+            .build()
+    }
+}
 
     @Provides
     @Singleton

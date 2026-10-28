@@ -548,6 +548,46 @@ internal fun HomeViewModel.loadCatalogPipeline(
     registerCatalogLoadJob(loadJob)
 }
 
+internal fun HomeViewModel.applyPagedCatalogRowUpdate(key: String, row: CatalogRow) {
+    if (_uiState.value.homeLayout == HomeLayout.GRID) {
+        scheduleUpdateCatalogRows()
+        return
+    }
+
+    val state = _uiState.value
+    val updatedRow = if (state.hideUnreleasedContent) {
+        row.filterReleasedItems(LocalDate.now())
+    } else {
+        row
+    }
+
+    _uiState.update { current ->
+        current.copy(
+            catalogRows = current.catalogRows.map { existing ->
+                if (catalogKey(existing.addonId, existing.apiType, existing.catalogId) == key) {
+                    updatedRow
+                } else {
+                    existing
+                }
+            },
+            homeRows = current.homeRows.map { homeRow ->
+                if (
+                    homeRow is HomeRow.Catalog &&
+                    catalogKey(
+                        homeRow.row.addonId,
+                        homeRow.row.apiType,
+                        homeRow.row.catalogId
+                    ) == key
+                ) {
+                    homeRow.copy(row = updatedRow)
+                } else {
+                    homeRow
+                }
+            }
+        )
+    }
+}
+
 internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addonId: String, type: String) {
     val key = catalogKey(addonId = addonId, type = type, catalogId = catalogId)
     val currentRow = readCatalogRow(key)
@@ -586,17 +626,24 @@ internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addon
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    updateCatalogRow(key) { latestRow ->
-                        val mergedRow = latestRow.mergeCatalogPage(result.data)
-                        mergedRow
+                    val mergedRow = updateCatalogRow(key) { latestRow ->
+                        latestRow.mergeCatalogPage(result.data)
                     }
                     _loadingCatalogs.update { it - key }
-                    scheduleUpdateCatalogRows()
+                    if (mergedRow != null) {
+                        applyPagedCatalogRowUpdate(key, mergedRow)
+                    } else {
+                        scheduleUpdateCatalogRows()
+                    }
                 }
                 is NetworkResult.Error -> {
-                    updateCatalogRow(key) { it.copy(isLoading = false) }
+                    val updated = updateCatalogRow(key) { it.copy(isLoading = false) }
                     _loadingCatalogs.update { it - key }
-                    scheduleUpdateCatalogRows()
+                    if (updated != null) {
+                        applyPagedCatalogRowUpdate(key, updated)
+                    } else {
+                        scheduleUpdateCatalogRows()
+                    }
                 }
                 NetworkResult.Loading -> { }
             }

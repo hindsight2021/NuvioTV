@@ -61,6 +61,7 @@ fun AiSettingsContent(
     var currentKey by remember { mutableStateOf(prefs.getApiKey(activeProvider)) }
     var currentModel by remember { mutableStateOf(prefs.getModel(activeProvider)) }
     var isTtsEnabled by remember { mutableStateOf(prefs.isTtsEnabled) }
+    var isSearchTtsEnabled by remember { mutableStateOf(prefs.isSearchTtsEnabled) }
     var isAiSearchEnabled by remember { mutableStateOf(prefs.isAiSearchEnabled) }
     var currentVoicePersona by remember { mutableStateOf(prefs.ttsVoicePersona) }
     var customPersona by remember { mutableStateOf(prefs.customPersona) }
@@ -75,6 +76,7 @@ fun AiSettingsContent(
         currentKey = prefs.getApiKey(activeProvider)
         currentModel = prefs.getModel(activeProvider)
         isTtsEnabled = prefs.isTtsEnabled
+        isSearchTtsEnabled = prefs.isSearchTtsEnabled
         isAiSearchEnabled = prefs.isAiSearchEnabled
         currentVoicePersona = prefs.ttsVoicePersona
         customPersona = prefs.customPersona
@@ -144,13 +146,26 @@ fun AiSettingsContent(
 
                     item(key = "ai_tts") {
                         SettingsToggleRow(
-                            title = "Voice Talk-Back (TTS)",
-                            subtitle = "AI speaks movie recommendations and answers aloud over TV speakers.",
+                            title = "Voice Reviews (Chic Critic)",
+                            subtitle = "Speak movie and TV reviews aloud with personality over TV speakers.",
                             checked = isTtsEnabled,
                             onToggle = {
                                 val next = !isTtsEnabled
                                 isTtsEnabled = next
                                 prefs.isTtsEnabled = next
+                            }
+                        )
+                    }
+
+                    item(key = "ai_search_tts") {
+                        SettingsToggleRow(
+                            title = "Search Voice Talk-Back",
+                            subtitle = "Automatically speak AI search answers and recommendations aloud. (Off by default)",
+                            checked = isSearchTtsEnabled,
+                            onToggle = {
+                                val next = !isSearchTtsEnabled
+                                isSearchTtsEnabled = next
+                                prefs.isSearchTtsEnabled = next
                             }
                         )
                     }

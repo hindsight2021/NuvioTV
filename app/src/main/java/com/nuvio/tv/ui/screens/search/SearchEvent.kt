@@ -23,5 +23,6 @@ sealed interface SearchEvent {
 
     data class QueryAi(val prompt: String) : SearchEvent
     data object ClearAiChat : SearchEvent
+    data object SpeakAiResponse : SearchEvent
     data object StopAiTts : SearchEvent
 }

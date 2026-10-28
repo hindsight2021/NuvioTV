@@ -364,7 +364,7 @@ class HomeViewModel @Inject constructor(
             observeLayoutPreferences()
             observeModernHomePresentation()
             loadContinueWatching()
-            watchedSeriesStateHolder.loadFromDisk()
+            launch { watchedSeriesStateHolder.loadFromDisk() }
             observeExternalMetaPrefetchPreference()
             observeContinueWatchingSortMode()
             loadHomeCatalogOrderPreference()
@@ -948,24 +948,25 @@ class HomeViewModel @Inject constructor(
         loadMoreCatalogItemsPipeline(catalogId, addonId, type)
 
     internal fun scheduleUpdateCatalogRows() {
-        catalogUpdateJob?.cancel()
+        if (catalogUpdateJob?.isActive == true) return
         catalogUpdateJob = viewModelScope.launch {
             val debounceMs = when {
                 // First render: use a moderate debounce so near-simultaneous
                 // catalog arrivals are batched into a single heavy update pass.
                 !hasRenderedFirstCatalog && hasAnyCatalogRows() -> {
                     hasRenderedFirstCatalog = true
-                    150L
+                    100L
                 }
                 // During bulk loading, batch aggressively — placeholders are
                 // already visible so the user won't notice the delay.
-                pendingCatalogLoads > 8 -> 300L
-                pendingCatalogLoads > 3 -> 250L
-                pendingCatalogLoads > 0 -> 200L
-                else -> 80L
+                pendingCatalogLoads > 8 -> 180L
+                pendingCatalogLoads > 3 -> 120L
+                pendingCatalogLoads > 0 -> 80L
+                else -> 50L
             }
             delay(debounceMs)
             updateCatalogRows()
+            hasRenderedFirstCatalog = true
         }
     }
 

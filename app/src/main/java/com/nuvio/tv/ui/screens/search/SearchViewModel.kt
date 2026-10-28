@@ -267,6 +267,7 @@ class SearchViewModel @Inject constructor(
             }
             is SearchEvent.QueryAi -> queryAi(event.prompt)
             SearchEvent.ClearAiChat -> clearAiChat()
+            SearchEvent.SpeakAiResponse -> speakAiResponse()
             SearchEvent.StopAiTts -> stopAiTts()
         }
     }
@@ -1267,7 +1268,7 @@ class SearchViewModel @Inject constructor(
                     )
                 }
 
-                if (aiPreferences.isTtsEnabled) {
+                if (aiPreferences.isSearchTtsEnabled) {
                     aiTtsPlayer?.speak(response.spokenResponse)
                 }
 
@@ -1295,6 +1296,11 @@ class SearchViewModel @Inject constructor(
                 aiHistory = emptyList()
             )
         }
+    }
+
+    fun speakAiResponse() {
+        val text = _uiState.value.aiResponse?.spokenResponse ?: return
+        aiTtsPlayer?.speak(text)
     }
 
     fun stopAiTts() {

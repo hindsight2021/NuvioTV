@@ -55,6 +55,7 @@ fun AiConversationalCard(
     providerName: String,
     onQuestionClick: (String) -> Unit,
     onDismiss: () -> Unit,
+    onSpeakToggle: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val cardShape = RoundedCornerShape(16.dp)
@@ -113,21 +114,45 @@ fun AiConversationalCard(
                     )
                 }
 
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.colors(
-                        containerColor = Color.White.copy(alpha = 0.1f),
-                        contentColor = NuvioTheme.colors.TextSecondary,
-                        focusedContainerColor = Color.White.copy(alpha = 0.25f),
-                        focusedContentColor = Color.White
-                    ),
-                    shape = ButtonDefaults.shape(shape = RoundedCornerShape(8.dp)),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Dismiss",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    if (onSpeakToggle != null && response != null) {
+                        Button(
+                            onClick = onSpeakToggle,
+                            colors = ButtonDefaults.colors(
+                                containerColor = Color.White.copy(alpha = 0.1f),
+                                contentColor = NuvioTheme.colors.TextSecondary,
+                                focusedContainerColor = Color.White.copy(alpha = 0.25f),
+                                focusedContentColor = Color.White
+                            ),
+                            shape = ButtonDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "🔊 Read Aloud",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.1f),
+                            contentColor = NuvioTheme.colors.TextSecondary,
+                            focusedContainerColor = Color.White.copy(alpha = 0.25f),
+                            focusedContentColor = Color.White
+                        ),
+                        shape = ButtonDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Dismiss",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
 

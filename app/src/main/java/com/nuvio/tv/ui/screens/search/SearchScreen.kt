@@ -690,6 +690,9 @@ fun SearchScreen(
                         },
                         onDismiss = {
                             viewModel.onEvent(SearchEvent.ClearAiChat)
+                        },
+                        onSpeakToggle = {
+                            viewModel.onEvent(SearchEvent.SpeakAiResponse)
                         }
                     )
                 }
@@ -1013,6 +1016,9 @@ fun SearchScreen(
                                     },
                                     onDismiss = {
                                         viewModel.onEvent(SearchEvent.ClearAiChat)
+                        },
+                        onSpeakToggle = {
+                            viewModel.onEvent(SearchEvent.SpeakAiResponse)
                                     }
                                 )
                             }

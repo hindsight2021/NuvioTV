@@ -21,6 +21,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -34,6 +35,19 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 private const val TMDB_HERO_ENRICHMENT_CONCURRENCY = 4
+
+@OptIn(FlowPreview::class)
+private fun <T> Flow<T>.debounceSubsequent(timeoutMillis: Long): Flow<T> {
+    var isFirst = true
+    return debounce {
+        if (isFirst) {
+            isFirst = false
+            0L
+        } else {
+            timeoutMillis
+        }
+    }
+}
 
 private data class CoreLayoutPrefs(
     val layout: HomeLayout,
@@ -257,7 +271,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             )
         }
             .distinctUntilChanged()
-            .debounce(300)
+            .debounceSubsequent(300L)
             .collectLatest { prefs ->
                 val effectivePosterLabelsEnabled = if (prefs.layout == HomeLayout.MODERN) {
                     false

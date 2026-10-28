@@ -43,6 +43,10 @@ class AiPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_AI_SEARCH_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_AI_SEARCH_ENABLED, value).apply()
 
+    var isSearchTtsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SEARCH_TTS_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SEARCH_TTS_ENABLED, value).apply()
+
     var ttsVoicePersona: AiVoicePersona
         get() {
             val id = prefs.getString(KEY_TTS_VOICE_PERSONA, AiVoicePersona.CHIC_CRITIC_BRITISH.id)
@@ -69,6 +73,7 @@ class AiPreferences(context: Context) {
         private const val KEY_MODEL_PREFIX = "ai_model_"
         private const val KEY_AI_SEARCH_ENABLED = "ai_search_enabled"
         private const val KEY_TTS_ENABLED = "ai_tts_enabled"
+        private const val KEY_SEARCH_TTS_ENABLED = "ai_search_tts_enabled"
         private const val KEY_TTS_VOICE_PERSONA = "ai_tts_voice_persona"
         private const val KEY_PERSONA = "ai_persona"
 
