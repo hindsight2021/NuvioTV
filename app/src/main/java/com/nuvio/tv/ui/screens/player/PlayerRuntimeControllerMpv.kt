@@ -250,7 +250,7 @@ internal fun PlayerRuntimeController.releaseForBackground() {
     if (isUsingMpvEngine() || pendingBackgroundCrashRecovery) return
     val player = _exoPlayer ?: return
     if (currentStreamUrl.isEmpty()) return
-    backgroundCrashSavedPositionMs = if (_uiState.value.isLive) 0L else player.currentPosition.coerceAtLeast(0L)
+    backgroundCrashSavedPositionMs = if (_playbackTimeline.value.isLive) 0L else player.currentPosition.coerceAtLeast(0L)
     // Pausing while buffering fires no isPlaying change, so neither the pause save nor the pause
     // scrobble ran; do both while the player still reports a position.
     saveWatchProgress()

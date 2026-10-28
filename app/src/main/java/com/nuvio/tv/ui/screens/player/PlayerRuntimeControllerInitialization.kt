@@ -1002,7 +1002,6 @@ internal fun PlayerRuntimeController.initializePlayer(
 
             disposeExoPlayerBeforeRebuild()
             delay(PLAYER_REBUILD_SETTLE_DELAY_MS)
-            if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
             // Left the foreground while preparing: build on return instead of claiming a decoder
             // the foreground app may need. The resume rebuild uses currentStreamUrl.
             if (isInBackground && url == currentStreamUrl) {
