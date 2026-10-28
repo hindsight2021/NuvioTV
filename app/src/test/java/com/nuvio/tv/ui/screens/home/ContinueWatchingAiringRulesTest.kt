@@ -1119,27 +1119,31 @@ class ContinueWatchingAiringRulesTest {
         )
 
         // Verify date-only fallback for the same show:
-        // "2026-10-29" in PDT -> midnight Oct 29 PDT = 07:00Z
+        // Plain date strings start at UTC midnight (00:00:00Z)
         val dateOnly = "2026-10-29"
+        val beforeUtcMidnight = Clock.fixed(
+            Instant.parse("2026-10-28T23:59:59Z"),
+            ZoneId.of("America/Los_Angeles")
+        )
         assertFalse(
-            "Date-only release must NOT be aired before local midnight",
+            "Date-only release must NOT be aired before UTC midnight",
             isEpisodeReleaseAired(
                 raw = dateOnly,
-                clock = preAirClock, // 10:30 PM PDT Oct 28
+                clock = beforeUtcMidnight,
                 airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
                 postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
             ) == true
         )
 
-        val postMidnightClock = Clock.fixed(
-            Instant.parse("2026-10-29T08:00:00Z"), // midnight PDT (07:00Z) + 1h buffer
+        val postUtcMidnightClock = Clock.fixed(
+            Instant.parse("2026-10-29T01:00:00Z"), // UTC midnight + 1h buffer
             ZoneId.of("America/Los_Angeles")
         )
         assertTrue(
-            "Date-only release must be aired at local midnight + buffer",
+            "Date-only release must be aired at UTC midnight + buffer",
             isEpisodeReleaseAired(
                 raw = dateOnly,
-                clock = postMidnightClock,
+                clock = postUtcMidnightClock,
                 airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
                 postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
             ) == true

@@ -7,6 +7,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 private val ISO_DATE_PATTERN = Regex("(?<!\\d)\\d{4}-\\d{2}-\\d{2}(?!\\d)")
@@ -65,8 +66,8 @@ internal fun parseEpisodeReleaseInstant(
 
     return parseExplicitReleaseInstant(value)
         ?: runCatching { LocalDateTime.parse(value).atZone(zoneId).toInstant() }.getOrNull()
-        ?: runCatching { LocalDate.parse(value).atStartOfDay(zoneId).toInstant() }.getOrNull()
-        ?: parseEmbeddedReleaseDate(value)?.atStartOfDay(zoneId)?.toInstant()
+        ?: runCatching { LocalDate.parse(value).atStartOfDay(ZoneOffset.UTC).toInstant() }.getOrNull()
+        ?: parseEmbeddedReleaseDate(value)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
 }
 
 /**
