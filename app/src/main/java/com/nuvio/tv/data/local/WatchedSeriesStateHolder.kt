@@ -37,8 +37,10 @@ class WatchedSeriesStateHolder @Inject constructor(
         private val KEY = stringSetPreferencesKey("fully_watched_ids")
         private val REVALIDATE_KEY = stringPreferencesKey("revalidate_after")
         private val VALIDATION_RESET_KEY = intPreferencesKey("validation_reset_version")
+        private val ONGOING_KEY = stringSetPreferencesKey("ongoing_series_ids")
         private const val VALIDATION_RESET_VERSION = 3
         private const val DEFAULT_TTL_MS = 24L * 60 * 60 * 1000 // 24 hours (1 day)
+        private const val ONGOING_TTL_MS = 2L * 60 * 60 * 1000 // 2 hours
         private const val MAX_DEADLINE_THRESHOLD = Long.MAX_VALUE - 1000L
     }
 
@@ -46,6 +48,9 @@ class WatchedSeriesStateHolder @Inject constructor(
     private val gson = Gson()
     private val _fullyWatchedSeriesIds = MutableStateFlow<Set<String>>(emptySet())
     val fullyWatchedSeriesIds: StateFlow<Set<String>> = _fullyWatchedSeriesIds.asStateFlow()
+
+    private val _ongoingSeriesIds = MutableStateFlow<Set<String>>(emptySet())
+    val ongoingSeriesIds: StateFlow<Set<String>> = _ongoingSeriesIds.asStateFlow()
 
     /** Per-series revalidation deadline (contentId → epochMs when re-check is needed). */
     @Volatile
@@ -59,6 +64,8 @@ class WatchedSeriesStateHolder @Inject constructor(
         if (loadedForProfileId == profileId) return
         val prefs = store(profileId).data.first()
         val persisted = prefs[KEY] ?: emptySet()
+        val persistedOngoing = prefs[ONGOING_KEY] ?: emptySet()
+        _ongoingSeriesIds.value = persistedOngoing
         val resetVersion = prefs[VALIDATION_RESET_KEY] ?: 0
         if (resetVersion < VALIDATION_RESET_VERSION) {
             revalidateAfterMap = emptyMap()
@@ -89,6 +96,7 @@ class WatchedSeriesStateHolder @Inject constructor(
     /** Clear in-memory state only — does NOT touch DataStore on disk. */
     fun clearInMemory() {
         _fullyWatchedSeriesIds.value = emptySet()
+        _ongoingSeriesIds.value = emptySet()
         revalidateAfterMap = emptyMap()
     }
 
@@ -108,11 +116,16 @@ class WatchedSeriesStateHolder @Inject constructor(
         _fullyWatchedSeriesIds.value = ids
         val now = System.currentTimeMillis()
         val defaultDeadline = now + DEFAULT_TTL_MS
+        val ongoingDeadline = now + ONGOING_TTL_MS
         val updated = revalidateAfterMap.toMutableMap()
         var deadlinesChanged = false
         validatedIds.forEach { id ->
             if (id in ids) {
-                val newDeadline = revalidateAt[id] ?: defaultDeadline
+                var newDeadline = revalidateAt[id] ?: defaultDeadline
+                // Ongoing series must be revalidated promptly — cap the deadline.
+                if (isOngoingSeries(id) && newDeadline > ongoingDeadline) {
+                    newDeadline = ongoingDeadline
+                }
                 if (newDeadline < MAX_DEADLINE_THRESHOLD) {
                     if (updated[id] != newDeadline) {
                         updated[id] = newDeadline
@@ -150,6 +163,7 @@ class WatchedSeriesStateHolder @Inject constructor(
      * Returns true if the given series does not yet need re-validation.
      */
     fun isSeriesValidationFresh(contentId: String): Boolean {
+        if (isOngoingSeries(contentId)) return false
         if (contentId !in _fullyWatchedSeriesIds.value) return false
         val deadline = revalidateAfterMap[contentId] ?: return false
         if (deadline >= MAX_DEADLINE_THRESHOLD) return false
@@ -185,6 +199,45 @@ class WatchedSeriesStateHolder @Inject constructor(
             now >= deadline
         }.toSet()
     }
+
+    /**
+     * Marks or unmarks a single series as ongoing/actively-airing.
+     * Ongoing series are never locked out by caught-up deadlines and are
+     * revalidated promptly.
+     */
+    fun markOngoing(
+        contentId: String,
+        isOngoing: Boolean,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        val current = _ongoingSeriesIds.value
+        val updated = if (isOngoing) current + contentId else current - contentId
+        if (updated == current) return
+        _ongoingSeriesIds.value = updated
+        scope.launch {
+            store(profileId).edit { prefs -> prefs[ONGOING_KEY] = updated }
+        }
+    }
+
+    /**
+     * Batch marks or unmarks series as ongoing/actively-airing.
+     */
+    fun markOngoingBatch(
+        contentIds: Set<String>,
+        isOngoing: Boolean,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        val current = _ongoingSeriesIds.value
+        val updated = if (isOngoing) current + contentIds else current - contentIds
+        if (updated == current) return
+        _ongoingSeriesIds.value = updated
+        scope.launch {
+            store(profileId).edit { prefs -> prefs[ONGOING_KEY] = updated }
+        }
+    }
+
+    /** Returns true if the given series is currently marked as ongoing/actively-airing. */
+    fun isOngoingSeries(contentId: String): Boolean = contentId in _ongoingSeriesIds.value
 
     private fun parseTimestamps(json: String?): Map<String, Long> {
         if (json.isNullOrBlank()) return emptyMap()

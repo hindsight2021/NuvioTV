@@ -871,7 +871,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             if (
                                 cutoffMs == null ||
                                 item.info.sortTimestamp >= cutoffMs ||
-                                item.info.isReleaseAlert
+                                item.info.isReleaseAlert ||
+                                isPotentialAiringSeries(seed.contentId)
                             ) {
                                 resolvedOlderNextUpContentIds += seed.contentId
                             }
@@ -896,7 +897,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     val cachedOlderToInject = if (cutoffMs != null) {
                         synchronized(discoveredOlderNextUpItems) {
                             discoveredOlderNextUpItems.filter { item ->
-                                item.info.sortTimestamp >= cutoffMs || item.info.isReleaseAlert
+                                item.info.sortTimestamp >= cutoffMs || item.info.isReleaseAlert || isPotentialAiringSeries(item.info.contentId)
                             }
                         }
                     } else {
@@ -918,8 +919,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         (!fullyWatchedSeriesIds.isSeriesValidationFresh(seed.contentId) || isPotentialAiringSeries(seed.contentId)) &&
                             seed.contentId !in cwProcessedOlderSeedContentIds
                     }
-                        .sortedByDescending { it.lastWatched }
-                        .take(24)
+                        .sortedWith(
+                            compareByDescending<WatchProgress> { isPotentialAiringSeries(it.contentId) }
+                                .thenByDescending { it.lastWatched }
+                        )
+                        .take(48)
                     if (uncachedSeeds.isNotEmpty()) {
                         launch(Dispatchers.IO) {
                             delay(1200L) // Wait for initial UI rendering to settle before background scan
@@ -953,8 +957,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     if (
                                         cutoffMs == null ||
                                         item.info.sortTimestamp >= cutoffMs ||
-                                        item.info.isReleaseAlert
-                                    ) {
+                                        item.info.isReleaseAlert ||
+                                        isPotentialAiringSeries(seed.contentId)
+                            ) {
                                         resolvedOlderNextUpContentIds += seed.contentId
                                     }
                                     // Same mid-season case as the lightweight path.
@@ -975,26 +980,30 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     discoveredNextUpItems.removeAll { it.info.contentId == item.info.contentId }
                                     discoveredNextUpItems.add(item)
                                     resolvedSinceLastEmit++
-                                    if (resolvedSinceLastEmit >= 6) {
+                                    if (resolvedSinceLastEmit >= 1) {
                                         resolvedSinceLastEmit = 0
-                                        // Partial emit: inject discovered items into UI.
+                                        // Partial emit: inject discovered items into UI immediately.
                                         val partialToInject = if (cutoffMs != null) {
                                             discoveredNextUpItems.filter { resolvedItem ->
-                                                resolvedItem.info.sortTimestamp >= cutoffMs || resolvedItem.info.isReleaseAlert
+                                                resolvedItem.info.sortTimestamp >= cutoffMs ||
+                                                    resolvedItem.info.isReleaseAlert ||
+                                                    isPotentialAiringSeries(resolvedItem.info.contentId)
                                             }
                                         } else {
                                             discoveredNextUpItems.toList()
                                         }
                                         if (partialToInject.isNotEmpty()) {
-                                            applyConclusiveOlderNextUpResults(
-                                                resolvedItems = partialToInject,
-                                                conclusivelyProcessedContentIds =
-                                                    conclusivelyProcessedOlderContentIds.toSet(),
-                                                dismissedNextUpKeys = dismissedNextUp,
-                                                sortMode = continueWatchingSortMode,
-                                                pipelineProfileId = pipelineProfileId,
-                                                persistSnapshot = false
-                                            )
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                                                applyConclusiveOlderNextUpResults(
+                                                    resolvedItems = partialToInject,
+                                                    conclusivelyProcessedContentIds =
+                                                        conclusivelyProcessedOlderContentIds.toSet(),
+                                                    dismissedNextUpKeys = dismissedNextUp,
+                                                    sortMode = continueWatchingSortMode,
+                                                    pipelineProfileId = pipelineProfileId,
+                                                    persistSnapshot = true
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
@@ -1022,7 +1031,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                             val resolvedItemsToRetain = if (cutoffMs != null) {
                                                 discoveredNextUpItems.filter { resolvedItem ->
                                                     resolvedItem.info.sortTimestamp >= cutoffMs ||
-                                                        resolvedItem.info.isReleaseAlert
+                                                        resolvedItem.info.isReleaseAlert ||
+                                                        isPotentialAiringSeries(resolvedItem.info.contentId)
                                                 }
                                             } else {
                                                 discoveredNextUpItems.toList()
@@ -1062,7 +1072,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             if (conclusivelyProcessedOlderContentIds.isNotEmpty()) {
                                 val itemsToInject = if (cutoffMs != null) {
                                     discoveredNextUpItems.filter { item ->
-                                        item.info.sortTimestamp >= cutoffMs || item.info.isReleaseAlert
+                                        item.info.sortTimestamp >= cutoffMs ||
+                                            item.info.isReleaseAlert ||
+                                            isPotentialAiringSeries(item.info.contentId)
                                     }
                                 } else {
                                     discoveredNextUpItems.toList()
@@ -1489,24 +1501,47 @@ private fun resolveVideoForProgress(progress: WatchProgress, meta: CwMetaSummary
 }
 
 private fun HomeViewModel.isPotentialAiringSeries(contentId: String): Boolean {
-    val cachedMeta = synchronized(cwMetaCache) {
-        cwMetaCache["series:$contentId"]
-            ?: cwMetaCache["tv:$contentId"]
-            ?: cwMetaCache.entries.firstOrNull { it.key.endsWith(":$contentId") }?.value
-    } ?: metaRepository.getCachedMeta("series", contentId)?.toCwSummary()
-      ?: metaRepository.getCachedMeta("tv", contentId)?.toCwSummary()
+    // Fast path: check disk-persisted ongoing series first (cold start recognition)
+    if (fullyWatchedSeriesIds.isOngoingSeries(contentId)) return true
 
-    if (isOngoingSeries(cachedMeta?.releaseInfo, cachedMeta?.status)) return true
+    val canonicalId = resolveCanonicalClusterKey(contentId, cwLastShowIdSiblings)
+    if (canonicalId != contentId && fullyWatchedSeriesIds.isOngoingSeries(canonicalId)) return true
+
+    fun lookupMeta(id: String): CwMetaSummary? {
+        val fromCache = synchronized(cwMetaCache) {
+            cwMetaCache["series:$id"]
+                ?: cwMetaCache["tv:$id"]
+                ?: cwMetaCache.entries.firstOrNull { it.key.endsWith(":$id") }?.value
+        }
+        return fromCache
+            ?: metaRepository.getCachedMeta("series", id)?.toCwSummary()
+            ?: metaRepository.getCachedMeta("tv", id)?.toCwSummary()
+    }
+
+    val cachedMeta = lookupMeta(contentId)
+        ?: if (canonicalId != contentId) lookupMeta(canonicalId) else null
+
+    if (isOngoingSeries(cachedMeta?.releaseInfo, cachedMeta?.status)) {
+        fullyWatchedSeriesIds.markOngoing(contentId, true)
+        if (canonicalId != contentId) fullyWatchedSeriesIds.markOngoing(canonicalId, true)
+        return true
+    }
+
     val cached = synchronized(cwEnrichedNextUpOverlay) {
         cwEnrichedNextUpOverlay[contentId]
+            ?: if (canonicalId != contentId) cwEnrichedNextUpOverlay[canonicalId] else null
     }
-    if (isOngoingSeries(cached?.releaseInfo)) return true
+    if (isOngoingSeries(cached?.releaseInfo)) {
+        fullyWatchedSeriesIds.markOngoing(contentId, true)
+        if (canonicalId != contentId) fullyWatchedSeriesIds.markOngoing(canonicalId, true)
+        return true
+    }
     return false
 }
 
 private fun HomeViewModel.isRecentOngoingSeed(progress: WatchProgress): Boolean {
     val nowMs = System.currentTimeMillis()
-    if (nowMs - progress.lastWatched > 60L * 24 * 60 * 60 * 1000) return false
+    if (nowMs - progress.lastWatched > 365L * 24 * 60 * 60 * 1000) return false
     return isPotentialAiringSeries(progress.contentId)
 }
 
@@ -1514,54 +1549,72 @@ private fun HomeViewModel.isKnownReleaseAlert(
     progress: WatchProgress,
     cachedNextUp: List<com.nuvio.tv.data.local.CachedNextUpItem>
 ): Boolean {
-    val cached = cachedNextUp.firstOrNull { it.contentId == progress.contentId }
+    val canonicalId = resolveCanonicalClusterKey(progress.contentId, cwLastShowIdSiblings)
+    val ids = if (canonicalId != progress.contentId) listOf(progress.contentId, canonicalId) else listOf(progress.contentId)
+    val nowMs = System.currentTimeMillis()
+
+    val cached = cachedNextUp.firstOrNull { it.contentId in ids }
     if (cached != null) {
         if (cached.isReleaseAlert) return true
         val (freshHasAired, freshIsReleaseAlert, _) = recalculateCachedReleaseBadge(cached)
         if (freshIsReleaseAlert && freshHasAired) return true
     }
-    val badgeMs = cwBadgeNextSeasonMs[progress.contentId]
-    if (badgeMs != null && badgeMs <= System.currentTimeMillis() &&
-        System.currentTimeMillis() - badgeMs <= 60L * 24 * 60 * 60 * 1000
-    ) {
-        return true
+
+    for (id in ids) {
+        val badgeMs = cwBadgeNextSeasonMs[id]
+        if (badgeMs != null && badgeMs <= nowMs &&
+            nowMs - badgeMs <= 60L * 24 * 60 * 60 * 1000
+        ) {
+            return true
+        }
     }
-    val prefix = "${progress.contentId}|"
+
     val inResolutionCache = synchronized(cwNextUpResolutionCache) {
         cwNextUpResolutionCache.entries.any { (k, v) ->
-            if (k.startsWith(prefix) && v != null) {
+            val matchesId = ids.any { k.startsWith("$it|") }
+            if (matchesId && v != null) {
                 val relMs = v.released?.let { parseEpisodeReleaseInstant(it)?.toEpochMilli() }
-                relMs != null && v.hasAired && relMs > progress.lastWatched &&
-                    (System.currentTimeMillis() - relMs <= 60L * 24 * 60 * 60 * 1000)
+                if (relMs != null) {
+                    val effectiveRelMs = relMs - 18L * 3600_000L
+                    v.hasAired && effectiveRelMs <= nowMs && relMs > progress.lastWatched &&
+                        (nowMs - relMs <= 60L * 24 * 60 * 60 * 1000)
+                } else false
             } else false
         }
     }
     if (inResolutionCache) return true
 
-    val cachedMeta = synchronized(cwMetaCache) {
-        cwMetaCache["${progress.contentType}:${progress.contentId}"]
-            ?: cwMetaCache["series:${progress.contentId}"]
-            ?: cwMetaCache["tv:${progress.contentId}"]
-    } ?: metaRepository.getCachedMeta(progress.contentType, progress.contentId)?.toCwSummary()
-      ?: metaRepository.getCachedMeta("series", progress.contentId)?.toCwSummary()
-      ?: metaRepository.getCachedMeta("tv", progress.contentId)?.toCwSummary()
+    fun lookupMeta(id: String): CwMetaSummary? {
+        val fromCache = synchronized(cwMetaCache) {
+            cwMetaCache["${progress.contentType}:$id"]
+                ?: cwMetaCache["series:$id"]
+                ?: cwMetaCache["tv:$id"]
+        }
+        return fromCache
+            ?: metaRepository.getCachedMeta(progress.contentType, id)?.toCwSummary()
+            ?: metaRepository.getCachedMeta("series", id)?.toCwSummary()
+            ?: metaRepository.getCachedMeta("tv", id)?.toCwSummary()
+    }
+
+    val cachedMeta = lookupMeta(progress.contentId)
+        ?: if (canonicalId != progress.contentId) lookupMeta(canonicalId) else null
 
     if (cachedMeta != null) {
         val seedS = progress.season ?: 1
         val seedE = progress.episode ?: 1
-        val nowMs = System.currentTimeMillis()
         val hasAiredNewerEpisode = cachedMeta.videos.any { video ->
             val s = video.season ?: return@any false
             val e = video.episode ?: return@any false
             val isAfterSeed = s > seedS || (s == seedS && e > seedE)
             if (!isAfterSeed) return@any false
             val relMs = video.released?.let { parseEpisodeReleaseInstant(it)?.toEpochMilli() }
-            relMs != null && (relMs + POST_BROADCAST_AIR_BUFFER_HOURS * 3600_000L) <= nowMs &&
-                (nowMs - relMs in 0..(60L * 24 * 60 * 60 * 1000))
+            if (relMs == null) return@any false
+            val effectiveRelMs = relMs - 18L * 3600_000L
+            effectiveRelMs <= nowMs && (nowMs - relMs in 0..(60L * 24 * 60 * 60 * 1000))
         }
         if (hasAiredNewerEpisode) return true
         if (isOngoingSeries(cachedMeta.releaseInfo, cachedMeta.status) &&
-            nowMs - progress.lastWatched <= 60L * 24 * 60 * 60 * 1000
+            nowMs - progress.lastWatched <= 365L * 24 * 60 * 60 * 1000
         ) {
             return true
         }
@@ -2809,8 +2862,8 @@ private fun resolveNextUpVideoFromMeta(
     val nextVideo = candidateVideos.firstOrNull { video ->
         val aired = isEpisodeReleaseAired(
             video.released,
-            airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
-            postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            airBufferHours = 18L,
+            postAirBufferHours = 0L
         ) == true
         isNextUpEpisodeEligible(
             parseEpisodeReleaseDate(video.released), video.available,
@@ -3421,8 +3474,8 @@ private fun HomeViewModel.publishBadgeUpdate(
 private fun hasEpisodeAired(raw: String?, fallback: Boolean = true): Boolean {
     return isEpisodeReleaseAired(
         raw,
-        airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
-        postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+        airBufferHours = 18L,
+        postAirBufferHours = 0L
     ) ?: fallback
 }
 
@@ -3654,7 +3707,7 @@ private fun recalculateCachedReleaseBadge(cached: com.nuvio.tv.data.local.Cached
     val hasAired = if (cached.released != null) {
         hasEpisodeAired(cached.released, fallback = cached.hasAired)
     } else if (releaseTimestamp != null) {
-        nowMs >= releaseTimestamp + POST_BROADCAST_AIR_BUFFER_HOURS * 3600_000L
+        nowMs >= releaseTimestamp - 18L * 3600_000L
     } else {
         cached.hasAired
     }

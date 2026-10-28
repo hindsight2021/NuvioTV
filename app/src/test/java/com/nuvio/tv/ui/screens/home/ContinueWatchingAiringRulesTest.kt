@@ -9,6 +9,7 @@ import org.junit.Test
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import com.nuvio.tv.core.util.BROADCAST_AIR_BUFFER_HOURS
@@ -892,4 +893,87 @@ class ContinueWatchingAiringRulesTest {
         assertEquals(setOf("trakt:200", "tt300"), siblings["tmdb:100"])
         assertEquals(setOf("tmdb:100"), siblings["tt300"])
     }
+
+    /**
+     * Locks in the fix for UTC rollover handling: a Cinemeta release timestamp that falls on the
+     * next UTC day must still be treated as aired/eligible when the viewer's local time (Atlantic,
+     * UTC-3) is still on the evening of the previous calendar day.
+     */
+    @Test
+    fun `Visionquest evening release with UTC rollover is considered aired and eligible on release night`() {
+        // Cinemeta reports the release at 05:00Z on Oct 28, which is 02:00 Atlantic on Oct 28.
+        val released = "2026-10-28T05:00:00.000Z"
+
+        // Viewer clock: Oct 27, 2026 21:00:00 Atlantic (UTC-3) == 2026-10-28T00:00:00Z.
+        val viewerInstant = Instant.parse("2026-10-28T00:00:00Z")
+        val atlantic = ZoneId.of("America/Halifax")
+        val clock = Clock.fixed(viewerInstant, atlantic)
+
+        // Sanity check that the fixed clock really represents the intended local evening.
+        val localDateTime = LocalDateTime.ofInstant(viewerInstant, atlantic)
+        assertEquals(2026, localDateTime.year)
+        assertEquals(10, localDateTime.monthValue)
+        assertEquals(27, localDateTime.dayOfMonth)
+        assertEquals(21, localDateTime.hour)
+
+        // The release must be considered aired despite the UTC date being "tomorrow".
+        assertTrue(
+            "Release should be considered aired on release night across UTC rollover",
+            isEpisodeReleaseAired(
+                raw = released,
+                clock = clock,
+                airBufferHours = 18L,
+                postAirBufferHours = 0L
+            ) == true
+        )
+
+        // The next-up episode must be eligible for the viewer's local "today" (Oct 27).
+        assertTrue(
+            "Next-up episode should be eligible on release night across UTC rollover",
+            isNextUpEpisodeEligible(
+                releaseDate = LocalDate.of(2026, 10, 28),
+                available = true,
+                isSeasonRollover = false,
+                showUnairedNextUp = false,
+                today = LocalDate.of(2026, 10, 27),
+                hasAired = true
+            )
+        )
+    }
+
+    /**
+     * Locks in the fix for ongoing-series detection and release-alert triggering for
+     * The Great Canadian Baking Show S10E4 (released Oct 25, 2026) when the seed's last-watched
+     * episode is 16 days old.
+     */
+    @Test
+    fun `The Great Canadian Baking Show S10E4 is recognized as ongoing and triggers release alert`() {
+        // Ongoing-series detection must accept a year-only start date and "Returning Series" status.
+        assertTrue(
+            "Series with year-only start and Returning Series status should be ongoing",
+            isOngoingSeries("2017-", "Returning Series")
+        )
+
+        // S10E4 release timestamp: 2026-10-25T00:00:00.000Z.
+        val s10e4Ms = Instant.parse("2026-10-25T00:00:00.000Z").toEpochMilli()
+
+        // Seed last-watched is 16 days before the release.
+        val sixteenDaysMs = 16L * 24L * 60L * 60L * 1000L
+        val lastWatchedMs = s10e4Ms - sixteenDaysMs
+
+        // Evaluate the alert at (or just after) the release moment.
+        val nowMs = s10e4Ms
+
+        assertTrue(
+            "S10E4 release should trigger a release alert for a 16-day-old last-watched seed",
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = s10e4Ms,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
 }
