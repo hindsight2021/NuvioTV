@@ -343,3 +343,54 @@ internal fun shouldRetainBeyondCutoff(
     cutoffMs = cutoffMs,
     stateHolder = stateHolder
 )
+
+/**
+ * Computes a boosted sort timestamp for the Continue Watching row.
+ *
+ * This resolves the cold-start "Catch-22" for caught-up ongoing shows: a show
+ * whose watched episodes are all in the past would normally sort by its last
+ * watched timestamp and sink below stale content. However, when a new episode
+ * has already aired (nextAir <= now) but has not yet been watched, we want the
+ * show to surface. By returning the next-air timestamp (which is strictly
+ * greater than [lastWatched]), the caller can use it as the effective sort key
+ * and float the show up without requiring a fresh watch event.
+ *
+ * @param contentId stable content identifier used as the primary state lookup key.
+ * @param videoId optional video identifier; used to derive an IMDb id fallback.
+ * @param lastWatched epoch-ms timestamp of the last watched episode.
+ * @param stateHolder source of next-air and ongoing-status metadata.
+ * @param siblings sibling content ids; the first non-ambiguous IMDb id is preferred.
+ * @param nowMs current epoch-ms time, injectable for deterministic testing.
+ * @return the next-air epoch-ms timestamp to use as a boosted sort key, or
+ *         `null` when no boost applies.
+ */
+internal fun computePersistedNextAirBoost(
+    contentId: String,
+    videoId: String?,
+    lastWatched: Long,
+    stateHolder: WatchedSeriesStateHolder,
+    siblings: Collection<String> = emptyList(),
+    nowMs: Long = System.currentTimeMillis()
+): Long? {
+    // Prefer an explicit IMDb sibling id; fall back to deriving one from the video id.
+    val imdbSibling: String? = siblings
+        .firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
+        ?: extractImdbIdFromVideoId(videoId)
+
+    // Resolve the next-air timestamp, trying the content id first, then the IMDb id.
+    val nextAir: Long? = stateHolder.getNextAirTimestamp(contentId)
+        ?: imdbSibling?.let { stateHolder.getNextAirTimestamp(it) }
+
+    // A show is "ongoing" if either identifier is known to be ongoing.
+    val isOngoing: Boolean =
+        stateHolder.isKnownOngoing(contentId) ||
+            (imdbSibling != null && stateHolder.isKnownOngoing(imdbSibling))
+
+    // Boost only when a new episode has aired since the last watch and the show is ongoing.
+    return if (nextAir != null && nextAir <= nowMs && isOngoing && nextAir > lastWatched) {
+        nextAir
+    } else {
+        null
+    }
+}
+

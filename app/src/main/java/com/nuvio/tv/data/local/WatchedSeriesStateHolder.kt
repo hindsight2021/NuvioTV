@@ -229,6 +229,10 @@ class WatchedSeriesStateHolder @Inject constructor(
     fun isKnownOngoing(contentId: String): Boolean =
         revalidationStates[contentId]?.status == SeriesAirStatus.ONGOING
 
+    /** Returns the persisted next air timestamp in epoch ms for a series, or null if unknown. */
+    fun getNextAirTimestamp(contentId: String): Long? =
+        revalidationStates[contentId]?.nextAirTimestampMs
+
     private fun parseRevalidationStates(json: String?): Map<String, SeriesRevalidationState> {
         if (json.isNullOrBlank()) return emptyMap()
         return runCatching {

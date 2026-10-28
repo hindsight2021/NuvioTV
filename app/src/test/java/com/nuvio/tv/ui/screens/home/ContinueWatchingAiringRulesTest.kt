@@ -1150,4 +1150,102 @@ class ContinueWatchingAiringRulesTest {
         )
     }
 
+    // --- Persisted nextAirTimestamp sort boost tests (Fix 1 & Fix 3) ---
+
+    @Test
+    fun `caught-up ongoing series with aired episode gets sort timestamp boosted`() {
+        val stateHolder = mockk<WatchedSeriesStateHolder>()
+        every { stateHolder.isKnownOngoing("tt23112594") } returns true
+        every { stateHolder.getNextAirTimestamp("tt23112594") } returns 1730091600000L
+
+        val lastWatched = 1729690000000L
+        val nowMs = 1730134800000L
+
+        val result = computePersistedNextAirBoost(
+            contentId = "tt23112594",
+            videoId = null,
+            siblings = emptyList(),
+            lastWatched = lastWatched,
+            nowMs = nowMs,
+            stateHolder = stateHolder
+        )
+
+        assertEquals(1730091600000L, result)
+    }
+
+    @Test
+    fun `caught-up ended series does not get boosted even with past nextAirTimestamp`() {
+        val stateHolder = mockk<WatchedSeriesStateHolder>()
+        every { stateHolder.isKnownOngoing("tt1234") } returns false
+        every { stateHolder.getNextAirTimestamp("tt1234") } returns 1730091600000L
+
+        val result = computePersistedNextAirBoost(
+            contentId = "tt1234",
+            videoId = null,
+            siblings = emptyList(),
+            lastWatched = 1729690000000L,
+            nowMs = 1730134800000L,
+            stateHolder = stateHolder
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `ongoing series with future nextAirTimestamp does not get boosted prematurely`() {
+        val stateHolder = mockk<WatchedSeriesStateHolder>()
+        every { stateHolder.isKnownOngoing("tt5678") } returns true
+        every { stateHolder.getNextAirTimestamp("tt5678") } returns 1730200000000L
+
+        val result = computePersistedNextAirBoost(
+            contentId = "tt5678",
+            videoId = null,
+            siblings = emptyList(),
+            lastWatched = 1729690000000L,
+            nowMs = 1730134800000L,
+            stateHolder = stateHolder
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `ongoing series where nextAirTimestamp is older than lastWatched does not boost`() {
+        val stateHolder = mockk<WatchedSeriesStateHolder>()
+        every { stateHolder.isKnownOngoing("tt9999") } returns true
+        every { stateHolder.getNextAirTimestamp("tt9999") } returns 1729600000000L
+
+        val lastWatched = 1729690000000L
+
+        val result = computePersistedNextAirBoost(
+            contentId = "tt9999",
+            videoId = null,
+            siblings = emptyList(),
+            lastWatched = lastWatched,
+            nowMs = 1730134800000L,
+            stateHolder = stateHolder
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `sibling fallback resolves nextAirTimestamp and ongoing status when primary contentId has no direct state`() {
+        val stateHolder = mockk<WatchedSeriesStateHolder>()
+        every { stateHolder.getNextAirTimestamp("tmdb:1001") } returns null
+        every { stateHolder.getNextAirTimestamp("tt23112594") } returns 1730091600000L
+        every { stateHolder.isKnownOngoing("tmdb:1001") } returns false
+        every { stateHolder.isKnownOngoing("tt23112594") } returns true
+
+        val result = computePersistedNextAirBoost(
+            contentId = "tmdb:1001",
+            videoId = "tt23112594:1:1",
+            siblings = listOf("tt23112594"),
+            lastWatched = 1729690000000L,
+            nowMs = 1730134800000L,
+            stateHolder = stateHolder
+        )
+
+        assertEquals(1730091600000L, result)
+    }
 }

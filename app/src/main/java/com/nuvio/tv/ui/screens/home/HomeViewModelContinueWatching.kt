@@ -908,13 +908,35 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         )
                     }
 
+                    val nowMs = System.currentTimeMillis()
                     val uncachedSeeds = remainingOlderSeeds.filter { seed ->
                         !fullyWatchedSeriesIds.isSeriesValidationFresh(seed.contentId) &&
                             seed.contentId !in cwProcessedOlderSeedContentIds
                     }
                         .sortedWith(
-                            compareByDescending<WatchProgress> { fullyWatchedSeriesIds.isKnownOngoing(it.contentId) }
-                                .thenByDescending { it.lastWatched }
+                            compareByDescending<WatchProgress> {
+                                computePersistedNextAirBoost(
+                                    contentId = it.contentId,
+                                    videoId = it.videoId,
+                                    lastWatched = it.lastWatched,
+                                    stateHolder = fullyWatchedSeriesIds,
+                                    siblings = cwLastShowIdSiblings[it.contentId].orEmpty(),
+                                    nowMs = nowMs
+                                ) != null
+                            }
+                                .thenByDescending {
+                                    maxOf(
+                                        it.lastWatched,
+                                        computePersistedNextAirBoost(
+                                            contentId = it.contentId,
+                                            videoId = it.videoId,
+                                            lastWatched = it.lastWatched,
+                                            stateHolder = fullyWatchedSeriesIds,
+                                            siblings = cwLastShowIdSiblings[it.contentId].orEmpty(),
+                                            nowMs = nowMs
+                                        ) ?: 0L
+                                    )
+                                }
                         )
                         .take(48)
                     if (uncachedSeeds.isNotEmpty()) {
@@ -1589,7 +1611,21 @@ private fun HomeViewModel.computeSeedEffectiveSortTimestamp(
         effective = fromNextSeason
     }
 
-    // 4. Check cached meta videos for recent aired episode after seed (including siblings)
+    // 4. Check persisted nextAirTimestampMs from WatchedSeriesStateHolder (Fix 1).
+    // Breaks the cold-start Catch-22: caught-up ongoing shows with an aired next episode
+    // are boosted into the top seeds using data already persisted on disk.
+    val persistedBoost = computePersistedNextAirBoost(
+        contentId = seed.contentId,
+        videoId = seed.videoId,
+        lastWatched = seed.lastWatched,
+        stateHolder = fullyWatchedSeriesIds,
+        siblings = cwLastShowIdSiblings[seed.contentId].orEmpty()
+    )
+    if (persistedBoost != null && persistedBoost > effective) {
+        effective = persistedBoost
+    }
+
+    // 5. Check cached meta videos for recent aired episode after seed (including siblings)
     val seedSiblings = cwLastShowIdSiblings[seed.contentId].orEmpty()
     val seedImdbSibling = seedSiblings.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
         ?: extractImdbIdFromVideoId(seed.videoId)
@@ -3062,6 +3098,31 @@ private suspend fun HomeViewModel.resolveBadgeEpisodes(
                 .toSet()
             summary.earliestRevalidationMs()?.let { ms ->
                 cwBadgeNextSeasonMs[contentId] = ms
+            }
+            synchronized(cwMetaCache) {
+                if (cwMetaCache[cacheKey] == null) {
+                    cwMetaCache[cacheKey] = summary
+                }
+                val seriesKey = "series:$contentId"
+                if (cwMetaCache[seriesKey] == null) {
+                    cwMetaCache[seriesKey] = summary
+                }
+                val tvKey = "tv:$contentId"
+                if (cwMetaCache[tvKey] == null) {
+                    cwMetaCache[tvKey] = summary
+                }
+                cwLastShowIdSiblings[contentId]?.forEach { sibling ->
+                    if (sibling != "__ambiguous__") {
+                        val siblingSeriesKey = "series:$sibling"
+                        if (cwMetaCache[siblingSeriesKey] == null) {
+                            cwMetaCache[siblingSeriesKey] = summary
+                        }
+                        val siblingTvKey = "tv:$sibling"
+                        if (cwMetaCache[siblingTvKey] == null) {
+                            cwMetaCache[siblingTvKey] = summary
+                        }
+                    }
+                }
             }
             synchronized(cwBadgeEpisodeCache) { cwBadgeEpisodeCache[cacheKey] = episodes }
             return episodes
