@@ -2,6 +2,8 @@ package com.nuvio.tv.ui.util
 
 import android.content.Context
 import com.nuvio.tv.R
+import com.nuvio.tv.core.util.BROADCAST_AIR_BUFFER_HOURS
+import com.nuvio.tv.core.util.POST_BROADCAST_AIR_BUFFER_HOURS
 import com.nuvio.tv.core.util.isEpisodeReleaseAired
 import com.nuvio.tv.core.util.parseEpisodeReleaseLocalDate
 import java.time.LocalDate
@@ -20,7 +22,7 @@ internal fun computeAirDateBadgeText(
     if (releasedIso.isNullOrBlank()) {
         return airDateLabel?.let { context.getString(R.string.cw_airs_date, it) }
     }
-    if (isEpisodeReleaseAired(releasedIso, airBufferHours = 18L, postAirBufferHours = 0L) == true) return null
+    if (isEpisodeReleaseAired(releasedIso, airBufferHours = BROADCAST_AIR_BUFFER_HOURS, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == true) return null
 
     val releaseDate = parseEpisodeReleaseDate(releasedIso) ?: return null
     val today = LocalDate.now(ZoneId.systemDefault())
@@ -51,7 +53,7 @@ internal fun computeAirDateBadgeTextShort(
     if (releasedIso.isNullOrBlank()) {
         return airDateLabel?.let { context.getString(R.string.cw_airs_date_short, it) }
     }
-    if (isEpisodeReleaseAired(releasedIso, airBufferHours = 18L, postAirBufferHours = 0L) == true) return null
+    if (isEpisodeReleaseAired(releasedIso, airBufferHours = BROADCAST_AIR_BUFFER_HOURS, postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS) == true) return null
 
     val releaseDate = parseEpisodeReleaseDate(releasedIso) ?: return null
     val today = LocalDate.now(ZoneId.systemDefault())

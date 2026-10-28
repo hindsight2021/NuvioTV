@@ -16,6 +16,11 @@ import com.nuvio.tv.core.util.BROADCAST_AIR_BUFFER_HOURS
 import com.nuvio.tv.core.util.POST_BROADCAST_AIR_BUFFER_HOURS
 import com.nuvio.tv.core.util.isEpisodeReleaseAired
 import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
+import com.nuvio.tv.data.local.SeriesAirStatus
+import com.nuvio.tv.data.local.computeDeadline
+import com.nuvio.tv.data.local.WatchedSeriesStateHolder
+import io.mockk.every
+import io.mockk.mockk
 
 /**
  * Regression tests for currently-airing series leaving Continue Watching on air day.
@@ -894,85 +899,250 @@ class ContinueWatchingAiringRulesTest {
         assertEquals(setOf("tmdb:100"), siblings["tt300"])
     }
 
-    /**
-     * Locks in the fix for UTC rollover handling: a Cinemeta release timestamp that falls on the
-     * next UTC day must still be treated as aired/eligible when the viewer's local time (Atlantic,
-     * UTC-3) is still on the evening of the previous calendar day.
-     */
+    private fun mockWatchedSeriesStateHolder(ongoing: Set<String> = emptySet()): WatchedSeriesStateHolder {
+        val mock = mockk<WatchedSeriesStateHolder>(relaxed = true)
+        every { mock.isKnownOngoing(any()) } answers { firstArg<String>() in ongoing }
+        return mock
+    }
+
     @Test
-    fun `Visionquest evening release with UTC rollover is considered aired and eligible on release night`() {
-        // Cinemeta reports the release at 05:00Z on Oct 28, which is 02:00 Atlantic on Oct 28.
-        val released = "2026-10-28T05:00:00.000Z"
+    fun `Amazing Race S39E6 releasing tonight must NOT evaluate as aired before release`() {
+        // Release: 2026-10-29T05:30:00Z (1:30 AM EDT, or 10:30 PM PDT Oct 28)
+        val released = "2026-10-29T05:30:00.000Z"
 
-        // Viewer clock: Oct 27, 2026 21:00:00 Atlantic (UTC-3) == 2026-10-28T00:00:00Z.
-        val viewerInstant = Instant.parse("2026-10-28T00:00:00Z")
-        val atlantic = ZoneId.of("America/Halifax")
-        val clock = Clock.fixed(viewerInstant, atlantic)
+        // Viewer: Oct 28, 2026 15:30:00 UTC (11:30 AM EDT / 8:30 AM PDT)
+        // This is ~14 hours before release.
+        val viewerClock = Clock.fixed(
+            Instant.parse("2026-10-28T15:30:00Z"),
+            ZoneId.of("America/New_York")
+        )
 
-        // Sanity check that the fixed clock really represents the intended local evening.
-        val localDateTime = LocalDateTime.ofInstant(viewerInstant, atlantic)
-        assertEquals(2026, localDateTime.year)
-        assertEquals(10, localDateTime.monthValue)
-        assertEquals(27, localDateTime.dayOfMonth)
-        assertEquals(21, localDateTime.hour)
+        // With restored constants: BROADCAST_AIR_BUFFER_HOURS=0, POST_BROADCAST_AIR_BUFFER_HOURS=1
+        val aired = isEpisodeReleaseAired(
+            raw = released,
+            clock = viewerClock,
+            airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+            postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+        )
+        assertFalse(
+            "Amazing Race S39E6 must NOT evaluate as aired 14 hours before release",
+            aired == true
+        )
 
-        // The release must be considered aired despite the UTC date being "tomorrow".
+        // Also verify it becomes aired 1 hour AFTER release
+        val afterReleaseClock = Clock.fixed(
+            Instant.parse("2026-10-29T06:30:00Z"), // release + 1h
+            ZoneId.of("America/New_York")
+        )
         assertTrue(
-            "Release should be considered aired on release night across UTC rollover",
+            "Amazing Race S39E6 must be aired 1 hour after release",
             isEpisodeReleaseAired(
                 raw = released,
-                clock = clock,
-                airBufferHours = 18L,
-                postAirBufferHours = 0L
+                clock = afterReleaseClock,
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
             ) == true
         )
 
-        // The next-up episode must be eligible for the viewer's local "today" (Oct 27).
-        assertTrue(
-            "Next-up episode should be eligible on release night across UTC rollover",
-            isNextUpEpisodeEligible(
-                releaseDate = LocalDate.of(2026, 10, 28),
-                available = true,
-                isSeasonRollover = false,
-                showUnairedNextUp = false,
-                today = LocalDate.of(2026, 10, 27),
-                hasAired = true
+        // Verify release alert does NOT fire yet
+        val nowMs = Instant.parse("2026-10-28T15:30:00Z").toEpochMilli()
+        val releaseMs = Instant.parse("2026-10-29T05:30:00Z").toEpochMilli()
+        assertFalse(
+            "Release alert must not trigger before episode airs",
+            computeNextUpReleaseAlert(
+                hasAired = false, // correctly false since isEpisodeReleaseAired returned false
+                releaseTimestamp = releaseMs,
+                lastWatched = nowMs - 7L * 24 * 3600_000L, // watched a week ago
+                isNewSeason = false,
+                nowMs = nowMs
             )
         )
     }
 
-    /**
-     * Locks in the fix for ongoing-series detection and release-alert triggering for
-     * The Great Canadian Baking Show S10E4 (released Oct 25, 2026) when the seed's last-watched
-     * episode is 16 days old.
-     */
     @Test
-    fun `The Great Canadian Baking Show S10E4 is recognized as ongoing and triggers release alert`() {
-        // Ongoing-series detection must accept a year-only start date and "Returning Series" status.
-        assertTrue(
-            "Series with year-only start and Returning Series status should be ongoing",
-            isOngoingSeries("2017-", "Returning Series")
+    fun `Visionquest S1E5 aired today revalidates immediately and appears in CW`() {
+        // Release: 2026-10-28T05:00:00Z (1:00 AM EDT)
+        val released = "2026-10-28T05:00:00.000Z"
+        val releaseMs = Instant.parse("2026-10-28T05:00:00Z").toEpochMilli()
+
+        // Viewer: Oct 28, 2026 13:00:00 UTC (9:00 AM EDT) - 8 hours after release
+        val nowMs = Instant.parse("2026-10-28T13:00:00Z").toEpochMilli()
+        val viewerClock = Clock.fixed(
+            Instant.parse("2026-10-28T13:00:00Z"),
+            ZoneId.of("America/New_York")
         )
 
-        // S10E4 release timestamp: 2026-10-25T00:00:00.000Z.
-        val s10e4Ms = Instant.parse("2026-10-25T00:00:00.000Z").toEpochMilli()
-
-        // Seed last-watched is 16 days before the release.
-        val sixteenDaysMs = 16L * 24L * 60L * 60L * 1000L
-        val lastWatchedMs = s10e4Ms - sixteenDaysMs
-
-        // Evaluate the alert at (or just after) the release moment.
-        val nowMs = s10e4Ms
-
+        // Step 1: Episode must be evaluated as aired (with constants, not 18h hack)
         assertTrue(
-            "S10E4 release should trigger a release alert for a 16-day-old last-watched seed",
+            "Visionquest S1E5 must be aired 8 hours after release",
+            isEpisodeReleaseAired(
+                raw = released,
+                clock = viewerClock,
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            ) == true
+        )
+
+        // Step 2: Deadline computation - user caught up yesterday, series is ongoing
+        // The pipeline resolved S1E5 as the next air date yesterday.
+        val catchUpMs = nowMs - 24L * 3600_000L // caught up 24h ago
+        val deadline = computeDeadline(
+            status = SeriesAirStatus.ONGOING,
+            nextAirTimestampMs = releaseMs, // next episode was known
+            nowMs = catchUpMs // computed at catch-up time
+        )
+        // Deadline should be releaseMs - 1h = 2026-10-28T04:00:00Z
+        val expectedDeadline = releaseMs - 1L * 3600_000L
+
+        assertEquals(
+            "Deadline must be 1 hour before release",
+            expectedDeadline, deadline
+        )
+        assertTrue(
+            "Deadline must have already passed (now > deadline)",
+            nowMs > deadline
+        )
+
+        // Step 4: Release alert fires for the newly aired episode
+        assertTrue(
+            "Release alert must fire for Visionquest S1E5",
             computeNextUpReleaseAlert(
                 hasAired = true,
-                releaseTimestamp = s10e4Ms,
+                releaseTimestamp = releaseMs,
+                lastWatched = catchUpMs,
+                isNewSeason = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `Baking Show S10E4 aired 3 days ago is never locked out by deadline`() {
+        val releaseMs = Instant.parse("2026-10-25T20:00:00Z").toEpochMilli()
+        val lastWatchedMs = releaseMs - 16L * 24 * 3600_000L // 16 days before release
+        val nowMs = Instant.parse("2026-10-28T13:00:00Z").toEpochMilli() // 3 days after release
+
+        // Step 1: Series is ongoing (year-only start date, "Returning Series")
+        val status = resolveSeriesAirStatus("2017-", "Returning Series")
+        assertEquals(SeriesAirStatus.ONGOING, status)
+
+        // Step 2: At last-watched time, no next air date was known (weekly show,
+        // next episode TBA). Deadline = lastValidated + 2h.
+        val deadlineAtCatchUp = computeDeadline(
+            status = SeriesAirStatus.ONGOING,
+            nextAirTimestampMs = null, // no known next air date
+            nowMs = lastWatchedMs
+        )
+        assertEquals(
+            "Deadline must be lastWatched + 2h when no air date known",
+            lastWatchedMs + 2L * 3600_000L, deadlineAtCatchUp
+        )
+        assertTrue(
+            "Deadline must have expired long ago (now >> deadline)",
+            nowMs > deadlineAtCatchUp
+        )
+
+        // Step 4: Release alert fires
+        assertTrue(
+            "Release alert must fire for Baking Show S10E4 (16-day-old seed)",
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
                 lastWatched = lastWatchedMs,
                 isNewSeason = false,
                 nowMs = nowMs
             )
+        )
+
+        // Step 5: shouldRetainBeyondCutoff keeps it in CW (even though lastWatched
+        // is way beyond the 90-day cutoff - it's a release alert)
+        assertTrue(
+            "Baking Show must be retained beyond cutoff as release alert",
+            shouldRetainBeyondCutoff(
+                sortTimestamp = releaseMs, // sortTimestamp promoted to releaseMs for alerts
+                isReleaseAlert = true,
+                contentId = "tt7332358",
+                cutoffMs = nowMs - 90L * 24 * 3600_000L,
+                stateHolder = mockWatchedSeriesStateHolder(ongoing = setOf("tt7332358"))
+            )
+        )
+    }
+
+    @Test
+    fun `late-night PDT broadcast must not appear as aired during the day`() {
+        // Release: 2026-10-29T06:00:00Z (11 PM PDT Oct 28)
+        val released = "2026-10-29T06:00:00.000Z"
+
+        // Viewer: Oct 28, 2026 14:00 PDT (21:00Z) - 9 hours before release
+        val afternoonClock = Clock.fixed(
+            Instant.parse("2026-10-28T21:00:00Z"),
+            ZoneId.of("America/Los_Angeles")
+        )
+        assertFalse(
+            "Must NOT be aired at 2 PM PDT (9h before release)",
+            isEpisodeReleaseAired(
+                raw = released,
+                clock = afternoonClock,
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            ) == true
+        )
+
+        // Viewer: Oct 28, 2026 22:30 PDT (05:30Z Oct 29) - 30 min before release
+        val preAirClock = Clock.fixed(
+            Instant.parse("2026-10-29T05:30:00Z"),
+            ZoneId.of("America/Los_Angeles")
+        )
+        assertFalse(
+            "Must NOT be aired 30 min before release",
+            isEpisodeReleaseAired(
+                raw = released,
+                clock = preAirClock,
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            ) == true
+        )
+
+        // Viewer: Oct 29, 2026 00:00 PDT (07:00Z) - 1 hour after release
+        val postAirClock = Clock.fixed(
+            Instant.parse("2026-10-29T07:00:00Z"),
+            ZoneId.of("America/Los_Angeles")
+        )
+        assertTrue(
+            "Must be aired 1 hour after release (post-broadcast buffer elapsed)",
+            isEpisodeReleaseAired(
+                raw = released,
+                clock = postAirClock,
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            ) == true
+        )
+
+        // Verify date-only fallback for the same show:
+        // "2026-10-29" in PDT -> midnight Oct 29 PDT = 07:00Z
+        val dateOnly = "2026-10-29"
+        assertFalse(
+            "Date-only release must NOT be aired before local midnight",
+            isEpisodeReleaseAired(
+                raw = dateOnly,
+                clock = preAirClock, // 10:30 PM PDT Oct 28
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            ) == true
+        )
+
+        val postMidnightClock = Clock.fixed(
+            Instant.parse("2026-10-29T08:00:00Z"), // midnight PDT (07:00Z) + 1h buffer
+            ZoneId.of("America/Los_Angeles")
+        )
+        assertTrue(
+            "Date-only release must be aired at local midnight + buffer",
+            isEpisodeReleaseAired(
+                raw = dateOnly,
+                clock = postMidnightClock,
+                airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
+                postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
+            ) == true
         )
     }
 

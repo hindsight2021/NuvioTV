@@ -1,5 +1,10 @@
 package com.nuvio.tv.ui.screens.home
 
+import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
+import com.nuvio.tv.data.local.SeriesAirStatus
+import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.data.local.WatchedSeriesStateHolder
+
 /**
  * Pure Continue Watching rules for currently-airing / fully-watched series.
  * Kept free of Android / ViewModel dependencies so unit tests can lock the
@@ -99,21 +104,67 @@ private val TRAILING_DASHES: Set<Char> = setOf(
  * Determines whether a series should be considered ongoing (still airing or expected to air more episodes).
  * Checks status (continuing, returning series, etc.) and releaseInfo trailing dashes (-, \u2013, \u2014).
  */
+/**
+ * Maps Cinemeta/TMDB metadata strings to a structured air status.
+ * Replaces the scattered isOngoingSeries() boolean checks.
+ */
+fun resolveSeriesAirStatus(releaseInfo: String?, status: String?): SeriesAirStatus {
+    val normalizedStatus = status?.trim()?.lowercase()
+    return when {
+        releaseInfo != null && releaseInfo.trim().lastOrNull() in TRAILING_DASHES -> SeriesAirStatus.ONGOING
+        normalizedStatus in ONGOING_STATUSES -> SeriesAirStatus.ONGOING
+        normalizedStatus == "ended" -> SeriesAirStatus.ENDED
+        normalizedStatus in setOf("canceled", "cancelled") -> SeriesAirStatus.CANCELED
+        else -> SeriesAirStatus.UNKNOWN
+    }
+}
+
+/**
+ * Scans metadata videos to find the earliest upcoming (unaired) episode
+ * release timestamp. Returns null if no future episodes are known.
+ */
+internal fun resolveNextAirTimestamp(
+    meta: CwMetaSummary,
+    seedProgress: WatchProgress,
+    nowMs: Long = System.currentTimeMillis()
+): Long? {
+    val seedS = seedProgress.season ?: 1
+    val seedE = seedProgress.episode ?: 1
+    return meta.videos
+        .filter { video ->
+            val s = video.season ?: return@filter false
+            val e = video.episode ?: return@filter false
+            s > seedS || (s == seedS && e > seedE)
+        }
+        .mapNotNull { video ->
+            video.released?.let { parseEpisodeReleaseInstant(it)?.toEpochMilli() }
+        }
+        .filter { it > nowMs } // only future timestamps
+        .minOrNull()
+}
+
+fun resolveNextAirTimestamp(
+    meta: com.nuvio.tv.domain.model.Meta,
+    seedProgress: WatchProgress,
+    nowMs: Long = System.currentTimeMillis()
+): Long? {
+    val seedS = seedProgress.season ?: 1
+    val seedE = seedProgress.episode ?: 1
+    return meta.videos
+        .filter { video ->
+            val s = video.season ?: return@filter false
+            val e = video.episode ?: return@filter false
+            s > seedS || (s == seedS && e > seedE)
+        }
+        .mapNotNull { video ->
+            video.released?.let { parseEpisodeReleaseInstant(it)?.toEpochMilli() }
+        }
+        .filter { it > nowMs }
+        .minOrNull()
+}
+
 fun isOngoingSeries(releaseInfo: String?, status: String? = null): Boolean {
-    if (!status.isNullOrBlank()) {
-        val normalizedStatus = status.trim().lowercase()
-        if (normalizedStatus in ONGOING_STATUSES) {
-            return true
-        }
-    }
-    val trimmed = releaseInfo?.trim()
-    if (!trimmed.isNullOrEmpty()) {
-        val lastChar = trimmed.last()
-        if (lastChar in TRAILING_DASHES) {
-            return true
-        }
-    }
-    return false
+    return resolveSeriesAirStatus(releaseInfo, status) == SeriesAirStatus.ONGOING
 }
 
 /**
@@ -252,3 +303,43 @@ fun buildShowIdSiblingsFromSeeds(
 
     return siblings.mapValues { (_, set) -> set.toSet() }
 }
+
+
+/**
+ * Central predicate for whether an older (pre-cutoff) next-up item should be
+ * retained in Continue Watching. ALL filter sites in the pipeline MUST call
+ * this — no inline cutoff checks.
+ *
+ * An item passes if ANY of:
+ * 1. No cutoff is active (unlimited history mode)
+ * 2. Item was watched recently enough (within cutoff window)
+ * 3. Item has an active release alert badge
+ * 4. Item's series is known-ongoing with a stale/expired validation deadline
+ */
+internal fun shouldRetainBeyondCutoff(
+    sortTimestamp: Long,
+    isReleaseAlert: Boolean,
+    contentId: String,
+    cutoffMs: Long?,
+    stateHolder: WatchedSeriesStateHolder
+): Boolean {
+    if (cutoffMs == null) return true
+    if (sortTimestamp >= cutoffMs) return true
+    if (isReleaseAlert) return true
+    // Known-ongoing series are always retained — the deadline system
+    // handles when to actually revalidate them.
+    if (stateHolder.isKnownOngoing(contentId)) return true
+    return false
+}
+
+internal fun shouldRetainBeyondCutoff(
+    item: ContinueWatchingItem.NextUp,
+    cutoffMs: Long?,
+    stateHolder: WatchedSeriesStateHolder
+): Boolean = shouldRetainBeyondCutoff(
+    sortTimestamp = item.info.sortTimestamp,
+    isReleaseAlert = item.info.isReleaseAlert,
+    contentId = item.info.contentId,
+    cutoffMs = cutoffMs,
+    stateHolder = stateHolder
+)
