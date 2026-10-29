@@ -517,40 +517,7 @@ internal fun buildContinueWatchingItem(
         },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
-        payload = ModernPayload.ContinueWatching(item),
-        metaPreview = when (item) {
-            is ContinueWatchingItem.InProgress -> MetaPreview(
-                id = item.progress.contentId,
-                type = when (item.progress.contentType.lowercase()) {
-                    "movie" -> ContentType.MOVIE
-                    else -> ContentType.SERIES
-                },
-                name = item.progress.name,
-                poster = item.progress.poster,
-                posterShape = if (useLandscapePosters) PosterShape.LANDSCAPE else PosterShape.POSTER,
-                background = item.progress.backdrop,
-                logo = item.progress.logo,
-                description = item.episodeDescription,
-                releaseInfo = item.releaseInfo,
-                imdbRating = item.episodeImdbRating,
-                genres = item.genres
-            )
-            is ContinueWatchingItem.NextUp -> MetaPreview(
-                id = item.info.contentId,
-                type = ContentType.SERIES,
-                name = item.info.name,
-                poster = item.info.poster,
-                posterShape = if (useLandscapePosters) PosterShape.LANDSCAPE else PosterShape.POSTER,
-                background = item.info.backdrop,
-                logo = item.info.logo,
-                description = item.info.episodeDescription,
-                releaseInfo = item.info.releaseInfo,
-                imdbRating = item.info.imdbRating,
-                tmdbRating = item.info.tmdbRating,
-                genres = item.info.genres,
-                released = item.info.released
-            )
-        }
+        payload = ModernPayload.ContinueWatching(item)
     )
 }
 
