@@ -386,8 +386,10 @@ internal fun computePersistedNextAirBoost(
         stateHolder.isKnownOngoing(contentId) ||
             (imdbSibling != null && stateHolder.isKnownOngoing(imdbSibling))
 
-    // Boost only when a new episode has aired since the last watch and the show is ongoing.
-    return if (nextAir != null && nextAir <= nowMs && isOngoing && nextAir > lastWatched) {
+    // Boost only when a new episode has aired since the last watch (within 60 days) and the show is ongoing.
+    return if (nextAir != null && nextAir <= nowMs && isOngoing && nextAir > lastWatched &&
+        nowMs - nextAir <= SIXTY_DAYS_MS
+    ) {
         nextAir
     } else {
         null

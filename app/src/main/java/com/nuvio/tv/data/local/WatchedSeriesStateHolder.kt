@@ -57,6 +57,10 @@ fun computeDeadline(
  * Persisted per profile so badges appear instantly on cold start.
  *
  * Uses per-series event-driven revalidation state instead of static lockouts.
+ *
+ * Revalidation state is intentionally decoupled from the fully-watched ID set:
+ * a series may carry air-status/revalidation metadata even when it is not (or no
+ * longer) fully watched, and removing a badge must not discard that metadata.
  */
 @Singleton
 class WatchedSeriesStateHolder @Inject constructor(
@@ -77,8 +81,12 @@ class WatchedSeriesStateHolder @Inject constructor(
     private val _fullyWatchedSeriesIds = MutableStateFlow<Set<String>>(emptySet())
     val fullyWatchedSeriesIds: StateFlow<Set<String>> = _fullyWatchedSeriesIds.asStateFlow()
 
+    /** Guards all reads/writes of [revalidationStates] and [loadedForProfileId]. */
+    private val stateLock = Any()
+
     @Volatile
     private var revalidationStates: Map<String, SeriesRevalidationState> = emptyMap()
+
     @Volatile
     private var loadedForProfileId: Int? = null
 
@@ -90,7 +98,9 @@ class WatchedSeriesStateHolder @Inject constructor(
         val persisted = prefs[KEY] ?: emptySet()
         val resetVersion = prefs[VALIDATION_RESET_KEY] ?: 0
         if (resetVersion < VALIDATION_RESET_VERSION) {
-            revalidationStates = emptyMap()
+            synchronized(stateLock) {
+                revalidationStates = emptyMap()
+            }
             store(profileId).edit { p ->
                 p.remove(REVALIDATION_STATE_KEY)
                 p.remove(stringPreferencesKey("revalidate_after"))
@@ -98,10 +108,13 @@ class WatchedSeriesStateHolder @Inject constructor(
                 p[VALIDATION_RESET_KEY] = VALIDATION_RESET_VERSION
             }
         } else {
-            revalidationStates = parseRevalidationStates(prefs[REVALIDATION_STATE_KEY])
-                .filter { (id, state) ->
-                    id in persisted && state.deadline < MAX_DEADLINE_THRESHOLD
-                }
+            // Revalidation state is independent of the fully-watched ID set: preserve
+            // every valid entry regardless of whether its id is currently watched.
+            val parsed = parseRevalidationStates(prefs[REVALIDATION_STATE_KEY])
+                .filterValues { state -> state.deadline < MAX_DEADLINE_THRESHOLD }
+            synchronized(stateLock) {
+                revalidationStates = parsed
+            }
         }
         if (_fullyWatchedSeriesIds.value.isEmpty() && persisted.isNotEmpty()) {
             _fullyWatchedSeriesIds.value = persisted
@@ -120,12 +133,20 @@ class WatchedSeriesStateHolder @Inject constructor(
     /** Clear in-memory state only — does NOT touch DataStore on disk. */
     fun clearInMemory() {
         _fullyWatchedSeriesIds.value = emptySet()
-        revalidationStates = emptyMap()
+        synchronized(stateLock) {
+            revalidationStates = emptyMap()
+        }
     }
 
     /**
      * Update badge IDs and mark the given series as freshly validated.
      * Records per-series revalidation state based on air status and next scheduled episode.
+     *
+     * Revalidation state is decoupled from the fully-watched set:
+     * - Any id present in [seriesStates] gets its state recorded/updated, whether or not
+     *   it is in [ids].
+     * - Ids not present in [seriesStates] retain their existing revalidation state.
+     * - No pruning of revalidation state occurs here.
      */
     @Synchronized
     fun updateWithValidation(
@@ -137,14 +158,17 @@ class WatchedSeriesStateHolder @Inject constructor(
         val idsChanged = _fullyWatchedSeriesIds.value != ids
         _fullyWatchedSeriesIds.value = ids
         val now = System.currentTimeMillis()
-        val updated = revalidationStates.toMutableMap()
+        val updated: MutableMap<String, SeriesRevalidationState>
         var statesChanged = false
 
-        validatedIds.forEach { id ->
-            if (id in ids) {
-                val input = seriesStates[id]
-                val status = input?.status ?: SeriesAirStatus.UNKNOWN
-                val nextAir = input?.nextAirTimestampMs
+        synchronized(stateLock) {
+            updated = revalidationStates.toMutableMap()
+
+            // Record/refresh state for every series we have fresh air-status input for,
+            // independent of whether it is fully watched.
+            seriesStates.forEach { (id, input) ->
+                val status = input.status
+                val nextAir = input.nextAirTimestampMs
                 val deadline = computeDeadline(status, nextAir, now)
                 val newState = SeriesRevalidationState(
                     deadline = deadline,
@@ -156,27 +180,91 @@ class WatchedSeriesStateHolder @Inject constructor(
                     updated[id] = newState
                     statesChanged = true
                 }
-            } else {
-                if (updated.remove(id) != null) {
-                    statesChanged = true
+            }
+
+            // Fallback: validated ids without explicit air-status input preserve existing
+            // state if available, or get a refreshed UNKNOWN-tier state.
+            validatedIds.forEach { id ->
+                if (id !in seriesStates) {
+                    val existing = updated[id]
+                    val status = existing?.status ?: SeriesAirStatus.UNKNOWN
+                    val nextAir = existing?.nextAirTimestampMs
+                    val deadline = computeDeadline(status, nextAir, now)
+                    val newState = SeriesRevalidationState(
+                        deadline = deadline,
+                        status = status,
+                        nextAirTimestampMs = nextAir,
+                        lastValidatedMs = now
+                    )
+                    if (updated[id] != newState) {
+                        updated[id] = newState
+                        statesChanged = true
+                    }
                 }
             }
+
+            revalidationStates = updated
         }
 
-        if (idsChanged) {
-            val keysToRetain = ids + validatedIds
-            val sizeBefore = updated.size
-            updated.keys.retainAll(keysToRetain)
-            if (updated.size != sizeBefore) statesChanged = true
-        }
-
-        revalidationStates = updated
         if (idsChanged || statesChanged) {
             scope.launch {
                 store(profileId).edit { prefs ->
                     prefs[KEY] = ids
                     prefs[REVALIDATION_STATE_KEY] = gson.toJson(updated)
                 }
+            }
+        }
+    }
+
+    /**
+     * Removes the given ids from the fully-watched set without touching revalidation state.
+     * Revalidation metadata for these series is preserved.
+     */
+    @Synchronized
+    fun removeFullyWatched(
+        idsToRemove: Set<String>,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        if (idsToRemove.isEmpty()) return
+        val current = _fullyWatchedSeriesIds.value
+        val newIds = current - idsToRemove
+        if (newIds == current) return
+        _fullyWatchedSeriesIds.value = newIds
+        scope.launch {
+            store(profileId).edit { prefs -> prefs[KEY] = newIds }
+        }
+    }
+
+    /**
+     * Records or updates the revalidation state for an arbitrary series, regardless of
+     * whether it is fully watched. Useful for tracking ongoing series / next air dates.
+     */
+    @Synchronized
+    fun recordSeriesAirState(
+        contentId: String,
+        status: SeriesAirStatus,
+        nextAirTimestampMs: Long? = null,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        val now = System.currentTimeMillis()
+        val deadline = computeDeadline(status, nextAirTimestampMs, now)
+        val newState = SeriesRevalidationState(
+            deadline = deadline,
+            status = status,
+            nextAirTimestampMs = nextAirTimestampMs,
+            lastValidatedMs = now
+        )
+        val snapshot: Map<String, SeriesRevalidationState>
+        synchronized(stateLock) {
+            if (revalidationStates[contentId] == newState) return
+            val updated = revalidationStates.toMutableMap()
+            updated[contentId] = newState
+            revalidationStates = updated
+            snapshot = updated
+        }
+        scope.launch {
+            store(profileId).edit { prefs ->
+                prefs[REVALIDATION_STATE_KEY] = gson.toJson(snapshot)
             }
         }
     }
@@ -203,7 +291,9 @@ class WatchedSeriesStateHolder @Inject constructor(
      * on the next CW pipeline cycle. Called when the user manually clears the CW cache.
      */
     fun clearValidationState(profileId: Int = profileManager.activeProfileId.value) {
-        revalidationStates = emptyMap()
+        synchronized(stateLock) {
+            revalidationStates = emptyMap()
+        }
         scope.launch {
             store(profileId).edit { prefs -> prefs.remove(REVALIDATION_STATE_KEY) }
         }
@@ -215,8 +305,9 @@ class WatchedSeriesStateHolder @Inject constructor(
      */
     fun filterStaleIds(ids: Set<String>): Set<String> {
         val now = System.currentTimeMillis()
+        val snapshot = revalidationStates
         return ids.filter { id ->
-            val state = revalidationStates[id] ?: return@filter true
+            val state = snapshot[id] ?: return@filter true
             now >= state.deadline
         }.toSet()
     }

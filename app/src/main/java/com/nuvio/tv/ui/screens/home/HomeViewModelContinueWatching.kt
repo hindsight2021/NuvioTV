@@ -1004,7 +1004,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                                 dismissedNextUpKeys = dismissedNextUp,
                                                 sortMode = continueWatchingSortMode,
                                                 pipelineProfileId = pipelineProfileId,
-                                                persistSnapshot = false
+                                                persistSnapshot = true
                                             )
                                         }
                                     }
@@ -1144,20 +1144,21 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     .filter {
                         val isCachedFromDisk = cachedOlderNextUp.any { c -> c.info.contentId == it.info.contentId }
                         val isResolvedOlder = it.info.contentId in resolvedOlderNextUpContentIds
+                        val isDiscoveredOlder = persistedOlderItems.any { p -> p.info.contentId == it.info.contentId }
                         val pass =
                             (!snapshot.hasLoadedRemoteProgress || it.info.contentId in activeSeedContentIds || isCachedFromDisk) &&
                             it.info.contentId !in recentIds &&
                             it.info.contentId !in inProgressIds &&
                             (
                                 it.info.contentId !in conclusivelyProcessedOlderContentIds ||
-                                    isResolvedOlder
+                                    isResolvedOlder || isDiscoveredOlder
                             ) &&
                             // Reject items the fresh pipeline evaluated but produced no
                             // next-up for (e.g. fully watched series). Cached-from-disk
                             // items survive only until the fresh pipeline processes their
                             // seed — once rejected there, they are removed immediately.
                             // However, if the older pipeline positively resolved this show, never reject it!
-                            (it.info.contentId !in rejectedByFreshPipeline || isResolvedOlder) &&
+                            (it.info.contentId !in rejectedByFreshPipeline || isResolvedOlder || isDiscoveredOlder) &&
                             // Respect "show unaired" setting for all items including cached.
                             (it.info.hasAired || showUnairedNextUp) &&
                             nextUpDismissKey(it.info.contentId, it.info.seedSeason, it.info.seedEpisode) !in dismissedNextUp &&
@@ -1511,6 +1512,16 @@ private fun HomeViewModel.isKnownReleaseAlert(
         val (freshHasAired, freshIsReleaseAlert, _) = recalculateCachedReleaseBadge(cached)
         if (freshIsReleaseAlert && freshHasAired) return true
     }
+
+    val persistedBoost = computePersistedNextAirBoost(
+        contentId = progress.contentId,
+        videoId = progress.videoId,
+        lastWatched = progress.lastWatched,
+        stateHolder = fullyWatchedSeriesIds,
+        siblings = cwLastShowIdSiblings[progress.contentId].orEmpty(),
+        nowMs = nowMs
+    )
+    if (persistedBoost != null) return true
 
     for (id in ids) {
         val badgeMs = cwBadgeNextSeasonMs[id]
@@ -2229,6 +2240,24 @@ private suspend fun HomeViewModel.buildNextUpItem(
         nextReleased = nextUp.released,
         hasAired = nextUp.hasAired
     )
+    val airStatus = resolveSeriesAirStatus(seedMeta?.releaseInfo, seedMeta?.status)
+    if (airStatus != SeriesAirStatus.UNKNOWN) {
+        fullyWatchedSeriesIds.recordSeriesAirState(
+            contentId = progress.contentId,
+            status = airStatus,
+            nextAirTimestampMs = releaseState.releaseTimestamp
+        )
+        val seedSiblings = cwLastShowIdSiblings[progress.contentId].orEmpty()
+        val seedImdb = seedSiblings.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
+            ?: extractImdbIdFromVideoId(progress.videoId)
+        if (seedImdb != null && seedImdb != progress.contentId) {
+            fullyWatchedSeriesIds.recordSeriesAirState(
+                contentId = seedImdb,
+                status = airStatus,
+                nextAirTimestampMs = releaseState.releaseTimestamp
+            )
+        }
+    }
     val nextUpVideo = seedMeta?.videos?.firstOrNull {
         it.season == nextUp.season && it.episode == nextUp.episode
     }
@@ -3356,11 +3385,7 @@ private fun HomeViewModel.clearStaleFullyWatchedForAiredNextUp(
     }
     val current = fullyWatchedSeriesIds.fullyWatchedSeriesIds.value
     if (toRemove.any { it in current }) {
-        fullyWatchedSeriesIds.updateWithValidation(
-            ids = current - toRemove,
-            validatedIds = toRemove,
-            seriesStates = emptyMap()
-        )
+        fullyWatchedSeriesIds.removeFullyWatched(toRemove)
     }
     synchronized(cwBadgeEpisodeCache) {
         listOf("series:$contentId", "tv:$contentId").forEach { key ->
