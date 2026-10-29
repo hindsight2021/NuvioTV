@@ -26,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -122,6 +123,15 @@ fun HomeScreen(
     // Home was the only major screen without a lifecycle observer, so nothing ever told it to
     // look at its catalogs again.
     val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, viewModel) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // A release changes with time even when watch progress does not.
+            while (true) {
+                viewModel.refreshContinueWatchingForClock()
+                kotlinx.coroutines.delay(60_000L)
+            }
+        }
+    }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {

@@ -55,6 +55,7 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
     pipelineProfileId: Int,
     persistSnapshot: Boolean
 ) {
+    if (profileManager.activeProfileId.value != pipelineProfileId) return
     if (resolvedItems.isEmpty() && conclusivelyProcessedContentIds.isEmpty()) return
 
     val acceptedResolvedItems = resolvedItems

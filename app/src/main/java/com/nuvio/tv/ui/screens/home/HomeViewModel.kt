@@ -287,6 +287,8 @@ class HomeViewModel @Inject constructor(
     internal val cwEnrichedInProgressOverlay = ConcurrentHashMap<String, ContinueWatchingItem.InProgress>()
     /** Bumped to force the CW pipeline to re-run (e.g. after cache clear). */
     internal val cwPipelineRefreshTrigger = kotlinx.coroutines.flow.MutableStateFlow(0)
+    internal val cwMetadataCheckedAt = ConcurrentHashMap<String, Long>()
+    internal val cwForcedNextUpRefreshIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
     /** Tracks the active CW pipeline coroutine so it can be cancelled on profile switch. */
     internal var cwPipelineJob: Job? = null
     internal val fullyWatchedSeriesIds get() = watchedSeriesStateHolder
@@ -356,6 +358,11 @@ class HomeViewModel @Inject constructor(
                 .map { it.continueWatchingItems }
                 .distinctUntilChanged()
                 .collect { items ->
+                    Log.d("ContinueWatching", "published count=${items.size} next=" + items.mapNotNull {
+                        (it as? ContinueWatchingItem.NextUp)?.info?.let { info ->
+                            "${info.contentId}:${info.season}:${info.episode}:alert=${info.isReleaseAlert}"
+                        }
+                    }.joinToString())
                     continueWatchingPreScrapeCoordinator?.onContinueWatchingItemsUpdated(items)
                 }
         }
@@ -363,8 +370,8 @@ class HomeViewModel @Inject constructor(
             profileManager.activeProfileReady.first { it }
             observeLayoutPreferences()
             observeModernHomePresentation()
+            watchedSeriesStateHolder.loadFromDisk()
             loadContinueWatching()
-            launch { watchedSeriesStateHolder.loadFromDisk() }
             observeExternalMetaPrefetchPreference()
             observeContinueWatchingSortMode()
             loadHomeCatalogOrderPreference()
@@ -403,6 +410,8 @@ class HomeViewModel @Inject constructor(
                     discoveredOlderNextUpItems.clear()
                     cwLastProcessedNextUpContentIds.clear()
                     cwProcessedOlderSeedContentIds.clear()
+                    cwMetadataCheckedAt.clear()
+                    cwForcedNextUpRefreshIds.clear()
                     cwEnrichedNextUpOverlay.clear()
                     cwEnrichedInProgressOverlay.clear()
                     cwLastBadgeEpisodeKeys = emptySet()
@@ -414,10 +423,10 @@ class HomeViewModel @Inject constructor(
                     _gridFocusState.value = HomeScreenFocusState()
                     // Reset so the new profile's pipeline signals first completion correctly.
                     _initialCwResolved.value = false
-                    loadContinueWatching()
                     // Clear watched badges so they don't leak between profiles.
                     watchedSeriesStateHolder.clearInMemory()
                     watchedSeriesStateHolder.loadFromDisk(profileId = newId)
+                    loadContinueWatching()
                     _movieWatchedStatus.value = emptyMap()
                     _pendingWatchedBatch.value = emptyMap()
                     _uiState.update { it.copy(movieWatchedStatus = emptyMap()) }
@@ -457,6 +466,8 @@ class HomeViewModel @Inject constructor(
         discoveredOlderNextUpItems.clear()
         cwLastProcessedNextUpContentIds.clear()
         cwProcessedOlderSeedContentIds.clear()
+        cwMetadataCheckedAt.clear()
+        cwForcedNextUpRefreshIds.clear()
         cwEnrichedNextUpOverlay.clear()
         cwEnrichedInProgressOverlay.clear()
         cwLastBadgeEpisodeKeys = emptySet()
