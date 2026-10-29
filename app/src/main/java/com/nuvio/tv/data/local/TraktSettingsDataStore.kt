@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.simkl.SimklAnimeIdPreference
 import com.nuvio.tv.domain.model.LibrarySourceMode
+import com.nuvio.tv.domain.model.sanitizeDismissedNextUpKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,10 +16,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -63,6 +66,26 @@ class TraktSettingsDataStore @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    init {
+        scope.launch {
+            profileManager.activeProfileId.collectLatest { pid ->
+                migrateLegacyDismissedKeys(pid)
+            }
+        }
+    }
+
+    private suspend fun migrateLegacyDismissedKeys(profileId: Int) {
+        runCatching {
+            store(profileId).edit { prefs ->
+                val raw = prefs[dismissedNextUpKeysKey] ?: return@edit
+                val sanitized = sanitizeDismissedNextUpKeys(raw)
+                if (sanitized != raw) {
+                    prefs[dismissedNextUpKeysKey] = sanitized
+                }
+            }
+        }
+    }
+
     private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
     private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
     private val showUnairedNextUpKey = booleanPreferencesKey("show_unaired_next_up")
@@ -84,9 +107,7 @@ class TraktSettingsDataStore @Inject constructor(
     val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             val raw = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            // Keep episode coordinates; collapsing them makes removals permanent
-            // show-wide vetoes, including episodes released weeks later.
-            raw
+            sanitizeDismissedNextUpKeys(raw)
         }
     }
 
@@ -143,11 +164,32 @@ class TraktSettingsDataStore @Inject constructor(
     }
 
     suspend fun addDismissedNextUpKey(key: String) {
-        if (key.isBlank()) return
+        if (key.isBlank() || !key.contains('|')) return
         val exactKey = key.trim()
         store().edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            prefs[dismissedNextUpKeysKey] = current + exactKey
+            val sanitized = sanitizeDismissedNextUpKeys(current)
+            prefs[dismissedNextUpKeysKey] = sanitized + exactKey
+        }
+    }
+
+    suspend fun removeDismissedNextUpKeysForContents(
+        contentIds: Collection<String>,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        val targets = contentIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (targets.isEmpty()) return
+        store(profileId).edit { prefs ->
+            val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
+            val sanitized = sanitizeDismissedNextUpKeys(current)
+            val filtered = sanitized.filterNot { key ->
+                targets.any { id ->
+                    key == id || key.startsWith("$id|") || key.startsWith("episode|$id|")
+                }
+            }.toSet()
+            if (filtered != current) {
+                prefs[dismissedNextUpKeysKey] = filtered
+            }
         }
     }
 
@@ -155,19 +197,7 @@ class TraktSettingsDataStore @Inject constructor(
         contentId: String,
         profileId: Int = profileManager.activeProfileId.value
     ) {
-        if (contentId.isBlank()) return
-        val trimmed = contentId.trim()
-        val prefix = "$trimmed|"
-        store(profileId).edit { prefs ->
-            val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            // Remove both legacy format ("contentId|season|episode") and new format ("contentId")
-            val filtered = current.filterNot {
-                it == trimmed || it.startsWith(prefix) || it.startsWith("episode|$trimmed|")
-            }
-            if (filtered.size != current.size) {
-                prefs[dismissedNextUpKeysKey] = filtered.toSet()
-            }
-        }
+        removeDismissedNextUpKeysForContents(listOf(contentId), profileId)
     }
 
     suspend fun setShowUnairedNextUp(enabled: Boolean) {

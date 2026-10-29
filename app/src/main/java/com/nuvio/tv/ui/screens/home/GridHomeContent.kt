@@ -564,11 +564,11 @@ fun GridHomeContent(
                             }
                             val season = when (item) {
                                 is ContinueWatchingItem.InProgress -> item.progress.season
-                                is ContinueWatchingItem.NextUp -> item.info.seedSeason
+                                is ContinueWatchingItem.NextUp -> item.info.season
                             }
                             val episode = when (item) {
                                 is ContinueWatchingItem.InProgress -> item.progress.episode
-                                is ContinueWatchingItem.NextUp -> item.info.seedEpisode
+                                is ContinueWatchingItem.NextUp -> item.info.episode
                             }
                             val isNextUp = item is ContinueWatchingItem.NextUp
                             onRemoveContinueWatching(contentId, season, episode, isNextUp)
@@ -636,11 +636,11 @@ fun GridHomeContent(
                             }
                             val season = when (item) {
                                 is ContinueWatchingItem.InProgress -> item.progress.season
-                                is ContinueWatchingItem.NextUp -> item.info.seedSeason
+                                is ContinueWatchingItem.NextUp -> item.info.season
                             }
                             val episode = when (item) {
                                 is ContinueWatchingItem.InProgress -> item.progress.episode
-                                is ContinueWatchingItem.NextUp -> item.info.seedEpisode
+                                is ContinueWatchingItem.NextUp -> item.info.episode
                             }
                             val isNextUp = item is ContinueWatchingItem.NextUp
                             onRemoveContinueWatching(contentId, season, episode, isNextUp)

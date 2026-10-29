@@ -4,7 +4,14 @@ fun nextUpEpisodeDismissKey(contentId: String, season: Int?, episode: Int?): Str
     if (season != null && episode != null) "episode|${contentId.trim()}|$season|$episode"
     else contentId.trim()
 
-/** Remove hides an episode; historical show-wide removals cannot veto a new release. */
+/** Filters out bare show IDs or malformed keys that lack episode coordinates. */
+fun sanitizeDismissedNextUpKeys(dismissedKeys: Set<String>): Set<String> =
+    dismissedKeys.filter { it.contains('|') }.toSet()
+
+/**
+ * Remove hides a specific episode; historical whole-show dismissals or other episode
+ * dismissals cannot veto a different episode or future release.
+ */
 fun isContinueWatchingNextUpDismissed(
     contentId: String,
     season: Int?,
@@ -12,8 +19,11 @@ fun isContinueWatchingNextUpDismissed(
     isReleaseAlert: Boolean,
     dismissedKeys: Set<String>
 ): Boolean {
+    if (season == null || episode == null) return false
     val id = contentId.trim()
-    if (season != null && episode != null && nextUpEpisodeDismissKey(id, season, episode) in dismissedKeys) return true
-    if (isReleaseAlert) return false
-    return dismissedKeys.any { it == id || it.startsWith("$id|") }
+    val modernKey = nextUpEpisodeDismissKey(id, season, episode)
+    if (modernKey in dismissedKeys) return true
+    val legacyKey = "$id|$season|$episode"
+    return legacyKey in dismissedKeys
 }
+

@@ -700,6 +700,13 @@ class WatchProgressRepositoryImpl @Inject constructor(
         return activeProgressProvider()?.showIdSiblings().orEmpty()
     }
 
+    private suspend fun clearDismissalsForSeriesAndSiblings(contentId: String, profileId: Int) {
+        if (contentId.isBlank()) return
+        val trimmed = contentId.trim()
+        val siblings = runCatching { getShowIdSiblings()[trimmed] }.getOrNull().orEmpty() + trimmed
+        traktSettingsDataStore.removeDismissedNextUpKeysForContents(siblings, profileId)
+    }
+
     override fun isWatchedByVideoId(videoId: String, episode: Int): Boolean? {
         val providerId = activeProgressProviderId ?: return null
         return trackingProgressProviders.provider(providerId)?.isWatchedByVideoId(videoId, episode)
@@ -746,8 +753,9 @@ class WatchProgressRepositoryImpl @Inject constructor(
         syncRemote: Boolean
     ) {
         if (progress.contentType.equals("series", ignoreCase = true) ||
-            progress.contentType.equals("tv", ignoreCase = true)) {
-            traktSettingsDataStore.removeDismissedNextUpKeysForContent(progress.contentId, profileId)
+            progress.contentType.equals("tv", ignoreCase = true) ||
+            progress.contentType.equals("anime", ignoreCase = true)) {
+            clearDismissalsForSeriesAndSiblings(progress.contentId, profileId)
         }
         val progressKey = progressKey(progress)
         val shouldPushRemote = syncRemote &&
@@ -945,8 +953,9 @@ class WatchProgressRepositoryImpl @Inject constructor(
         broadcastTrackingHistory: Boolean
     ) {
         if (progress.contentType.equals("series", ignoreCase = true) ||
-            progress.contentType.equals("tv", ignoreCase = true)) {
-            traktSettingsDataStore.removeDismissedNextUpKeysForContent(progress.contentId, profileId)
+            progress.contentType.equals("tv", ignoreCase = true) ||
+            progress.contentType.equals("anime", ignoreCase = true)) {
+            clearDismissalsForSeriesAndSiblings(progress.contentId, profileId)
         }
         val now = System.currentTimeMillis()
         val progressKey = progressKey(progress)
@@ -982,8 +991,9 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val profileId = profileManager.activeProfileId.value
         val firstProgress = progressList.first()
         if (firstProgress.contentType.equals("series", ignoreCase = true) ||
-            firstProgress.contentType.equals("tv", ignoreCase = true)) {
-            traktSettingsDataStore.removeDismissedNextUpKeysForContent(firstProgress.contentId, profileId)
+            firstProgress.contentType.equals("tv", ignoreCase = true) ||
+            firstProgress.contentType.equals("anime", ignoreCase = true)) {
+            clearDismissalsForSeriesAndSiblings(firstProgress.contentId, profileId)
         }
         val now = System.currentTimeMillis()
         val rawEntries = watchProgressPreferences.getAllRawEntries(profileId)

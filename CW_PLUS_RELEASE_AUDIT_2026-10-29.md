@@ -1,6 +1,6 @@
-# Plus release audit: Home and Continue Watching
+# Plus release audit: Continue Watching and its data dependencies
 
-Each published Plus release is inspected against the preceding published Plus release. This lists Home/CW changes, not playback acceptance. Missing release numbers were not present in the published release inventory.
+Each published Plus release is compared with the preceding published Plus release. The scope includes Home, air-state and dismissal stores, enrichment persistence, date parsing, launcher sync, watch progress and metadata repositories. The table records source changes, not device acceptance. Missing release numbers were not present in the published inventory.
 
 | Release | Relevant commits | Changes |
 |---|---:|---|
@@ -26,8 +26,8 @@ Each published Plus release is inspected against the preceding published Plus re
 | 0.9.4-plus.20 | 0 |  |
 | 0.9.4-plus.21 | 0 |  |
 | 0.9.4-plus.22 | 1 | 1abc33d7b fix(sprint-21): resolve screensaver black screen, top pill focus trap, sidebar scrolling, and HA integration |
-| 0.9.4-plus.23 | 1 | 281629cc2 feat(cw): instant launch continue watching pre-scraper and sprint 21 fixes |
-| 0.9.4-plus.24 | 0 |  |
+| 0.9.4-plus.23 | 2 | eb3bc0210 feat(nas): sprint 22 local nas media discovery, zero-debrid playback, and ha voice fix<br>281629cc2 feat(cw): instant launch continue watching pre-scraper and sprint 21 fixes |
+| 0.9.4-plus.24 | 1 | aab564f74 fix: resolve compile errors in LocalMedia repository, scanner, search, and settings for Sprint 22 |
 | 0.9.4-plus.25 | 0 |  |
 | 0.9.4-plus.26 | 1 | 8d267927d feat: search priority, tv catalog curation, default genres, and remote sound controls (v0.9.4-plus.26) |
 | 0.9.4-plus.27 | 1 | 8ea4e8975 release(v0.9.4-plus.27): voice playback, search history, AI channels, screensaver pause fix, stutter RCA, and TMDB season expansion |
@@ -46,8 +46,8 @@ Each published Plus release is inspected against the preceding published Plus re
 | 0.9.4-plus.40 | 0 |  |
 | 0.9.4-plus.44 | 2 | a9787d674 fix: cast details photos, tmdb catalog ratings, youtube trailer black screen, and next-up missing seasons (v0.9.4-plus.44)<br>e879fe166 fix(player): suppress trakt, simkl, and continue watching tracking for random episodes (v0.9.4-plus.43) |
 | 0.9.4-plus.45 | 2 | fcb2d4b40 fix: multiple hotfixes (cast photos, tmdb rating, youtube trailers, next-up season synthesis) (v0.9.4-plus.45)<br>433fe8f7a fix(build): resolve kotlin compiler errors from coil3 migration and variable renaming (v0.9.4-plus.44) |
-| 0.9.4-plus.46 | 0 |  |
-| 0.9.4-plus.47 | 2 | 7429605c0 fix(compile): use primary.imdbId and contentId in candidateIds for CW<br>bdbdf18d8 feat: complete Just Play integration, multi-source continue watching merging, and full release unit test fixes (v0.9.4-plus.50) |
+| 0.9.4-plus.46 | 1 | 87cdd51d1 feat: multi-source metadata superset merging & on-screen source switching (v0.9.4-plus.46) |
+| 0.9.4-plus.47 | 3 | 7429605c0 fix(compile): use primary.imdbId and contentId in candidateIds for CW<br>bdbdf18d8 feat: complete Just Play integration, multi-source continue watching merging, and full release unit test fixes (v0.9.4-plus.50)<br>929846419 fix(compile): resolve candidate meta addons suspend, flow imports, and theme tokens |
 | 0.9.4-plus.50 | 1 | 6b78101ee fix: guard CW metadata aliases and prepare plus.50 |
 | 0.9.4-plus.51 | 1 | d0f0cb881 fix(cw): prevent unannounced future season premieres from appearing in continue watching |
 | 0.9.4-plus.52 | 0 |  |

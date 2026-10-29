@@ -124,12 +124,12 @@ fun ContinueWatchingItem.title(): String = when (this) {
 
 fun ContinueWatchingItem.season(): Int? = when (this) {
     is ContinueWatchingItem.InProgress -> progress.season
-    is ContinueWatchingItem.NextUp -> info.seedSeason ?: info.season
+    is ContinueWatchingItem.NextUp -> info.season
 }
 
 fun ContinueWatchingItem.episode(): Int? = when (this) {
     is ContinueWatchingItem.InProgress -> progress.episode
-    is ContinueWatchingItem.NextUp -> info.seedEpisode ?: info.episode
+    is ContinueWatchingItem.NextUp -> info.episode
 }
 
 fun ContinueWatchingItem.videoId(): String = when (this) {
