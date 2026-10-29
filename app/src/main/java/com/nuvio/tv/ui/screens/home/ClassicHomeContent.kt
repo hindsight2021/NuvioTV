@@ -63,6 +63,7 @@ import com.nuvio.tv.ui.components.CatalogRowSection
 import com.nuvio.tv.ui.components.CollectionRowSection
 import com.nuvio.tv.ui.components.ContinueWatchingSection
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.HeroCarouselBackdrop
 import com.nuvio.tv.ui.components.LoadingIndicator
@@ -106,6 +107,7 @@ fun ClassicHomeContent(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    onDeleteAllProgress: (String) -> Unit = {},
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     onRequestTrailerPreview: (MetaPreview) -> Unit,
@@ -677,6 +679,9 @@ fun ClassicHomeContent(
                         val isNextUp = item is ContinueWatchingItem.NextUp
                         onRemoveContinueWatching(contentId, season, episode, isNextUp)
                     },
+                    onDeleteAllProgress = { item ->
+                        onDeleteAllProgress(item.contentId())
+                    },
                     focusedItemIndex = when {
                         focusState.hasSavedFocus && focusState.focusedRowIndex == -1 -> focusState.focusedItemIndex
                         shouldRequestInitialFocus && !heroVisible -> 0
@@ -720,7 +725,7 @@ fun ClassicHomeContent(
                 }
                 ContinueWatchingSection(
                     items = uiState.displayedUpcomingItems,
-                    title = stringResource(R.string.upcoming_section_title),
+                    title = stringResource(if (uiState.separateNextUpRow) R.string.cw_next_up else R.string.upcoming_section_title),
                     onItemClick = { item ->
                         onContinueWatchingClick(item)
                     },

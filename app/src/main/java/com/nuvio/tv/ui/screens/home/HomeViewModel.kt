@@ -29,6 +29,7 @@ import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.domain.model.isContinueWatchingNextUpDismissed
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.ListMembershipChanges
@@ -312,6 +313,10 @@ class HomeViewModel @Inject constructor(
     internal var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
     internal var continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT
+    @Volatile
+    internal var separateNextUpRow: Boolean = false
+    @Volatile
+    internal var nextUpRowPosition: NextUpRowPosition = NextUpRowPosition.BELOW_CONTINUE_WATCHING
     internal val startupStartedAtMs: Long = SystemClock.elapsedRealtime()
     @Volatile
     internal var startupGracePeriodActive: Boolean = true
@@ -516,6 +521,23 @@ class HomeViewModel @Inject constructor(
                     clearAllCwInMemoryCaches()
                 }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.separateNextUpRow
+                .distinctUntilChanged()
+                .collect { separate ->
+                    separateNextUpRow = separate
+                    _uiState.update { it.copy(separateNextUpRow = separate) }
+                    clearAllCwInMemoryCaches()
+                }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.nextUpRowPosition
+                .distinctUntilChanged()
+                .collect { position ->
+                    nextUpRowPosition = position
+                    _uiState.update { it.copy(nextUpRowPosition = position) }
+                }
+        }
     }
 
     private fun observeBlurUnwatchedEpisodes() {
@@ -703,6 +725,7 @@ class HomeViewModel @Inject constructor(
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.SelectHomeTab -> selectHomeTab(event.tab)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
+            is HomeEvent.OnDeleteAllProgress -> deleteAllProgressPipeline(event.contentId)
             is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(
                 contentId = event.contentId,
                 season = event.season,
@@ -882,7 +905,7 @@ class HomeViewModel @Inject constructor(
                 mode = sortMode
             )
             if (items.isNotEmpty()) {
-                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode)
+                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, separateNextUpRow)
                 _uiState.update { state ->
                     if (profileManager.activeProfileId.value != restoringProfileId ||
                         _initialCwResolved.value || state.continueWatchingItems.isNotEmpty() ||

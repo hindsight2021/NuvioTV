@@ -200,6 +200,11 @@ fun HomeScreen(
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         }
     }
+    val onDeleteAllProgressStable = remember(viewModel) {
+        { contentId: String ->
+            viewModel.onEvent(HomeEvent.OnDeleteAllProgress(contentId))
+        }
+    }
 
     val context = LocalContext.current
     val homeCoroutineScope = rememberCoroutineScope()
@@ -887,6 +892,7 @@ private fun ClassicHomeRoute(
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         },
+        onDeleteAllProgress = { contentId -> viewModel.onEvent(HomeEvent.OnDeleteAllProgress(contentId)) },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onRequestTrailerPreview = { item ->
@@ -960,6 +966,7 @@ private fun GridHomeRoute(
                 viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
             }
         },
+        onDeleteAllProgress = { contentId -> viewModel.onEvent(HomeEvent.OnDeleteAllProgress(contentId)) },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onItemFocus = remember(viewModel) {
@@ -1019,6 +1026,11 @@ private fun ModernHomeRoute(
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         }
     }
+    val deleteAllProgress = remember(viewModel) {
+        { contentId: String ->
+            viewModel.onEvent(HomeEvent.OnDeleteAllProgress(contentId))
+        }
+    }
     val saveModernFocusState = remember(viewModel) {
         { vi: Int, vo: Int, rk: String?, ikm: Map<String, String>, m: Map<String, Int>, ri: Int, ii: Int ->
             viewModel.saveFocusState(vi, vo, rk, ikm, m, ri, ii)
@@ -1059,6 +1071,7 @@ private fun ModernHomeRoute(
         onRequestTrailerPreview = requestTrailerPreview,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,
+        onDeleteAllProgress = deleteAllProgress,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onNavigateToFolderDetail = onNavigateToFolderDetail,

@@ -132,6 +132,7 @@ fun ContinueWatchingSection(
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
+    onDeleteAllProgress: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     showManualPlayOption: Boolean = false,
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
@@ -316,6 +317,7 @@ fun ContinueWatchingSection(
                 onRemoveItem(menuItem)
                 optionsItem = null
             },
+            onDeleteAllProgress = onDeleteAllProgress?.let { { it(menuItem); optionsItem = null } },
             onDetails = {
                 onDetailsClick(menuItem)
                 optionsItem = null
@@ -507,7 +509,8 @@ fun ContinueWatchingCard(
     val effectiveNewEpisodeLabel = if (useShortLabels) strNewEpisodeShort else strNewEpisode
     val nextUpBadgeText = nextUp?.let { info ->
         if (info.isReleaseAlert) {
-            if (info.isNewSeasonRelease) strNewSeason else effectiveNewEpisodeLabel
+            val label = if (info.isNewSeasonRelease) strNewSeason else effectiveNewEpisodeLabel
+            "● $label"
         } else if (!info.hasAired) {
             val airDateText = if (useShortLabels) {
                 computeAirDateBadgeTextShort(cardContext, info.released, info.airDateLabel)
@@ -611,11 +614,23 @@ fun ContinueWatchingCard(
             .build()
     }
 
+    val isReleaseAlert = nextUp?.isReleaseAlert == true
+    val isNewSeason = nextUp?.isNewSeasonRelease == true
+    val neonGlowBrush = remember {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFF00E5FF),
+                Color(0xFF7C4DFF),
+                Color(0xFFFF007F)
+            )
+        )
+    }
+
     val bgColor = NuvioTheme.colors.Background
     val badgeBackground = remember(bgColor, nextUp) {
         when {
-            nextUp?.isNewSeasonRelease == true -> CwNewSeasonBadgeColor
-            nextUp?.isReleaseAlert == true -> CwNewEpisodeBadgeColor
+            isNewSeason -> Color(0xFF7C3AED)
+            isReleaseAlert -> Color(0xFF0066FF)
             else -> bgColor.copy(alpha = 0.8f)
         }
     }
@@ -671,12 +686,25 @@ fun ContinueWatchingCard(
         border = if (textBelowArtwork) {
             CardDefaults.border(focusedBorder = Border.None)
         } else {
-            CardDefaults.border(
-                focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                    shape = cwCardShape
+            if (isReleaseAlert) {
+                CardDefaults.border(
+                    border = Border(
+                        border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                        shape = cwCardShape
+                    ),
+                    focusedBorder = Border(
+                        border = BorderStroke(2.5.dp, neonGlowBrush),
+                        shape = cwCardShape
+                    )
                 )
-            )
+            } else {
+                CardDefaults.border(
+                    focusedBorder = Border(
+                        border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                        shape = cwCardShape
+                    )
+                )
+            }
         },
         scale = CardDefaults.scale(focusedScale = 1f)
     ) {
@@ -740,11 +768,21 @@ fun ContinueWatchingCard(
                     )
                     .clip(cwClipShape)
                     .then(
-                        if (textBelowArtwork && isFocused) {
-                            Modifier.border(
-                                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                                shape = cwClipShape
-                            )
+                        if (textBelowArtwork) {
+                            if (isFocused) {
+                                Modifier.border(
+                                    border = if (isReleaseAlert) BorderStroke(2.5.dp, neonGlowBrush)
+                                             else NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                                    shape = cwClipShape
+                                )
+                            } else if (isReleaseAlert) {
+                                Modifier.border(
+                                    border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                                    shape = cwClipShape
+                                )
+                            } else {
+                                Modifier
+                            }
                         } else {
                             Modifier
                         }
@@ -1122,6 +1160,7 @@ fun ContinueWatchingOptionsDialog(
     item: ContinueWatchingItem,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
+    onDeleteAllProgress: (() -> Unit)? = null,
     onDetails: () -> Unit,
     onStartFromBeginning: () -> Unit = {},
     showPlayManually: Boolean = false,
@@ -1143,6 +1182,7 @@ fun ContinueWatchingOptionsDialog(
     }
     val isSeries = item.isSeries()
 
+    var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
     val detailsFocusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
 
@@ -1319,6 +1359,72 @@ fun ContinueWatchingOptionsDialog(
                     text = stringResource(R.string.cw_action_remove),
                     style = MaterialTheme.typography.bodyMedium
                 )
+            }
+
+            if (onDeleteAllProgress != null) {
+                Button(
+                    onClick = { showDeleteConfirmationDialog = true },
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFFC62828).copy(alpha = 0.2f),
+                        contentColor = Color(0xFFFF6B6B)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp)
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (isSeries) R.string.cw_action_delete_all_progress
+                            else R.string.cw_action_delete_progress
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirmationDialog) {
+        val cancelFocusRequester = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            cancelFocusRequester.requestFocus()
+        }
+        NuvioDialog(
+            onDismiss = { showDeleteConfirmationDialog = false },
+            title = stringResource(R.string.cw_delete_progress_confirm_title),
+            subtitle = stringResource(R.string.cw_delete_progress_confirm_subtitle, title),
+            suppressFirstKeyUp = false
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+            ) {
+                Button(
+                    onClick = { showDeleteConfirmationDialog = false },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(cancelFocusRequester),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+                Button(
+                    onClick = {
+                        showDeleteConfirmationDialog = false
+                        onDeleteAllProgress?.invoke()
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFFC62828),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(stringResource(R.string.cw_delete_progress_confirm_btn))
+                }
             }
         }
     }

@@ -51,12 +51,16 @@ class TraktTrackingHistoryWriter @Inject constructor(
                 service.removeSeasonFromHistoryBatch(first.contentId(), episodes)
             } else {
                 group.forEach { media ->
-                    service.removeFromHistory(
-                        contentId = media.contentId(),
-                        videoId = media.catalog?.videoId,
-                        season = media.episode?.season,
-                        episode = media.episode?.number
-                    )
+                    if (media.kind != TrackingMediaKind.MOVIE && media.episode == null) {
+                        service.removeShowFromHistory(media.contentId())
+                    } else {
+                        service.removeFromHistory(
+                            contentId = media.contentId(),
+                            videoId = media.catalog?.videoId,
+                            season = media.episode?.season,
+                            episode = media.episode?.number
+                        )
+                    }
                 }
             }
         }

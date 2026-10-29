@@ -84,6 +84,7 @@ import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LocalCardDepthStyle
 import com.nuvio.tv.ui.components.GridContinueWatchingSection
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.LocalStartupSplashEnabled
@@ -113,6 +114,7 @@ fun GridHomeContent(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onNavigateToFolderDetail: (String, String) -> Unit = { _, _ -> },
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    onDeleteAllProgress: (String) -> Unit = {},
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
@@ -573,6 +575,9 @@ fun GridHomeContent(
                             val isNextUp = item is ContinueWatchingItem.NextUp
                             onRemoveContinueWatching(contentId, season, episode, isNextUp)
                         },
+                        onDeleteAllProgress = { item ->
+                            onDeleteAllProgress(item.contentId())
+                        },
                         blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
                         useEpisodeThumbnails = uiState.useEpisodeThumbnailsInCw,
                         cardStyle = uiState.continueWatchingCardStyle,
@@ -599,7 +604,7 @@ fun GridHomeContent(
                         modifier = Modifier.fillMaxWidth(),
                         fullWidth = gridWidth,
                         items = uiState.displayedUpcomingItems,
-                        title = stringResource(R.string.upcoming_section_title),
+                        title = stringResource(if (uiState.separateNextUpRow) R.string.cw_next_up else R.string.upcoming_section_title),
                         lastFocusedIndex = lastFocusedUpcomingIndex,
                         focusRequesters = upcomingFocusRequesters,
                         rowFocusRequester = upcomingRowFocusRequester,

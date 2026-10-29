@@ -159,6 +159,21 @@ class WatchedItemsPreferences @Inject constructor(
         }
     }
 
+    suspend fun unmarkAllForContent(
+        contentId: String,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        val prefix = "$contentId|"
+        store(profileId).edit { preferences ->
+            val current = preferences[watchedItemsKey] ?: emptySet()
+            val filtered = current.filterNot { json ->
+                val key = extractWatchedItemKey(json)
+                key == contentId || key.startsWith(prefix)
+            }
+            preferences[watchedItemsKey] = filtered.toSet()
+        }
+    }
+
     suspend fun unmarkAsWatchedBatch(
         contentId: String,
         episodes: List<Pair<Int, Int>>,

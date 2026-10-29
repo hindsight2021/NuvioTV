@@ -22,6 +22,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.flow
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.domain.model.nextUpEpisodeDismissKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -181,6 +182,8 @@ class HomeContinueWatchingRefreshTest {
         every { vm.layoutPreferenceDataStore.showUnairedNextUp } returns MutableStateFlow(false)
         every { vm.layoutPreferenceDataStore.nextUpFromFurthestEpisode } returns MutableStateFlow(true)
         every { vm.layoutPreferenceDataStore.continueWatchingSortMode } returns MutableStateFlow(ContinueWatchingSortMode.DEFAULT)
+        every { vm.layoutPreferenceDataStore.separateNextUpRow } returns MutableStateFlow(false)
+        every { vm.layoutPreferenceDataStore.nextUpRowPosition } returns MutableStateFlow(NextUpRowPosition.BELOW_CONTINUE_WATCHING)
         coEvery { vm.cwEnrichmentCache.getNextUpSnapshot() } returns emptyList()
         coEvery { vm.cwEnrichmentCache.getInProgressSnapshot() } returns emptyList()
         every { repo.getMetaFromAllAddons(any(), "tt999", any()) } returns flow { awaitCancellation() }

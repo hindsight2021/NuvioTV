@@ -166,6 +166,11 @@
     <string name="cw_action_go_to_details">Go to details</string>
     <string name="cw_action_start_from_beginning">Start from beginning</string>
     <string name="cw_action_remove">Remove</string>
+    <string name="cw_action_delete_all_progress">Delete All Progress…</string>
+    <string name="cw_action_delete_progress">Delete Progress…</string>
+    <string name="cw_delete_progress_confirm_title">Delete Watch Progress</string>
+    <string name="cw_delete_progress_confirm_subtitle">Are you sure you want to delete all watch progress and history for "%1$s" from Nuvio, Trakt, and Simkl? This will reset your progress so you can start over.</string>
+    <string name="cw_delete_progress_confirm_btn">Delete</string>
     <string name="cw_dialog_subtitle">Choose what you want to do with this item.</string>
     <string name="home_poster_dialog_subtitle">Title actions</string>
 
@@ -1088,6 +1093,14 @@
     <string name="layout_cw_sort_streaming_desc">Released items first, upcoming at the end</string>
     <string name="layout_cw_sort_split_upcoming">Separate Upcoming Row</string>
     <string name="layout_cw_sort_split_upcoming_desc">Move unaired episodes to a separate Upcoming row</string>
+    <string name="layout_separate_next_up_row">Separate Next Up Row</string>
+    <string name="layout_separate_next_up_row_sub">Show recent new episodes in a dedicated Next Up row</string>
+    <string name="layout_next_up_row_position">Next Up Row Position</string>
+    <string name="layout_next_up_row_position_sub">Display the Next Up row above or below Continue Watching</string>
+    <string name="layout_next_up_row_above">Above Continue Watching</string>
+    <string name="layout_next_up_row_above_desc">Place new episode releases at the top before continue watching</string>
+    <string name="layout_next_up_row_below">Below Continue Watching</string>
+    <string name="layout_next_up_row_below_desc">Place new episode releases directly under continue watching</string>
     <string name="upcoming_section_title">Upcoming</string>
     <string name="layout_trailer_button">Show Trailer Button</string>
     <string name="layout_trailer_button_sub">Show trailer button on detail page (only when trailer is available).</string>

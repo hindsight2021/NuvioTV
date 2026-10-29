@@ -862,6 +862,60 @@ class WatchProgressRepositoryImpl @Inject constructor(
         triggerRemoteSync(profileId = profileId)
     }
 
+    override suspend fun deleteAllProgressForSeries(contentId: String) {
+        val profileId = profileManager.activeProfileId.value
+        val trimmed = contentId.trim()
+        val siblingIds: List<String> = (runCatching { getShowIdSiblings()[trimmed] }.getOrNull().orEmpty() + trimmed).distinct()
+
+        // 1. Clear dismissals across all siblings so show is not blocked from CW if watched again
+        clearDismissalsForSeriesAndSiblings(contentId, profileId)
+
+        // 2. Clear local watch progress for all siblings
+        for (id in siblingIds) {
+            watchProgressPreferences.removeProgress(id, null, null, profileId)
+        }
+
+        // 3. Clear local watched history for all siblings
+        for (id in siblingIds) {
+            watchedItemsPreferences.unmarkAllForContent(id, profileId)
+        }
+
+        // 4. Remote providers (Trakt + Simkl)
+        // Optimistic removal and remote delete of progress/history
+        for (id in siblingIds) {
+            for (provider in connectedProgressProviders()) {
+                provider.applyOptimisticRemoval(id, null, null)
+                runCatching { provider.removeProgress(id, null, null) }
+                    .onFailure { error -> Log.w(TAG, "Failed ${provider.providerId.storageId} progress removal", error) }
+            }
+        }
+
+        val media = buildTrackingMediaReference(
+            contentType = "series",
+            parentMetaId = contentId,
+            videoId = null,
+            seasonNumber = null,
+            episodeNumber = null
+        )
+        broadcastHistoryRemoval(profileId, listOf(media))
+
+        // 5. Nuvio Sync / remote delete keys
+        val remoteDeleteKeys = siblingIds
+        mutationStore.queueProgressDeletes(remoteDeleteKeys, profileId)
+        mutationStore.queueWatchedDeletes(siblingIds.map { WatchedMutationKey(it, null, null) }, profileId)
+
+        if (authManager.isAuthenticated) {
+            watchProgressSyncService.deleteFromRemote(remoteDeleteKeys, profileId)
+                .onFailure { error -> Log.w(TAG, "deleteAllProgress remote delete failed", error) }
+            for (id in siblingIds) {
+                watchedItemsSyncService.deleteFromRemote(id, null, null, profileId)
+            }
+        }
+
+        triggerRemoteSync(profileId = profileId)
+        triggerWatchedItemsSync(profileId = profileId)
+    }
+
     override suspend fun removeFromHistory(contentId: String, videoId: String?, season: Int?, episode: Int?) {
         val profileId = profileManager.activeProfileId.value
         val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, season, episode, profileId = profileId)

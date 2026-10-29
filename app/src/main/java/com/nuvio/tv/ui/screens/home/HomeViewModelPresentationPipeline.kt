@@ -362,6 +362,8 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     catalogRows = state.catalogRows,
                     continueWatchingItems = if (state.continueWatchingEnabled) state.displayedContinueWatchingItems else emptyList(),
                     upcomingItems = if (state.continueWatchingEnabled) state.displayedUpcomingItems else emptyList(),
+                    separateNextUpRow = state.separateNextUpRow,
+                    nextUpRowPosition = state.nextUpRowPosition,
                     useLandscapePosters = state.modernLandscapePostersEnabled,
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                     showFullReleaseDate = state.showFullReleaseDate,
@@ -381,6 +383,8 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                 old.homeRows === new.homeRows
                     && old.continueWatchingItems == new.continueWatchingItems
                     && old.upcomingItems == new.upcomingItems
+                    && old.separateNextUpRow == new.separateNextUpRow
+                    && old.nextUpRowPosition == new.nextUpRowPosition
                     && old.useLandscapePosters == new.useLandscapePosters
                     && old.showCatalogTypeSuffix == new.showCatalogTypeSuffix
                     && old.showFullReleaseDate == new.showFullReleaseDate

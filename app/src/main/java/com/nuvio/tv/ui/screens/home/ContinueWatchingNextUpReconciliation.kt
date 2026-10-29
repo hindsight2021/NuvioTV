@@ -91,7 +91,7 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
             dismissedNextUpKeys = dismissedNextUpKeys
         )
         val sorted = sortContinueWatchingItems(reconciled, sortMode)
-        val (main, upcoming) = splitUpcomingItems(sorted, sortMode)
+        val (main, upcoming) = splitUpcomingItems(sorted, sortMode, separateNextUpRow)
         if (state.continueWatchingItems == main && state.upcomingItems == upcoming) {
             state
         } else {

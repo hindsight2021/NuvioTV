@@ -83,6 +83,7 @@ import com.nuvio.tv.core.streams.StreamBadgePlacement
 import com.nuvio.tv.domain.model.AnimatedBackdropMode
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_EDGE_COVERAGE
@@ -148,6 +149,7 @@ fun LayoutSettingsContent(
     var posterCardStyleExpanded by rememberSaveable { mutableStateOf(false) }
     var showCardDepthFineTuneDialog by rememberSaveable { mutableStateOf(false) }
     var showCwSortModeDialog by rememberSaveable { mutableStateOf(false) }
+    var showNextUpRowPositionDialog by rememberSaveable { mutableStateOf(false) }
     var showStreamBadgePositionDialog by rememberSaveable { mutableStateOf(false) }
     var showEpisodeRatingsDialog by rememberSaveable { mutableStateOf(false) }
     var showEpisodeOptionsOverlayStyleDialog by rememberSaveable { mutableStateOf(false) }
@@ -992,6 +994,31 @@ fun LayoutSettingsContent(
                         onClick = { showCwSortModeDialog = true },
                         onFocused = { focusedSection = LayoutSettingsSection.CONTINUE_WATCHING }
                     )
+
+                    CompactToggleRow(
+                        title = stringResource(R.string.layout_separate_next_up_row),
+                        subtitle = stringResource(R.string.layout_separate_next_up_row_sub),
+                        checked = uiState.separateNextUpRow,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetSeparateNextUpRow(!uiState.separateNextUpRow)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.CONTINUE_WATCHING }
+                    )
+
+                    if (uiState.separateNextUpRow) {
+                        SettingsActionRow(
+                            title = stringResource(R.string.layout_next_up_row_position),
+                            subtitle = stringResource(R.string.layout_next_up_row_position_sub),
+                            value = when (uiState.nextUpRowPosition) {
+                                NextUpRowPosition.ABOVE_CONTINUE_WATCHING -> stringResource(R.string.layout_next_up_row_above)
+                                NextUpRowPosition.BELOW_CONTINUE_WATCHING -> stringResource(R.string.layout_next_up_row_below)
+                            },
+                            onClick = { showNextUpRowPositionDialog = true },
+                            onFocused = { focusedSection = LayoutSettingsSection.CONTINUE_WATCHING }
+                        )
+                    }
                     } // end if (uiState.continueWatchingEnabled)
                 }
             }
@@ -1177,6 +1204,17 @@ fun LayoutSettingsContent(
                     showCwSortModeDialog = false
                 },
                 onDismiss = { showCwSortModeDialog = false }
+            )
+        }
+
+        if (showNextUpRowPositionDialog) {
+            NextUpRowPositionDialog(
+                currentPosition = uiState.nextUpRowPosition,
+                onPositionSelected = { position ->
+                    viewModel.onEvent(LayoutSettingsEvent.SetNextUpRowPosition(position))
+                    showNextUpRowPositionDialog = false
+                },
+                onDismiss = { showNextUpRowPositionDialog = false }
             )
         }
 
@@ -1433,6 +1471,36 @@ private fun EpisodeOptionsOverlayStyleDialog(
         onDismiss = onDismiss,
         width = 460.dp,
         maxHeight = 380.dp
+    )
+}
+
+@Composable
+private fun NextUpRowPositionDialog(
+    currentPosition: NextUpRowPosition,
+    onPositionSelected: (NextUpRowPosition) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(
+        SettingsPickerOption(
+            NextUpRowPosition.ABOVE_CONTINUE_WATCHING,
+            stringResource(R.string.layout_next_up_row_above),
+            stringResource(R.string.layout_next_up_row_above_desc)
+        ),
+        SettingsPickerOption(
+            NextUpRowPosition.BELOW_CONTINUE_WATCHING,
+            stringResource(R.string.layout_next_up_row_below),
+            stringResource(R.string.layout_next_up_row_below_desc)
+        )
+    )
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.layout_next_up_row_position),
+        options = options,
+        selectedValue = currentPosition,
+        onOptionSelected = onPositionSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 320.dp
     )
 }
 

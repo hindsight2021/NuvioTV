@@ -25,6 +25,7 @@ import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_EDGE_COVERAGE
 import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_EDGE_STRENGTH
 import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_SHEEN_STRENGTH
@@ -122,6 +123,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val nextUpFromFurthestEpisodeKey = booleanPreferencesKey("next_up_from_furthest_episode")
     private val blurContinueWatchingNextUpKey = booleanPreferencesKey("blur_continue_watching_next_up")
     private val continueWatchingSortModeKey = stringPreferencesKey("continue_watching_sort_mode")
+    private val separateNextUpRowKey = booleanPreferencesKey("separate_next_up_row")
+    private val nextUpRowPositionKey = stringPreferencesKey("next_up_row_position")
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
     private val modernHeroFullScreenBackdropKey = booleanPreferencesKey("modern_hero_full_screen_backdrop")
@@ -447,6 +450,16 @@ class LayoutPreferenceDataStore @Inject constructor(
         val stored = prefs[continueWatchingSortModeKey] ?: ContinueWatchingSortMode.DEFAULT.name
         runCatching { ContinueWatchingSortMode.valueOf(stored) }
             .getOrDefault(ContinueWatchingSortMode.DEFAULT)
+    }
+
+    val separateNextUpRow: Flow<Boolean> = profileFlow { prefs ->
+        prefs[separateNextUpRowKey] ?: false
+    }
+
+    val nextUpRowPosition: Flow<NextUpRowPosition> = profileFlow { prefs ->
+        val stored = prefs[nextUpRowPositionKey] ?: NextUpRowPosition.BELOW_CONTINUE_WATCHING.name
+        runCatching { NextUpRowPosition.valueOf(stored) }
+            .getOrDefault(NextUpRowPosition.BELOW_CONTINUE_WATCHING)
     }
 
     val detailPageTrailerButtonEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -903,6 +916,18 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setContinueWatchingSortMode(mode: ContinueWatchingSortMode) {
         store().edit { prefs ->
             prefs[continueWatchingSortModeKey] = mode.name
+        }
+    }
+
+    suspend fun setSeparateNextUpRow(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[separateNextUpRowKey] = enabled
+        }
+    }
+
+    suspend fun setNextUpRowPosition(position: NextUpRowPosition) {
+        store().edit { prefs ->
+            prefs[nextUpRowPositionKey] = position.name
         }
     }
 

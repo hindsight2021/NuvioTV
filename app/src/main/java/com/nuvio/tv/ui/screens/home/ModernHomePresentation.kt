@@ -13,6 +13,7 @@ import com.nuvio.tv.domain.model.stableItemKey
 import com.nuvio.tv.ui.util.StableList
 import com.nuvio.tv.ui.util.asStable
 import kotlinx.coroutines.withContext
+import com.nuvio.tv.domain.model.NextUpRowPosition
 
 @Immutable
 internal data class ModernHomePresentationInput(
@@ -20,6 +21,8 @@ internal data class ModernHomePresentationInput(
     val catalogRows: List<CatalogRow>,
     val continueWatchingItems: List<ContinueWatchingItem>,
     val upcomingItems: List<ContinueWatchingItem>,
+    val separateNextUpRow: Boolean = false,
+    val nextUpRowPosition: NextUpRowPosition = NextUpRowPosition.BELOW_CONTINUE_WATCHING,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
     val showFullReleaseDate: Boolean,
@@ -51,7 +54,7 @@ internal fun buildModernHomePresentation(
         val catalogRowLimit = maxCatalogRows?.coerceAtLeast(0)
         var renderedCatalogRows = 0
 
-        if (input.continueWatchingItems.isNotEmpty()) {
+        val builtCwRow = if (input.continueWatchingItems.isNotEmpty()) {
             val reuseContinueWatchingRow =
                 cache.continueWatchingRow != null &&
                     cache.continueWatchingItems == input.continueWatchingItems &&
@@ -98,15 +101,20 @@ internal fun buildModernHomePresentation(
             cache.continueWatchingCustomPosterPattern = input.customPosterPattern
             cache.continueWatchingRpdbApiKey = input.rpdbApiKey
             cache.continueWatchingRow = continueWatchingRow
-            add(continueWatchingRow)
+            continueWatchingRow
         } else {
             cache.continueWatchingItems = emptyList()
             cache.continueWatchingRow = null
+            null
         }
 
-        // Upcoming row (SPLIT_UPCOMING mode)
-        val strUpcomingSectionTitle = localizedContext.getString(R.string.upcoming_section_title)
-        if (input.upcomingItems.isNotEmpty()) {
+        // Upcoming / Next Up row
+        val strUpcomingSectionTitle = if (input.separateNextUpRow) {
+            localizedContext.getString(R.string.cw_next_up)
+        } else {
+            localizedContext.getString(R.string.upcoming_section_title)
+        }
+        val builtUpcomingRow = if (input.upcomingItems.isNotEmpty()) {
             val reuseUpcomingRow =
                 cache.upcomingRow != null &&
                     cache.upcomingItems == input.upcomingItems &&
@@ -149,10 +157,19 @@ internal fun buildModernHomePresentation(
             cache.upcomingCustomPosterPattern = input.customPosterPattern
             cache.upcomingRpdbApiKey = input.rpdbApiKey
             cache.upcomingRow = upcomingRow
-            add(upcomingRow)
+            upcomingRow
         } else {
             cache.upcomingItems = emptyList()
             cache.upcomingRow = null
+            null
+        }
+
+        if (input.nextUpRowPosition == NextUpRowPosition.ABOVE_CONTINUE_WATCHING) {
+            if (builtUpcomingRow != null) add(builtUpcomingRow)
+            if (builtCwRow != null) add(builtCwRow)
+        } else {
+            if (builtCwRow != null) add(builtCwRow)
+            if (builtUpcomingRow != null) add(builtUpcomingRow)
         }
 
         visibleHomeRows.forEachIndexed { index, homeRow ->

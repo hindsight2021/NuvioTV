@@ -45,6 +45,7 @@ fun GridContinueWatchingSection(
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
+    onDeleteAllProgress: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     showManualPlayOption: Boolean = false,
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
@@ -200,6 +201,7 @@ fun GridContinueWatchingSection(
                 onRemoveItem(menuItem)
                 optionsItem = null
             },
+            onDeleteAllProgress = onDeleteAllProgress?.let { { it(menuItem); optionsItem = null } },
             onDetails = {
                 onDetailsClick(menuItem)
                 optionsItem = null

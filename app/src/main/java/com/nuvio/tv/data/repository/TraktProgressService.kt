@@ -891,6 +891,39 @@ class TraktProgressService @Inject constructor(
         refreshNow()
     }
 
+    suspend fun removeShowFromHistory(contentId: String) {
+        Log.d(TAG, "removeShowFromHistory: contentId=$contentId")
+        applyOptimisticRemoval(contentId, null, null)
+
+        val ids = toTraktIds(parseContentIds(contentId))
+        if (!ids.hasAnyId()) {
+            Log.d(TAG, "removeShowFromHistory: no valid Trakt IDs, skipping")
+            refreshNow()
+            return
+        }
+
+        val removeBody = TraktHistoryRemoveRequestDto(
+            shows = listOf(
+                TraktHistoryShowRemoveDto(
+                    ids = ids,
+                    seasons = null
+                )
+            )
+        )
+
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+            traktApi.removeHistory(authHeader, removeBody)
+        }
+        Log.d(TAG, "removeShowFromHistory RESPONSE: code=${response?.code()} body=${response?.body()}")
+
+        episodeProgressState.update { current ->
+            current.filterKeys { it != contentId && !it.startsWith("$contentId|") }
+        }
+        cachedEpisodesPlayback = null
+        cachedUserStats = null
+        refreshNow()
+    }
+
     suspend fun removeFromHistory(contentId: String, videoId: String? = null, season: Int?, episode: Int?) {
         Log.d(TAG, "removeFromHistory: contentId=$contentId videoId=$videoId season=$season episode=$episode")
         applyOptimisticRemoval(contentId, season, episode)

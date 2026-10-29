@@ -21,6 +21,7 @@ import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.NextUpRowPosition
 import com.nuvio.tv.domain.model.DiscoverLocation
 import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
 import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
@@ -86,6 +87,8 @@ data class LayoutSettingsUiState(
     val showUnairedNextUp: Boolean = true,
     val continueWatchingEnabled: Boolean = true,
     val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
+    val separateNextUpRow: Boolean = false,
+    val nextUpRowPosition: NextUpRowPosition = NextUpRowPosition.BELOW_CONTINUE_WATCHING,
     val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
     val separateMoviesTvEnabled: Boolean = false,
     val trackChannelShuffleInCw: Boolean = false,
@@ -163,6 +166,8 @@ sealed class LayoutSettingsEvent {
     data class SetShowUnairedNextUp(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingSortMode(val mode: ContinueWatchingSortMode) : LayoutSettingsEvent()
+    data class SetSeparateNextUpRow(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetNextUpRowPosition(val position: NextUpRowPosition) : LayoutSettingsEvent()
     data class SetContinueWatchingCardStyle(val style: ContinueWatchingCardStyle) : LayoutSettingsEvent()
     data class SetPosterProvider(val provider: PosterProvider) : LayoutSettingsEvent()
     data class SetPostersPlusTextless(val enabled: Boolean) : LayoutSettingsEvent()
@@ -451,6 +456,20 @@ class LayoutSettingsViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.separateNextUpRow
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    updateUiStateIfChanged { it.copy(separateNextUpRow = enabled) }
+                }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.nextUpRowPosition
+                .distinctUntilChanged()
+                .collect { position ->
+                    updateUiStateIfChanged { it.copy(nextUpRowPosition = position) }
+                }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.continueWatchingCardStyle
                 .distinctUntilChanged()
                 .collect { style ->
@@ -543,6 +562,8 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetShowUnairedNextUp -> setShowUnairedNextUp(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingEnabled -> setContinueWatchingEnabled(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingSortMode -> setContinueWatchingSortMode(event.mode)
+            is LayoutSettingsEvent.SetSeparateNextUpRow -> setSeparateNextUpRow(event.enabled)
+            is LayoutSettingsEvent.SetNextUpRowPosition -> setNextUpRowPosition(event.position)
             is LayoutSettingsEvent.SetContinueWatchingCardStyle -> setContinueWatchingCardStyle(event.style)
             is LayoutSettingsEvent.SetPosterProvider -> setPosterProvider(event.provider)
             is LayoutSettingsEvent.SetPostersPlusTextless -> setPostersPlusTextless(event.enabled)
@@ -988,6 +1009,20 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.continueWatchingSortMode == mode) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setContinueWatchingSortMode(mode)
+        }
+    }
+
+    private fun setSeparateNextUpRow(enabled: Boolean) {
+        if (_uiState.value.separateNextUpRow == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setSeparateNextUpRow(enabled)
+        }
+    }
+
+    private fun setNextUpRowPosition(position: NextUpRowPosition) {
+        if (_uiState.value.nextUpRowPosition == position) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setNextUpRowPosition(position)
         }
     }
 

@@ -130,6 +130,8 @@ interface WatchProgressRepository {
     
     suspend fun removeProgress(contentId: String, season: Int? = null, episode: Int? = null)
 
+    suspend fun deleteAllProgressForSeries(contentId: String) = Unit
+
     suspend fun removeFromHistory(contentId: String, videoId: String? = null, season: Int? = null, episode: Int? = null)
 
     /**
