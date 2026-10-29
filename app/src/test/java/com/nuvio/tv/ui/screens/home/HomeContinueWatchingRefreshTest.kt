@@ -9,6 +9,9 @@ import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
+import io.mockk.just
+import io.mockk.Runs
 import io.mockk.verify
 import io.mockk.coEvery
 import kotlinx.coroutines.awaitCancellation
@@ -34,7 +37,7 @@ import org.junit.Test
 class HomeContinueWatchingRefreshTest {
     private lateinit var vm: HomeViewModel
     private val repo = mockk<MetaRepository>(relaxed = true)
-    private val holder = mockk<WatchedSeriesStateHolder>(relaxed = true)
+    private lateinit var holder: WatchedSeriesStateHolder
     private val southPark = "tt0121955"
     private val scrubs = "tt40197357"
     private val now = 10_000_000L
@@ -42,11 +45,15 @@ class HomeContinueWatchingRefreshTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(Dispatchers.Unconfined)
-        every { holder.filterStaleIds(any()) } answers { firstArg<Set<String>>() }
         val profiles = mockk<ProfileManager>(relaxed = true) {
             every { activeProfileReady } returns MutableStateFlow(false)
             every { activeProfileId } returns MutableStateFlow(1)
         }
+        holder = spyk(WatchedSeriesStateHolder(mockk(relaxed = true), profiles))
+        every { holder.filterStaleIds(any()) } answers { firstArg<Set<String>>() }
+        every { holder.recordSeriesAirState(any(), any(), any(), any()) } just Runs
+        every { holder.updateWithValidation(any(), any(), any(), any()) } just Runs
+        every { holder.removeFullyWatched(any(), any()) } just Runs
         val cache = mockk<ContinueWatchingEnrichmentCache>(relaxed = true) {
             every { cacheCleared } returns MutableStateFlow(0)
         }
@@ -200,5 +207,6 @@ class HomeContinueWatchingRefreshTest {
         verify(exactly = 0) { repo.clearCacheForId(scrubs) }
         vm.cwPipelineJob?.cancel()
         vm.cwPipelineJob?.join()
+        Unit
     }
 }

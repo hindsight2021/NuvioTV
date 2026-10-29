@@ -44,6 +44,7 @@ import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -395,7 +396,7 @@ class HomeViewModel @Inject constructor(
                 if (newId != previousProfileId) {
                     previousProfileId = newId
                     // Cancel old pipeline — prevents racing writes from stale coroutines.
-                    cwPipelineJob?.cancel()
+                    cwPipelineJob?.cancelAndJoin()
                     cwPipelineJob = null
                     continueWatchingPreScrapeCoordinator?.clear()
                     // Clear all in-memory CW caches so data from the previous
