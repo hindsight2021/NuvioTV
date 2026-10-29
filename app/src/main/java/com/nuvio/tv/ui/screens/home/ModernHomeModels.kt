@@ -17,6 +17,7 @@ import com.nuvio.tv.domain.model.stableKey
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.ui.util.localizedContentType
 import com.nuvio.tv.ui.util.computeAirDateBadgeText
+import com.nuvio.tv.ui.util.formatEpisodeReleaseDateTimeInHalifax
 import com.nuvio.tv.ui.util.formatHeroRuntime
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.R
@@ -68,7 +69,8 @@ data class HeroPreview(
     val frozenBackdropUrl: String? = null,
     /** Same idea for the logo URL. */
     val frozenLogoUrl: String? = null,
-    val badgeText: String? = null
+    val badgeText: String? = null,
+    val releaseDateTimeText: String? = null
 )
 
 @Immutable
@@ -405,6 +407,11 @@ internal fun buildContinueWatchingItem(
                 item.info.isReleaseAlert || item.info.hasAired -> "NEW EPISODE"
                 else -> null
             }
+            val releaseDateTime = formatEpisodeReleaseDateTimeInHalifax(
+                released = item.info.released,
+                releaseTimestamp = item.info.releaseTimestamp,
+                context = context
+            )
             HeroPreview(
                 title = item.info.name,
                 logo = item.info.logo,
@@ -416,7 +423,7 @@ internal fun buildContinueWatchingItem(
                 yearText = extractYearOrRange(item.info.releaseInfo),
                 secondaryHighlightText = secondaryHighlightText,
                 imdbText = item.info.imdbRating
-                    ?.let { String.format("%.1f", it) },
+                    ?.let { String.format(java.util.Locale.US, "%.1f", it) },
                 tmdbText = item.info.tmdbRating?.let { (it * 10).toInt().toString() },
                 genres = item.info.genres.asStable(),
                 poster = item.info.poster,
@@ -426,7 +433,8 @@ internal fun buildContinueWatchingItem(
                 } else {
                     firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
                 },
-                badgeText = nextUpBadge
+                badgeText = nextUpBadge,
+                releaseDateTimeText = releaseDateTime
             )
         }
     }
@@ -509,7 +517,40 @@ internal fun buildContinueWatchingItem(
         },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
-        payload = ModernPayload.ContinueWatching(item)
+        payload = ModernPayload.ContinueWatching(item),
+        metaPreview = when (item) {
+            is ContinueWatchingItem.InProgress -> MetaPreview(
+                id = item.progress.contentId,
+                type = when (item.progress.contentType.lowercase()) {
+                    "movie" -> ContentType.MOVIE
+                    else -> ContentType.SERIES
+                },
+                name = item.progress.name,
+                poster = item.progress.poster,
+                posterShape = if (useLandscapePosters) PosterShape.LANDSCAPE else PosterShape.POSTER,
+                background = item.progress.backdrop,
+                logo = item.progress.logo,
+                description = item.episodeDescription,
+                releaseInfo = item.releaseInfo,
+                imdbRating = item.episodeImdbRating,
+                genres = item.genres
+            )
+            is ContinueWatchingItem.NextUp -> MetaPreview(
+                id = item.info.contentId,
+                type = ContentType.SERIES,
+                name = item.info.name,
+                poster = item.info.poster,
+                posterShape = if (useLandscapePosters) PosterShape.LANDSCAPE else PosterShape.POSTER,
+                background = item.info.backdrop,
+                logo = item.info.logo,
+                description = item.info.episodeDescription,
+                releaseInfo = item.info.releaseInfo,
+                imdbRating = item.info.imdbRating,
+                tmdbRating = item.info.tmdbRating,
+                genres = item.info.genres,
+                released = item.info.released
+            )
+        }
     )
 }
 

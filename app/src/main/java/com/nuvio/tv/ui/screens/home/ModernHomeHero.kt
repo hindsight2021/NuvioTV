@@ -449,7 +449,8 @@ private fun HeroTitleContent(
             preview.secondaryHighlightText,
             preview.ageRatingText,
             preview.statusText,
-            preview.languageText
+            preview.languageText,
+            preview.releaseDateTimeText
         ) {
             ModernHeroSecondaryMeta(
                 highlightText = preview.secondaryHighlightText?.trim()?.takeIf { it.isNotBlank() },
@@ -467,6 +468,7 @@ private fun HeroTitleContent(
                     else -> preview.statusText?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
                 },
                 details = buildList {
+                    preview.releaseDateTimeText?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
                     preview.languageText?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
                 }
             )
@@ -667,7 +669,7 @@ private fun HeroTitleContent(
                     Text(
                         text = value,
                         style = labelMedium,
-                        color = NuvioTheme.colors.TextTertiary,
+                        color = NuvioTheme.colors.TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
