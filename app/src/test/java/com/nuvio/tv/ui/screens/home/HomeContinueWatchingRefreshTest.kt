@@ -22,6 +22,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.flow
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.nextUpEpisodeDismissKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -155,7 +156,7 @@ class HomeContinueWatchingRefreshTest {
             contentId = id, contentType = "series", name = name, poster = null,
             backdrop = null, logo = null, videoId = "$id:$season:$episode",
             season = season, episode = episode, episodeTitle = null,
-            position = 1L, duration = 1L, lastWatched = timestamp, progressPercent = 100f
+            position = 1L, duration = 1L, lastWatched = timestamp - 86_400_000L, progressPercent = 100f
         )
         val seeds = listOf(seed(southPark, "South Park", 29, 3), seed(scrubs, "Scrubs", 2, 5),
             seed("tt999", "Slow provider", 1, 1))
@@ -175,7 +176,8 @@ class HomeContinueWatchingRefreshTest {
         coEvery { vm.watchProgressRepository.getShowIdSiblings() } returns emptyMap()
         every { holder.fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
         every { vm.traktSettingsDataStore.continueWatchingDaysCap } returns MutableStateFlow(0)
-        every { vm.traktSettingsDataStore.dismissedNextUpKeys } returns MutableStateFlow(emptySet())
+        val dismissals = MutableStateFlow(setOf(southPark, scrubs))
+        every { vm.traktSettingsDataStore.dismissedNextUpKeys } returns dismissals
         every { vm.layoutPreferenceDataStore.showUnairedNextUp } returns MutableStateFlow(false)
         every { vm.layoutPreferenceDataStore.nextUpFromFurthestEpisode } returns MutableStateFlow(true)
         every { vm.layoutPreferenceDataStore.continueWatchingSortMode } returns MutableStateFlow(ContinueWatchingSortMode.DEFAULT)
@@ -185,9 +187,9 @@ class HomeContinueWatchingRefreshTest {
         every { repo.getMetaFromPrimaryAddon(any(), "tt999") } returns flow { awaitCancellation() }
         seeds.take(2).forEach { progress ->
             vm.cwMetaCache["series:${progress.contentId}"] = summary(progress.contentId).copy(
-                name = progress.name, releaseInfo = "2026-", videos = listOf(progress.episode!!, progress.episode + 1).map { ep ->
+                name = progress.name, releaseInfo = "2026-", videos = listOf(progress.episode!!, progress.episode + 1, progress.episode + 2).map { ep ->
                     CwVideoSummary("${progress.contentId}:${progress.season}:$ep", "Episode $ep",
-                        "2026-10-01T00:00:00Z", null, progress.season, ep, null, true)
+                        java.time.Instant.ofEpochMilli(timestamp - 7_200_000L).toString(), null, progress.season, ep, null, true)
                 }
             )
         }
@@ -205,6 +207,15 @@ class HomeContinueWatchingRefreshTest {
         assertTrue("the stalled provider must still be running", vm.cwPipelineJob?.isActive == true)
         verify(exactly = 0) { repo.clearCacheForId(southPark) }
         verify(exactly = 0) { repo.clearCacheForId(scrubs) }
+        dismissals.value = setOf(nextUpEpisodeDismissKey(southPark, 29, 4), scrubs)
+        withTimeout(6_000L) {
+            while (vm.uiState.value.continueWatchingItems.none {
+                it is ContinueWatchingItem.NextUp && it.info.contentId == southPark && it.info.episode == 5
+            }) delay(20L)
+        }
+        assertFalse(vm.uiState.value.continueWatchingItems.any {
+            it is ContinueWatchingItem.NextUp && it.info.contentId == southPark && it.info.episode == 4
+        })
         vm.cwPipelineJob?.cancel()
         vm.cwPipelineJob?.join()
         Unit

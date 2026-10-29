@@ -78,7 +78,7 @@ class ContinueWatchingNextUpReconciliationTest {
             currentItems = listOf(stale),
             resolvedItems = listOf(resolved),
             conclusivelyProcessedContentIds = setOf("series"),
-            dismissedNextUpKeys = setOf(nextUpDismissKey("series", 1, 2))
+            dismissedNextUpKeys = setOf(nextUpDismissKey("series", 1, 3))
         )
 
         assertTrue(result.isEmpty())

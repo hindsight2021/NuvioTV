@@ -84,9 +84,9 @@ class TraktSettingsDataStore @Inject constructor(
     val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             val raw = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            // Normalize: extract contentId from legacy "contentId|season|episode" keys
-            // so the check `contentId in dismissedSet` works for both old and new formats.
-            raw.mapTo(mutableSetOf()) { it.substringBefore("|") }
+            // Keep episode coordinates; collapsing them makes removals permanent
+            // show-wide vetoes, including episodes released weeks later.
+            raw
         }
     }
 
@@ -144,12 +144,10 @@ class TraktSettingsDataStore @Inject constructor(
 
     suspend fun addDismissedNextUpKey(key: String) {
         if (key.isBlank()) return
-        // Store just the contentId (no season/episode suffix) so dismiss
-        // survives anime episode remapping and seed changes.
-        val contentIdOnly = key.trim().substringBefore("|")
+        val exactKey = key.trim()
         store().edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            prefs[dismissedNextUpKeysKey] = current + contentIdOnly
+            prefs[dismissedNextUpKeysKey] = current + exactKey
         }
     }
 
@@ -163,7 +161,9 @@ class TraktSettingsDataStore @Inject constructor(
         store(profileId).edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
             // Remove both legacy format ("contentId|season|episode") and new format ("contentId")
-            val filtered = current.filterNot { it == trimmed || it.startsWith(prefix) }
+            val filtered = current.filterNot {
+                it == trimmed || it.startsWith(prefix) || it.startsWith("episode|$trimmed|")
+            }
             if (filtered.size != current.size) {
                 prefs[dismissedNextUpKeysKey] = filtered.toSet()
             }

@@ -10,6 +10,7 @@ The GitHub release inventory and comparison of every published Plus release are 
 
 ## Root causes in the source
 
+0. **A removal could veto every future release of a show.** Dismissal storage and reads collapsed episode coordinates into a bare content ID, and the foreground pipeline filtered that ID before resolving the new episode. The clean-start signed candidate still resolved South Park 29x4 and Scrubs 2x6 without adding either to the displayed list; the raw progress API showed neither as in-progress and both as completed seeds. A real-pipeline regression seeded with legacy bare-ID removals reproduced the missing-card failure before the dismissal fix. Device confirmation of the actual keys is part of final acceptance, not inferred from a build message.
 1. **Badge state controlled metadata invalidation.** `buildNextUpItem` discarded both repository and CW caches whenever `isSeriesValidationFresh` was false. That method deliberately returns false when a show lacks a fully-watched badge. Discovering an aired unwatched episode removes that badge. Consequently even positive cache hits were repeatedly converted into network work. This also undermined the cached-older-seed fast path and increased time spent resolving the library.
 2. **Resolution did not imply publication.** Foreground publication waited for 2–8 successful resolutions; older discovery waited for six successes or completion of the whole scan. A single newly released show could wait behind unrelated slow providers. Plus 71 increased the older success threshold from three to six and introduced a fixed older-seed cap; later increases to the cap did not establish eventual coverage.
 3. **Snapshot workers outlived their input.** `launch` inside the non-receiver `collectLatest` action inherited the enclosing pipeline scope. Background badge/discovery work could therefore survive replacement of a progress snapshot. Several snapshot writes explicitly used `viewModelScope`, extending their lifetime further. Older work could mutate the current list and persistence after newer input arrived.
@@ -28,6 +29,7 @@ These are source-confirmed failure paths. The old build did not log its publishe
 - Invalidate matching metadata, badge, positive/negative resolution, and repository entries together. Preserve visible cards and disk snapshots until resolution finishes. Force due discovery even if an old badge deadline remains fresh.
 - Bound pending refresh state to active seeds and clear it on conclusive resolution.
 - Log actual published next-up IDs/coordinates, not just successful builds, so future diagnosis can distinguish resolution from presentation.
+- Keep legacy removal records without allowing them to hide genuine new-release alerts. Store new removals against the actual offered episode, preserve coordinates in DataStore, use the same policy for cached/live/older/launcher items, and skip a specifically removed episode when selecting the following eligible episode. Invalidate resolution caches on removal and keep artwork enrichment pinned to the chosen episode. Dropped-show controls and watched history remain unchanged.
 
 ## Delegated review
 

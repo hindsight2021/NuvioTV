@@ -9,6 +9,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.core.recommendations.TvRecommendationManager
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.model.isContinueWatchingNextUpDismissed
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -160,7 +161,10 @@ class AndroidTvChannelSyncService @Inject constructor(
         val filteredNextUp = nextUp
             .filter { it.hasAired }  // Never show unaired in launcher — can't be played
             .filter { cutoffMs == null || it.lastWatched >= cutoffMs }
-            .filter { nextUpDismissKey(it) !in settings.dismissedNextUp }
+            .filter {
+                !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
+                    it.isReleaseAlert, settings.dismissedNextUp)
+            }
 
         // Deduplicate: in-progress wins over next-up for same contentId
         val inProgressContentIds = filteredInProgress.mapTo(mutableSetOf()) { it.contentId }

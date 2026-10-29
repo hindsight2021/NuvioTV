@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.home
 
 import com.nuvio.tv.data.local.CachedNextUpItem
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.isContinueWatchingNextUpDismissed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
@@ -25,11 +26,13 @@ internal fun reconcileConclusiveNextUpItems(
     val acceptedResolvedItems = resolvedByContentId.values.filter { item ->
         item.info.contentId !in inProgressContentIds &&
             item.info.contentId in conclusivelyProcessedContentIds &&
-            nextUpDismissKey(
+            !isContinueWatchingNextUpDismissed(
                 item.info.contentId,
-                item.info.seedSeason,
-                item.info.seedEpisode
-            ) !in dismissedNextUpKeys
+                item.info.season,
+                item.info.episode,
+                item.info.isReleaseAlert,
+                dismissedNextUpKeys
+            )
     }
     return retainedItems + acceptedResolvedItems
 }
@@ -62,11 +65,13 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
         .distinctBy { item -> item.info.contentId }
         .filter { item ->
             item.info.contentId in conclusivelyProcessedContentIds &&
-                nextUpDismissKey(
+                !isContinueWatchingNextUpDismissed(
                     item.info.contentId,
-                    item.info.seedSeason,
-                    item.info.seedEpisode
-                ) !in dismissedNextUpKeys
+                    item.info.season,
+                    item.info.episode,
+                    item.info.isReleaseAlert,
+                    dismissedNextUpKeys
+                )
         }
     val reconciledContentIds = conclusivelyProcessedContentIds
 

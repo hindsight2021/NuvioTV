@@ -29,6 +29,7 @@ import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.isContinueWatchingNextUpDismissed
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
@@ -838,7 +839,10 @@ class HomeViewModel @Inject constructor(
                 }
             val nextUpItems = cachedNextUp
                 .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
-                .filter { nextUpDismissKey(it.contentId, it.seedSeason, it.seedEpisode) !in dismissedNextUp }
+                .filter {
+                    !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
+                        recalculateCachedReleaseBadge(it).second, dismissedNextUp)
+                }
                 .map { cached ->
                 ContinueWatchingItem.NextUp(
                     info = NextUpInfo(
