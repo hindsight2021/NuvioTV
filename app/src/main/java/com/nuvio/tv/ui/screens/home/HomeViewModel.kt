@@ -797,6 +797,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun loadContinueWatching() {
+        val restoringProfileId = profileManager.activeProfileId.value
         // Immediately restore last known CW from disk cache for instant display.
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val cachedInProgress = runCatching { cwEnrichmentCache.getInProgressSnapshot() }.getOrDefault(emptyList())
@@ -875,8 +876,16 @@ class HomeViewModel @Inject constructor(
             )
             if (items.isNotEmpty()) {
                 val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode)
-                _uiState.update { it.copy(continueWatchingItems = mainItems, upcomingItems = upcomingOnly) }
-                _initialCwResolved.value = true
+                _uiState.update { state ->
+                    if (profileManager.activeProfileId.value != restoringProfileId ||
+                        _initialCwResolved.value || state.continueWatchingItems.isNotEmpty() ||
+                        state.upcomingItems.isNotEmpty()) state
+                    else state.copy(continueWatchingItems = mainItems, upcomingItems = upcomingOnly)
+                }
+                if (profileManager.activeProfileId.value == restoringProfileId &&
+                    (_uiState.value.continueWatchingItems.isNotEmpty() || _uiState.value.upcomingItems.isNotEmpty())) {
+                    _initialCwResolved.value = true
+                }
             }
         }
         loadContinueWatchingPipeline()
