@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.simkl.SimklAnimeIdPreference
 import com.nuvio.tv.domain.model.LibrarySourceMode
-import com.nuvio.tv.domain.model.sanitizeDismissedNextUpKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -66,26 +65,6 @@ class TraktSettingsDataStore @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    init {
-        scope.launch {
-            profileManager.activeProfileId.collectLatest { pid ->
-                migrateLegacyDismissedKeys(pid)
-            }
-        }
-    }
-
-    private suspend fun migrateLegacyDismissedKeys(profileId: Int) {
-        runCatching {
-            store(profileId).edit { prefs ->
-                val raw = prefs[dismissedNextUpKeysKey] ?: return@edit
-                val sanitized = sanitizeDismissedNextUpKeys(raw)
-                if (sanitized != raw) {
-                    prefs[dismissedNextUpKeysKey] = sanitized
-                }
-            }
-        }
-    }
-
     private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
     private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
     private val showUnairedNextUpKey = booleanPreferencesKey("show_unaired_next_up")
@@ -106,8 +85,7 @@ class TraktSettingsDataStore @Inject constructor(
 
     val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            val raw = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            sanitizeDismissedNextUpKeys(raw)
+            prefs[dismissedNextUpKeysKey] ?: emptySet()
         }
     }
 
@@ -164,12 +142,11 @@ class TraktSettingsDataStore @Inject constructor(
     }
 
     suspend fun addDismissedNextUpKey(key: String) {
-        if (key.isBlank() || !key.contains('|')) return
+        if (key.isBlank()) return
         val exactKey = key.trim()
         store().edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            val sanitized = sanitizeDismissedNextUpKeys(current)
-            prefs[dismissedNextUpKeysKey] = sanitized + exactKey
+            prefs[dismissedNextUpKeysKey] = current + exactKey
         }
     }
 
@@ -181,13 +158,12 @@ class TraktSettingsDataStore @Inject constructor(
         if (targets.isEmpty()) return
         store(profileId).edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            val sanitized = sanitizeDismissedNextUpKeys(current)
-            val filtered = sanitized.filterNot { key ->
+            val filtered = current.filterNot { key ->
                 targets.any { id ->
                     key == id || key.startsWith("$id|") || key.startsWith("episode|$id|")
                 }
             }.toSet()
-            if (filtered != current) {
+            if (filtered.size != current.size) {
                 prefs[dismissedNextUpKeysKey] = filtered
             }
         }

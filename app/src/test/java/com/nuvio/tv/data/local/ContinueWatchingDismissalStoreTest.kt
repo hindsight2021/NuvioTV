@@ -15,7 +15,7 @@ import org.junit.Test
 
 class ContinueWatchingDismissalStoreTest {
     @Test
-    fun `read sanitizes bare show ids and preserves episode coordinates`() = runTest {
+    fun `read and write preserve both bare show ids and episode coordinates`() = runTest {
         val data = TestPreferencesStore()
         val key = stringSetPreferencesKey("dismissed_next_up_keys")
         data.edit { it[key] = setOf("legacy-show", "old-show|1|2") }
@@ -24,7 +24,7 @@ class ContinueWatchingDismissalStoreTest {
         val settings = TraktSettingsDataStore(factory, profiles)
         val episodeKey = nextUpEpisodeDismissKey("show", 2, 6)
         settings.addDismissedNextUpKey(episodeKey)
-        assertEquals(setOf("old-show|1|2", episodeKey), settings.dismissedNextUpKeys.first())
+        assertEquals(setOf("legacy-show", "old-show|1|2", episodeKey), settings.dismissedNextUpKeys.first())
     }
 
     @Test
@@ -46,8 +46,10 @@ class ContinueWatchingDismissalStoreTest {
         val key = stringSetPreferencesKey("dismissed_next_up_keys")
         val imdbKey = nextUpEpisodeDismissKey("tt0121955", 29, 4)
         val tmdbKey = nextUpEpisodeDismissKey("tmdb:2190", 29, 4)
+        val bareImdb = "tt0121955"
+        val bareTmdb = "tmdb:2190"
         val other = nextUpEpisodeDismissKey("tt9999999", 1, 1)
-        data.edit { it[key] = setOf(imdbKey, tmdbKey, other) }
+        data.edit { it[key] = setOf(imdbKey, tmdbKey, bareImdb, bareTmdb, other) }
         val factory = mockk<ProfileDataStoreFactory> { every { get(any(), any()) } returns data }
         val profiles = mockk<ProfileManager> { every { activeProfileId } returns MutableStateFlow(1) }
         val settings = TraktSettingsDataStore(factory, profiles)

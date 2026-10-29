@@ -4,13 +4,18 @@ fun nextUpEpisodeDismissKey(contentId: String, season: Int?, episode: Int?): Str
     if (season != null && episode != null) "episode|${contentId.trim()}|$season|$episode"
     else contentId.trim()
 
-/** Filters out bare show IDs or malformed keys that lack episode coordinates. */
-fun sanitizeDismissedNextUpKeys(dismissedKeys: Set<String>): Set<String> =
-    dismissedKeys.filter { it.contains('|') }.toSet()
-
 /**
- * Remove hides a specific episode; historical whole-show dismissals or other episode
- * dismissals cannot veto a different episode or future release.
+ * Checks whether a NextUp item is dismissed from Continue Watching.
+ *
+ * Rules:
+ * 1. An explicit episode removal (e.g. "episode|id|s|e" or "id|s|e") always hides that specific episode.
+ * 2. A newly released episode (isReleaseAlert == true) is NEVER hidden by historical removals or
+ *    whole-show dismissals — new episodes (e.g. South Park S29E4, Scrubs S2E6) always appear on CW.
+ * 3. For non-release-alerts (isReleaseAlert == false), historical whole-show dismissals keep previously
+ *    dismissed/completed shows (Futurama, The Middle, Below Deck, White Lotus, etc.) off CW so
+ *    they do not reappear unprompted.
+ * 4. When a user actively watches an episode of any show, clearDismissalsForSeriesAndSiblings
+ *    purges all dismissal keys for that show across all sibling IDs, allowing it to stick back to CW.
  */
 fun isContinueWatchingNextUpDismissed(
     contentId: String,
@@ -19,11 +24,11 @@ fun isContinueWatchingNextUpDismissed(
     isReleaseAlert: Boolean,
     dismissedKeys: Set<String>
 ): Boolean {
-    if (season == null || episode == null) return false
     val id = contentId.trim()
-    val modernKey = nextUpEpisodeDismissKey(id, season, episode)
-    if (modernKey in dismissedKeys) return true
-    val legacyKey = "$id|$season|$episode"
-    return legacyKey in dismissedKeys
+    if (season != null && episode != null) {
+        if (nextUpEpisodeDismissKey(id, season, episode) in dismissedKeys) return true
+        if ("$id|$season|$episode" in dismissedKeys) return true
+    }
+    if (isReleaseAlert) return false
+    return id in dismissedKeys
 }
-
