@@ -10,9 +10,38 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.nuvio.tv.domain.model.WatchProgress
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ContinueWatchingRefreshPolicyTest {
+    private fun seed(id: String, lastWatched: Long) = WatchProgress(
+        contentId = id, contentType = "series", name = id, poster = null,
+        backdrop = null, logo = null, videoId = id, season = 1, episode = 1,
+        episodeTitle = null, position = 1L, duration = 1L, lastWatched = lastWatched
+    )
+
+    @Test
+    fun `unvisited library tail outranks recently attempted shows`() {
+        val result = prioritizeCwDiscoverySeeds(
+            listOf(seed("recent", 10_000L), seed("tail", 100L)), mapOf("recent" to 9_999L)
+        ) { null }
+        assertEquals(listOf("tail", "recent"), result.map { it.contentId })
+    }
+
+    @Test
+    fun `known aired releases retain discovery priority`() {
+        val result = prioritizeCwDiscoverySeeds(
+            listOf(seed("old", 1L), seed("new", 5L)), mapOf("new" to 99L)
+        ) { if (it.contentId == "new") 999_999L else null }
+        assertEquals(listOf("new", "old"), result.map { it.contentId })
+    }
+
+    @Test
+    fun `cancelled attempt rotates behind the next unvisited seed`() {
+        val seeds = listOf(seed("a", 500L), seed("b", 400L))
+        assertEquals(listOf("a", "b"), prioritizeCwDiscoverySeeds(seeds, emptyMap()) { null }.map { it.contentId })
+        assertEquals(listOf("b", "a"), prioritizeCwDiscoverySeeds(seeds, mapOf("a" to 1_000L)) { null }.map { it.contentId })
+    }
     @Test
     fun `expired schedule refreshes without any watch progress change`() {
         assertFalse(shouldRefreshCwSeries(null, true, 0L))

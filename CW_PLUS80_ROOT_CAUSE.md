@@ -23,7 +23,7 @@ These are source-confirmed failure paths. The old build did not log its publishe
 
 - Load persisted air state before starting initial/profile pipelines.
 - Give each collected snapshot a coroutine scope; cancellation joins its badge, discovery, and snapshot-write children before the replacement runs.
-- Publish each resolved next-up immediately and persist partial snapshots. Remove the fixed older scan cap while retaining sequential background resolution.
+- Publish each resolved next-up immediately and persist partial snapshots. Remove the fixed older scan cap while retaining sequential background resolution. Record attempted seeds before each lookup and prioritize unvisited/least-recently-attempted seeds across cancelled snapshots, while preserving known release priority; removing the cap alone would not prevent a repeatedly interrupted scan from restarting at the same head.
 - Replace badge-driven per-lookup cache destruction with independent metadata revalidation: check while Home is resumed, retry due/unknown entries after five minutes, and refresh metadata after fifteen minutes even when the provider supplied no useful schedule. Home lifecycle polling does not run during player playback.
 - Invalidate matching metadata, badge, positive/negative resolution, and repository entries together. Preserve visible cards and disk snapshots until resolution finishes. Force due discovery even if an old badge deadline remains fresh.
 - Bound pending refresh state to active seeds and clear it on conclusive resolution.

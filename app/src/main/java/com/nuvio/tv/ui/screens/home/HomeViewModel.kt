@@ -289,6 +289,7 @@ class HomeViewModel @Inject constructor(
     /** Bumped to force the CW pipeline to re-run (e.g. after cache clear). */
     internal val cwPipelineRefreshTrigger = kotlinx.coroutines.flow.MutableStateFlow(0)
     internal val cwMetadataCheckedAt = ConcurrentHashMap<String, Long>()
+    internal val cwOlderSeedAttemptedAt = ConcurrentHashMap<String, Long>()
     internal val cwForcedNextUpRefreshIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
     /** Tracks the active CW pipeline coroutine so it can be cancelled on profile switch. */
     internal var cwPipelineJob: Job? = null
@@ -412,6 +413,7 @@ class HomeViewModel @Inject constructor(
                     cwLastProcessedNextUpContentIds.clear()
                     cwProcessedOlderSeedContentIds.clear()
                     cwMetadataCheckedAt.clear()
+                    cwOlderSeedAttemptedAt.clear()
                     cwForcedNextUpRefreshIds.clear()
                     cwEnrichedNextUpOverlay.clear()
                     cwEnrichedInProgressOverlay.clear()
@@ -468,6 +470,7 @@ class HomeViewModel @Inject constructor(
         cwLastProcessedNextUpContentIds.clear()
         cwProcessedOlderSeedContentIds.clear()
         cwMetadataCheckedAt.clear()
+        cwOlderSeedAttemptedAt.clear()
         cwForcedNextUpRefreshIds.clear()
         cwEnrichedNextUpOverlay.clear()
         cwEnrichedInProgressOverlay.clear()

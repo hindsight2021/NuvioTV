@@ -19,6 +19,7 @@ internal fun HomeViewModel.invalidateDueContinueWatchingMetadata(
     nowMs: Long = System.currentTimeMillis()
 ) {
     cwMetadataCheckedAt.keys.retainAll(seedIds)
+    cwOlderSeedAttemptedAt.keys.retainAll(seedIds)
     cwForcedNextUpRefreshIds.retainAll(seedIds)
     val staleIds = watchedSeriesStateHolder.filterStaleIds(seedIds)
     val dueIds = seedIds.filterTo(mutableSetOf()) { id ->

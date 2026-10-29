@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import com.nuvio.tv.domain.model.WatchProgress
 
 internal fun shouldRefreshCwSeries(
     lastCheckedMs: Long?,
@@ -20,3 +21,14 @@ internal fun shouldRefreshCwSeries(
 internal suspend fun <T> Flow<T>.collectLatestCwSnapshot(
     block: suspend CoroutineScope.(T) -> Unit
 ) = collectLatest { value -> coroutineScope { block(value) } }
+
+internal fun prioritizeCwDiscoverySeeds(
+    seeds: List<WatchProgress>,
+    lastAttemptById: Map<String, Long>,
+    releaseBoost: (WatchProgress) -> Long?
+): List<WatchProgress> = seeds.map { it to releaseBoost(it) }.sortedWith(
+    compareByDescending<Pair<WatchProgress, Long?>> { it.second != null }
+        .thenBy { lastAttemptById[it.first.contentId] ?: Long.MIN_VALUE }
+        .thenByDescending { maxOf(it.first.lastWatched, it.second ?: 0L) }
+        .thenBy { it.first.contentId }
+).map { it.first }

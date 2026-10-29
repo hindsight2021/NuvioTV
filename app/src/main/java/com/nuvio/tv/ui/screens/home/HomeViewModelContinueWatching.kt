@@ -919,36 +919,20 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     }
 
                     val nowMs = System.currentTimeMillis()
-                    val uncachedSeeds = remainingOlderSeeds.filter { seed ->
+                    val eligibleOlderSeeds = remainingOlderSeeds.filter { seed ->
                         (!fullyWatchedSeriesIds.isSeriesValidationFresh(seed.contentId) ||
                             seed.contentId in cwForcedNextUpRefreshIds) &&
                             seed.contentId !in cwProcessedOlderSeedContentIds
                     }
-                        .sortedWith(
-                            compareByDescending<WatchProgress> {
-                                computePersistedNextAirBoost(
-                                    contentId = it.contentId,
-                                    videoId = it.videoId,
-                                    lastWatched = it.lastWatched,
-                                    stateHolder = fullyWatchedSeriesIds,
-                                    siblings = cwLastShowIdSiblings[it.contentId].orEmpty(),
-                                    nowMs = nowMs
-                                ) != null
-                            }
-                                .thenByDescending {
-                                    maxOf(
-                                        it.lastWatched,
-                                        computePersistedNextAirBoost(
-                                            contentId = it.contentId,
-                                            videoId = it.videoId,
-                                            lastWatched = it.lastWatched,
-                                            stateHolder = fullyWatchedSeriesIds,
-                                            siblings = cwLastShowIdSiblings[it.contentId].orEmpty(),
-                                            nowMs = nowMs
-                                        ) ?: 0L
-                                    )
-                                }
+                    val uncachedSeeds = prioritizeCwDiscoverySeeds(
+                        eligibleOlderSeeds, cwOlderSeedAttemptedAt.toMap()
+                    ) { seed ->
+                        computePersistedNextAirBoost(
+                            contentId = seed.contentId, videoId = seed.videoId,
+                            lastWatched = seed.lastWatched, stateHolder = fullyWatchedSeriesIds,
+                            siblings = cwLastShowIdSiblings[seed.contentId].orEmpty(), nowMs = nowMs
                         )
+                    }
                     if (uncachedSeeds.isNotEmpty()) {
                         launch(Dispatchers.IO) {
                             delay(1200L) // Wait for initial UI rendering to settle before background scan
@@ -966,6 +950,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     kotlinx.coroutines.yield()
                                     continue
                                 }
+                                cwOlderSeedAttemptedAt[seed.contentId] = System.currentTimeMillis()
                                 val remappedSeed = watchProgressRepository.prepareNextUpSeed(seed)
                                 val item = buildNextUpItem(
                                     progress = remappedSeed,
