@@ -3836,61 +3836,35 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
     episode: Int? = null,
     isNextUp: Boolean = false
 ) {
-    if (isNextUp) {
-        val dismissKey = nextUpDismissKey(contentId, season, episode)
-        _uiState.update { state ->
-            state.copy(
-                continueWatchingItems = state.continueWatchingItems.filterNot { item ->
-                    when (item) {
-                        is ContinueWatchingItem.NextUp ->
-                            nextUpDismissKey(
-                                item.info.contentId,
-                                item.info.season,
-                                item.info.episode
-                            ) == dismissKey
-                        is ContinueWatchingItem.InProgress -> false
-                    }
-                },
-                upcomingItems = state.upcomingItems.filterNot { item ->
-                    when (item) {
-                        is ContinueWatchingItem.NextUp ->
-                            nextUpDismissKey(
-                                item.info.contentId,
-                                item.info.season,
-                                item.info.episode
-                            ) == dismissKey
-                        is ContinueWatchingItem.InProgress -> false
-                    }
-                }
-            )
-        }
-        viewModelScope.launch {
-            synchronized(cwNextUpResolutionCache) {
-                cwNextUpResolutionCache.keys.removeAll { it.substringBefore('|') == contentId }
+    val siblingIds = (cwLastShowIdSiblings[contentId].orEmpty() + contentId).distinct()
+    _uiState.update { state ->
+        state.copy(
+            continueWatchingItems = state.continueWatchingItems.filterNot { item ->
+                item.contentId() in siblingIds
+            },
+            upcomingItems = state.upcomingItems.filterNot { item ->
+                item.contentId() in siblingIds
             }
-            cwNextUpNegativeCacheTimestamps.keys.removeAll { it.substringBefore('|') == contentId }
-            traktSettingsDataStore.addDismissedNextUpKey(dismissKey)
-        }
-        return
+        )
     }
     viewModelScope.launch {
-        // Optimistic UI: remove the item from the CW list immediately
-        // so the user sees instant feedback while the DataStore write propagates.
-        _uiState.update { state ->
-            state.copy(
-                continueWatchingItems = state.continueWatchingItems.filterNot { item ->
-                    when (item) {
-                        is ContinueWatchingItem.InProgress -> item.progress.contentId == contentId
-                        is ContinueWatchingItem.NextUp -> item.info.contentId == contentId
-                    }
-                },
-                upcomingItems = state.upcomingItems.filterNot { item ->
-                    when (item) {
-                        is ContinueWatchingItem.InProgress -> item.progress.contentId == contentId
-                        is ContinueWatchingItem.NextUp -> item.info.contentId == contentId
-                    }
-                }
-            )
+        synchronized(cwNextUpResolutionCache) {
+            cwNextUpResolutionCache.keys.removeAll { key ->
+                val id = key.substringBefore('|')
+                id in siblingIds
+            }
+        }
+        cwNextUpNegativeCacheTimestamps.keys.removeAll { key ->
+            val id = key.substringBefore('|')
+            id in siblingIds
+        }
+        for (id in siblingIds) {
+            cwEnrichedNextUpOverlay.remove(id)
+            // Dismiss whole show across all siblings so next episodes don't keep popping up!
+            traktSettingsDataStore.addDismissedNextUpKey(id)
+            if (season != null && episode != null) {
+                traktSettingsDataStore.addDismissedNextUpKey(nextUpEpisodeDismissKey(id, season, episode))
+            }
         }
         val targetSeason = if (isNextUp) season else null
         val targetEpisode = if (isNextUp) episode else null
@@ -3902,29 +3876,35 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
     }
 }
 
-
 internal fun HomeViewModel.deleteAllProgressPipeline(contentId: String) {
+    val siblingIds = (cwLastShowIdSiblings[contentId].orEmpty() + contentId).distinct()
     _uiState.update { state ->
         state.copy(
             continueWatchingItems = state.continueWatchingItems.filterNot { item ->
-                when (item) {
-                    is ContinueWatchingItem.InProgress -> item.progress.contentId == contentId
-                    is ContinueWatchingItem.NextUp -> item.info.contentId == contentId
-                }
+                item.contentId() in siblingIds
             },
             upcomingItems = state.upcomingItems.filterNot { item ->
-                when (item) {
-                    is ContinueWatchingItem.InProgress -> item.progress.contentId == contentId
-                    is ContinueWatchingItem.NextUp -> item.info.contentId == contentId
-                }
+                item.contentId() in siblingIds
             }
         )
     }
     synchronized(cwNextUpResolutionCache) {
-        cwNextUpResolutionCache.keys.removeAll { it.substringBefore('|') == contentId }
+        cwNextUpResolutionCache.keys.removeAll { key ->
+            val id = key.substringBefore('|')
+            id in siblingIds
+        }
     }
-    cwNextUpNegativeCacheTimestamps.keys.removeAll { it.substringBefore('|') == contentId }
+    cwNextUpNegativeCacheTimestamps.keys.removeAll { key ->
+        val id = key.substringBefore('|')
+        id in siblingIds
+    }
+    for (id in siblingIds) {
+        cwEnrichedNextUpOverlay.remove(id)
+    }
     viewModelScope.launch {
+        for (id in siblingIds) {
+            traktSettingsDataStore.addDismissedNextUpKey(id)
+        }
         watchProgressRepository.deleteAllProgressForSeries(contentId)
     }
 }

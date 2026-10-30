@@ -957,6 +957,7 @@ class TraktProgressService @Inject constructor(
             )
         } else {
             TraktHistoryRemoveRequestDto(
+                shows = listOf(TraktHistoryShowRemoveDto(ids = ids)),
                 movies = listOf(TraktMovieDto(ids = ids))
             )
         }

@@ -867,8 +867,10 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val trimmed = contentId.trim()
         val siblingIds: List<String> = (runCatching { getShowIdSiblings()[trimmed] }.getOrNull().orEmpty() + trimmed).distinct()
 
-        // 1. Clear dismissals across all siblings so show is not blocked from CW if watched again
-        clearDismissalsForSeriesAndSiblings(contentId, profileId)
+        // 1. Dismiss whole show across all siblings so it stays off CW unless actively watched again
+        for (id in siblingIds) {
+            traktSettingsDataStore.addDismissedNextUpKey(id)
+        }
 
         // 2. Clear local watch progress for all siblings
         for (id in siblingIds) {
