@@ -1199,6 +1199,7 @@ fun ContinueWatchingOptionsDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f, fill = false)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {

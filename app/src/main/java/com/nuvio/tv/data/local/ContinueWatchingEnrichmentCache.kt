@@ -32,6 +32,7 @@ data class CachedNextUpItem(
     val airDateLabel: String? = null,
     val lastWatched: Long,
     val imdbRating: Float? = null,
+    val tmdbRating: Float? = null,
     val genres: List<String> = emptyList(),
     val releaseInfo: String? = null,
     val sortTimestamp: Long,

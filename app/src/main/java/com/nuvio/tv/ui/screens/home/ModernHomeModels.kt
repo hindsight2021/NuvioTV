@@ -379,8 +379,8 @@ internal fun buildContinueWatchingItem(
                 isSeries = isSeries,
                 yearText = extractYearOrRange(item.releaseInfo),
                 secondaryHighlightText = secondaryHighlightText,
-                imdbText = item.episodeImdbRating
-                    ?.let { String.format("%.1f", it) },
+                imdbText = (item.episodeImdbRating ?: item.episodeTmdbRating)
+                    ?.let { String.format(java.util.Locale.US, "%.1f", it) },
                 tmdbText = item.episodeTmdbRating?.let { (it * 10).toInt().toString() },
                 genres = item.genres.asStable(),
                 poster = item.progress.poster,
@@ -422,7 +422,7 @@ internal fun buildContinueWatchingItem(
                 isSeries = true,
                 yearText = extractYearOrRange(item.info.releaseInfo),
                 secondaryHighlightText = secondaryHighlightText,
-                imdbText = item.info.imdbRating
+                imdbText = (item.info.imdbRating ?: item.info.tmdbRating)
                     ?.let { String.format(java.util.Locale.US, "%.1f", it) },
                 tmdbText = item.info.tmdbRating?.let { (it * 10).toInt().toString() },
                 genres = item.info.genres.asStable(),
