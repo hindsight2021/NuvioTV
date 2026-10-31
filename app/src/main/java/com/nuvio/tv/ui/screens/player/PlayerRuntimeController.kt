@@ -483,6 +483,7 @@ class PlayerRuntimeController(
     internal var resolvedAutoPlayerEngine: InternalPlayerEngine? = null
     internal var currentInternalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER
     internal var autopilotEnabledSetting: Boolean = false
+    internal var inAppPipEnabledSetting: Boolean = false
     internal var autopilotModeSetting: com.nuvio.tv.core.autopilot.AutopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT
     internal var autopilotJob: kotlinx.coroutines.Job? = null
     internal var autopilotCountdownJob: kotlinx.coroutines.Job? = null

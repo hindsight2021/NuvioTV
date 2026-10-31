@@ -236,3 +236,21 @@ fun PlayerRuntimeController.showAutopilotBanner(text: String) {
         _uiState.update { it.copy(showAutopilotIndicator = false) }
     }
 }
+
+/**
+ * Toggles in-app picture-in-picture (mini player on back press).
+ */
+fun PlayerRuntimeController.onToggleInAppPip() {
+    val newSetting = !_uiState.value.inAppPipEnabled
+    inAppPipEnabledSetting = newSetting
+    scope.launch {
+        playerSettingsDataStore.setInAppPipEnabled(newSetting)
+    }
+    _uiState.update { it.copy(inAppPipEnabled = newSetting) }
+    val bannerText = if (newSetting) {
+        "Picture-in-Picture: ON (Back to browse)"
+    } else {
+        "Picture-in-Picture: OFF"
+    }
+    showAutopilotBanner(bannerText)
+}

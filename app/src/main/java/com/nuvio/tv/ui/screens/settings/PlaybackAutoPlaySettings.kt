@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.FlightTakeoff
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.runtime.Composable
@@ -89,6 +90,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetPostPlayMovieThresholdPercent: (Int) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
     onSetAutopilotEnabled: (Boolean) -> Unit = {},
+    onSetInAppPipEnabled: (Boolean) -> Unit = {},
     onSetAutopilotMode: (com.nuvio.tv.core.autopilot.AutopilotMode) -> Unit = {},
     onSetStreamAutoPlayNextEpisodeFallbackEnabled: (Boolean) -> Unit,
     onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
@@ -232,6 +234,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
+
+    item(key = "in_app_pip_toggle") {
+        ToggleSettingsItem(
+            icon = Icons.Default.PictureInPictureAlt,
+            title = stringResource(R.string.pref_in_app_pip_title),
+            subtitle = stringResource(R.string.pref_in_app_pip_desc),
+            isChecked = playerSettings.inAppPipEnabled,
+            onCheckedChange = onSetInAppPipEnabled,
+            onFocused = onItemFocused
+        )
     }
 
     item(key = "autopilot_toggle") {

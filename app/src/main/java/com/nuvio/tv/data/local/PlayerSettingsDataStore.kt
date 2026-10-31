@@ -310,7 +310,8 @@ data class PlayerSettings(
     // Nuvio ExoPlayer Performance Mode
     val nuvioPerformanceModeEnabled: Boolean = DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED,
     val hideUncachedStreams: Boolean = false,
-    val enableEndCreditsNextEpisodePrompt: Boolean = false
+    val enableEndCreditsNextEpisodePrompt: Boolean = false,
+    val inAppPipEnabled: Boolean = false
 ) {
     /** Prefer FFmpeg/extension audio decoder (EXTENSION_RENDERER_MODE_PREFER). */
     val isPreferAppDecoder: Boolean
@@ -587,6 +588,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val assessmentRevertSnapshotKey = stringPreferencesKey("assessment_revert_snapshot_json")
     private val hideUncachedStreamsKey = booleanPreferencesKey("hide_uncached_streams")
     private val enableEndCreditsNextEpisodePromptKey = booleanPreferencesKey("enable_end_credits_next_episode_prompt")
+    private val inAppPipEnabledKey = booleanPreferencesKey("in_app_pip_enabled")
 
     // Subtitle style keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -1021,6 +1023,7 @@ class PlayerSettingsDataStore @Inject constructor(
                         android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O,
                 hideUncachedStreams = prefs[hideUncachedStreamsKey] ?: false,
                 enableEndCreditsNextEpisodePrompt = prefs[enableEndCreditsNextEpisodePromptKey] ?: false,
+                inAppPipEnabled = prefs[inAppPipEnabledKey] ?: false,
                 subtitleStyle = run {
                     val resolvedPreferredLanguage = resolveSubtitlePreferredLanguage(
                         prefs[subtitlePreferredLanguageKey],
@@ -1855,6 +1858,11 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setInAppPipEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[inAppPipEnabledKey] = enabled
+        }
+    }
     suspend fun setEnableEndCreditsNextEpisodePrompt(enabled: Boolean) {
         store().edit { prefs ->
             prefs[enableEndCreditsNextEpisodePromptKey] = enabled

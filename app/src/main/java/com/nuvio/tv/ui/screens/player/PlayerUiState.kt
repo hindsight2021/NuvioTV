@@ -198,6 +198,7 @@ data class PlayerUiState(
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val autopilotEnabled: Boolean = false,
+    val inAppPipEnabled: Boolean = false,
     val autopilotMode: com.nuvio.tv.core.autopilot.AutopilotMode = com.nuvio.tv.core.autopilot.AutopilotMode.DEFAULT,
     val autopilotCandidate: com.nuvio.tv.core.autopilot.AutopilotCandidate? = null,
     val autopilotAiRationale: String? = null,

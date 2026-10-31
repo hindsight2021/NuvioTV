@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -347,14 +348,18 @@ fun PlayerScreen(
         } else if (uiState.showControls) {
             viewModel.hideControls()
         } else {
-            // PRESSING BACK ONCE: Move video content right corner / hero banner location so you can browse!
-            com.nuvio.tv.core.player.MiniPlayerManager.enterMiniPlayer(
-                controller = viewModel.controller,
-                title = uiState.title,
-                route = com.nuvio.tv.core.player.MiniPlayerManager.fullPlayerRoute,
-                viewModel = viewModel
-            )
-            onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, false)
+            if (uiState.inAppPipEnabled) {
+                // In-App PiP enabled: move video content to corner so you can browse
+                com.nuvio.tv.core.player.MiniPlayerManager.enterMiniPlayer(
+                    controller = viewModel.controller,
+                    title = uiState.title,
+                    route = com.nuvio.tv.core.player.MiniPlayerManager.fullPlayerRoute,
+                    viewModel = viewModel
+                )
+                onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, false)
+            } else {
+                exitPlayer()
+            }
         }
     }
 
@@ -2581,6 +2586,15 @@ private fun PlayerControlsOverlay(
                                     onShowStreamInfo()
                                 },
                                 focusRequester = streamInfoFocusRequester,
+                                upFocusRequester = progressUpTarget,
+                                onDownKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                                                        ControlButton(
+                                icon = Icons.Default.PictureInPictureAlt,
+                                contentDescription = stringResource(R.string.cd_picture_in_picture),
+                                onClick = { viewModel.controller.onToggleInAppPip() },
+                                isActive = uiState.inAppPipEnabled,
                                 upFocusRequester = progressUpTarget,
                                 onDownKey = onHideControls,
                                 onFocused = onResetHideTimer

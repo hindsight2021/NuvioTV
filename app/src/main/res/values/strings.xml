@@ -3468,4 +3468,9 @@
     <string name="ambient_channel_fireplace">Fireplace</string>
     <string name="ambient_channel_cinema">Cinema</string>
 
+    <!-- In-App Picture-in-Picture / Mini-Player -->
+    <string name="cd_picture_in_picture">Picture-in-Picture</string>
+    <string name="pref_in_app_pip_title">Picture-in-Picture (Mini Player)</string>
+    <string name="pref_in_app_pip_desc">Shrink video to corner when pressing back to browse</string>
+
 </resources>

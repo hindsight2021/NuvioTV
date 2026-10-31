@@ -476,6 +476,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
     }
 
+    suspend fun setInAppPipEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setInAppPipEnabled(enabled)
+    }
+
     suspend fun setAutopilotEnabled(enabled: Boolean) {
         playerSettingsDataStore.setAutopilotEnabled(enabled)
     }

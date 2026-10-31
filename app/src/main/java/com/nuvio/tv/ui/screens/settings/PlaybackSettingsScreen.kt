@@ -230,6 +230,7 @@ fun PlaybackSettingsContent(
                 onSetPostPlayMovieThresholdPercent = { percent ->
                     coroutineScope.launch { viewModel.setPostPlayMovieThresholdPercent(percent) }
                 },
+                onSetInAppPipEnabled = { enabled -> coroutineScope.launch { viewModel.setInAppPipEnabled(enabled) } },
                 onSetAutopilotEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setAutopilotEnabled(enabled) }
                 },

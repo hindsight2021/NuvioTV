@@ -1381,6 +1381,15 @@ open class MainActivity : ComponentActivity() {
 
                             val isMiniPlayerActive by com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.collectAsState()
                             if (isMiniPlayerActive && currentRoute?.startsWith("player/") != true) {
+                                BackHandler(enabled = isMiniPlayerActive && (currentRoute in rootRoutes || navController.previousBackStackEntry == null)) {
+                                    com.nuvio.tv.core.player.MiniPlayerManager.restoreFullScreen { route ->
+                                        if (route.isNotBlank()) {
+                                            navController.navigate(route) {
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                }
                                 com.nuvio.tv.ui.components.player.MiniPlayerOverlay(
                                     onExpandFullScreen = { route ->
                                         if (route.isNotBlank()) {
@@ -1667,22 +1676,23 @@ private fun LegacySidebarScaffold(
 
 
     val isMiniPlayerActiveLegacy by com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.collectAsState()
+
+    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed && !isMiniPlayerActiveLegacy) {
+        pendingSidebarFocusRequest = true
+        drawerState.setValue(DrawerValue.Open)
+    }
+
+    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Open && !isMiniPlayerActiveLegacy) {
+        if (longPressBackHeld.value) return@BackHandler
+        onExitApp()
+    }
+
     BackHandler(enabled = currentRoute in rootRoutes && isMiniPlayerActiveLegacy) {
         com.nuvio.tv.core.player.MiniPlayerManager.restoreFullScreen { route ->
             navController.navigate(route) {
                 launchSingleTop = true
             }
         }
-    }
-
-    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
-        pendingSidebarFocusRequest = true
-        drawerState.setValue(DrawerValue.Open)
-    }
-
-    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Open) {
-        if (longPressBackHeld.value) return@BackHandler
-        onExitApp()
     }
 
     LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
@@ -2106,23 +2116,24 @@ private fun ModernSidebarScaffold(
     }
 
     val isMiniPlayerActiveModern by com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.collectAsState()
+
+    BackHandler(enabled = currentRoute in rootRoutes && !isSidebarExpanded && !sidebarCollapsePending && !isMiniPlayerActiveModern) {
+        isSidebarExpanded = true
+        sidebarCollapsePending = false
+        pendingSidebarFocusRequest = true
+    }
+
+    BackHandler(enabled = currentRoute in rootRoutes && isSidebarExpanded && !sidebarCollapsePending && !isMiniPlayerActiveModern) {
+        if (longPressBackHeld.value) return@BackHandler
+        onExitApp()
+    }
+
     BackHandler(enabled = currentRoute in rootRoutes && isMiniPlayerActiveModern) {
         com.nuvio.tv.core.player.MiniPlayerManager.restoreFullScreen { route ->
             navController.navigate(route) {
                 launchSingleTop = true
             }
         }
-    }
-
-    BackHandler(enabled = currentRoute in rootRoutes && !isSidebarExpanded && !sidebarCollapsePending) {
-        isSidebarExpanded = true
-        sidebarCollapsePending = false
-        pendingSidebarFocusRequest = true
-    }
-
-    BackHandler(enabled = currentRoute in rootRoutes && isSidebarExpanded && !sidebarCollapsePending) {
-        if (longPressBackHeld.value) return@BackHandler
-        onExitApp()
     }
 
     LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
