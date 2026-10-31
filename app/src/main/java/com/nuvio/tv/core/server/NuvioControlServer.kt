@@ -125,6 +125,9 @@ class NuvioControlServer(
 
             uri == "$API_PREFIX/queue" && method == Method.GET -> handleQueue()
             uri == "$API_PREFIX/queue" && method == Method.DELETE -> dispatch(AppCommand.ClearQueue)
+            uri == "$API_PREFIX/queue" && method == Method.POST -> handleQueueAdd(session, isPlayNext = false)
+            uri == "$API_PREFIX/queue/play-next" && method == Method.POST -> handleQueueAdd(session, isPlayNext = true)
+            uri == "$API_PREFIX/queue/advance" && method == Method.POST -> dispatch(AppCommand.AdvanceQueue)
 
             else -> jsonError(Response.Status.NOT_FOUND, "Endpoint not found: $uri")
         }
@@ -359,6 +362,35 @@ class NuvioControlServer(
         val prompt = body.get("prompt")?.asString
             ?: return jsonError(Response.Status.BAD_REQUEST, "prompt required")
         return dispatch(AppCommand.ExecuteAiPrompt(prompt))
+    }
+
+    private fun handleQueueAdd(session: IHTTPSession, isPlayNext: Boolean = false): Response {
+        val body = parseJsonBody(session)
+        val contentId = body.get("contentId")?.asString.orEmpty()
+        val title = body.get("title")?.asString.orEmpty()
+        if (contentId.isBlank() && title.isBlank()) {
+            return jsonError(Response.Status.BAD_REQUEST, "contentId or title required")
+        }
+        val videoId = body.get("videoId")?.asString
+        val seriesTitle = body.get("seriesTitle")?.asString
+        val season = body.get("season")?.asInt
+        val episode = body.get("episode")?.asInt
+        val thumbnail = body.get("thumbnail")?.asString
+        val mediaType = body.get("mediaType")?.asString ?: if (season != null || episode != null) "series" else "movie"
+        val playNextFlag = isPlayNext || (body.get("playNext")?.asBoolean == true)
+
+        val item = PlaylistItem(
+            contentId = contentId.ifBlank { videoId ?: "queue_${System.currentTimeMillis()}" },
+            videoId = videoId,
+            title = title.ifBlank { "Queued Item" },
+            seriesTitle = seriesTitle,
+            season = season,
+            episode = episode,
+            thumbnail = thumbnail,
+            mediaType = mediaType
+        )
+        val command = if (playNextFlag) AppCommand.PlayNextItem(item) else AppCommand.QueueAdd(item)
+        return dispatch(command)
     }
 
     private fun handleQueue(): Response {

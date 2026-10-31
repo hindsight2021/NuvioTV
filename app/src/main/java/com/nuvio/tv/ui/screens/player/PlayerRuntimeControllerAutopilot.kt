@@ -185,8 +185,7 @@ fun PlayerRuntimeController.triggerAutopilotPlayback(
     _uiState.update {
         it.copy(
             postPlayMode = null,
-            postPlayDismissedForCurrentEpisode = true,
-            playbackEnded = true
+            postPlayDismissedForCurrentEpisode = true
         )
     }
 

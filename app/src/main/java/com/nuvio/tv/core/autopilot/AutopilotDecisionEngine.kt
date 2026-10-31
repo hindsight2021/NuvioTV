@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.ai.AiManager
 import com.nuvio.tv.data.local.ContinueWatchingEnrichmentCache
+import kotlinx.coroutines.flow.firstOrNull
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,7 +24,8 @@ import org.json.JSONObject
 class AutopilotDecisionEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val continueWatchingEnrichmentCache: ContinueWatchingEnrichmentCache,
-    private val aiManager: AiManager
+    private val aiManager: AiManager,
+    private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository? = null
 ) {
 
     /**
@@ -76,7 +78,7 @@ class AutopilotDecisionEngine @Inject constructor(
 
         val nextUpCandidates = nextUpItems
             .asSequence()
-            .filter { !currentContentId.isNullOrBlank() && it.contentId != currentContentId }
+            .filter { currentContentId.isNullOrBlank() || it.contentId != currentContentId }
             .filter { it.hasAired }
             .map { item ->
                 val isNewRelease = item.isReleaseAlert ||
@@ -106,7 +108,7 @@ class AutopilotDecisionEngine @Inject constructor(
 
         val inProgressCandidates = inProgressItems
             .asSequence()
-            .filter { !currentContentId.isNullOrBlank() && it.contentId != currentContentId }
+            .filter { currentContentId.isNullOrBlank() || it.contentId != currentContentId }
             .filter { item -> item.progressPercent == null || item.progressPercent < 0.95f }
             .map { item ->
                 AutopilotCandidate(
@@ -135,8 +137,47 @@ class AutopilotDecisionEngine @Inject constructor(
         val inProgressIds = inProgressCandidates.map { it.contentId }.toSet()
         val combined = inProgressCandidates + nextUpCandidates.filter { it.contentId !in inProgressIds }
 
-        Log.d(TAG, "loadCandidates: found ${combined.size} valid CW candidates")
-        return combined
+        if (combined.isNotEmpty()) {
+            Log.d(TAG, "loadCandidates: found ${combined.size} valid CW candidates from cache")
+            return combined
+        }
+
+        // Fallback: load directly from WatchProgressRepository if cache is empty
+        val repo = watchProgressRepository
+        val repoItems = if (repo != null) {
+            val list = runCatching {
+                repo.continueWatching.firstOrNull()
+            }.getOrNull().orEmpty()
+            list
+                .filter { currentContentId.isNullOrBlank() || it.contentId != currentContentId }
+                .filter { (it.duration <= 0L) || (it.position < (it.duration * 0.95f)) }
+                .map { p ->
+                    AutopilotCandidate(
+                        contentId = p.contentId,
+                        contentType = p.contentType,
+                        title = p.name,
+                        poster = p.poster,
+                        backdrop = p.backdrop,
+                        logo = p.logo,
+                        videoId = p.videoId,
+                        season = p.season,
+                        episode = p.episode,
+                        episodeTitle = p.episodeTitle,
+                        episodeDescription = null,
+                        thumbnail = p.backdrop ?: p.poster,
+                        genres = emptyList(),
+                        isNewRelease = false,
+                        releaseDateLabel = null,
+                        lastWatched = p.lastWatched,
+                        imdbRating = null
+                    )
+                }
+        } else {
+            emptyList()
+        }
+
+        Log.d(TAG, "loadCandidates: found ${repoItems.size} valid CW candidates from repo fallback")
+        return repoItems
     }
 
     /**

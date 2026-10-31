@@ -908,7 +908,7 @@ fun ModernHomeContent(
                         heroBackdrop = heroBackdrop,
                         preview = preview,
                         enrichmentActive = enrichmentActive,
-                        shouldPlayTrailer = shouldPlayHeroTrailerState.value,
+                        shouldPlayTrailer = shouldPlayHeroTrailerState.value && !com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.value,
                         trailerFirstFrameRendered = heroTrailerFirstFrameRendered,
                         trailerUrl = heroMediaUrl,
                         trailerAudioUrl = heroMediaAudioUrl,

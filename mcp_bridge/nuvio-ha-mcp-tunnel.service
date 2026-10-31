@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenAI Secure MCP Tunnel for Home Assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+EnvironmentFile=/etc/nuvio-mcp-tunnel.env
+EnvironmentFile=/etc/nuvio-ha-mcp.env
+ExecStart=/usr/local/bin/tunnel-client run --profile ha-home --profile-dir /opt/nuvio-mcp-bridge/tunnel-profiles --mcp.extra-headers "Authorization: env:HA_MCP_AUTHORIZATION" --mcp.discovery-extra-headers "Authorization: env:HA_MCP_AUTHORIZATION"
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

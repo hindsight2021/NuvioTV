@@ -1378,6 +1378,19 @@ open class MainActivity : ComponentActivity() {
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
+
+                            val isMiniPlayerActive by com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.collectAsState()
+                            if (isMiniPlayerActive && currentRoute?.startsWith("player/") != true) {
+                                com.nuvio.tv.ui.components.player.MiniPlayerOverlay(
+                                    onExpandFullScreen = { route ->
+                                        if (route.isNotBlank()) {
+                                            navController.navigate(route) {
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 } 
@@ -1526,6 +1539,14 @@ open class MainActivity : ComponentActivity() {
             }
         }
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            val isLongPress = event.isLongPress || (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0)
+            if (isLongPress) {
+                if (com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.value || com.nuvio.tv.core.player.MiniPlayerManager.isPlaybackRunning()) {
+                    longPressBackHeld.value = true
+                    com.nuvio.tv.core.player.MiniPlayerManager.stopAndDismiss()
+                    return true
+                }
+            }
             if (longPressBackHeld.value) {
                 if (event.action == KeyEvent.ACTION_UP) longPressBackHeld.value = false
                 return true
@@ -1644,6 +1665,15 @@ private fun LegacySidebarScaffold(
     // resets while the user navigates between drawer items.
     var legacyDrawerInteractionVersion by remember { mutableStateOf(0) }
 
+
+    val isMiniPlayerActiveLegacy by com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.collectAsState()
+    BackHandler(enabled = currentRoute in rootRoutes && isMiniPlayerActiveLegacy) {
+        com.nuvio.tv.core.player.MiniPlayerManager.restoreFullScreen { route ->
+            navController.navigate(route) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
         pendingSidebarFocusRequest = true
@@ -2072,6 +2102,15 @@ private fun ModernSidebarScaffold(
         if (showSidebar && !isSidebarExpanded) {
             isFloatingPillIconOnly = false
             pillExpandRequestCount++
+        }
+    }
+
+    val isMiniPlayerActiveModern by com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.collectAsState()
+    BackHandler(enabled = currentRoute in rootRoutes && isMiniPlayerActiveModern) {
+        com.nuvio.tv.core.player.MiniPlayerManager.restoreFullScreen { route ->
+            navController.navigate(route) {
+                launchSingleTop = true
+            }
         }
     }
 

@@ -631,8 +631,7 @@ private fun PlaybackNavHost(
                     val streamUrl = playbackInfo.url
                         ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else null
                     streamUrl?.let { url ->
-                        navController.navigate(
-                            Screen.Player.createRoute(
+                        val playerRoute = Screen.Player.createRoute(
                                 streamUrl = url,
                                 title = playbackInfo.title,
                                 streamName = playbackInfo.streamName,
@@ -666,15 +665,15 @@ private fun PlaybackNavHost(
                                 profileId = playbackInfo.profileId,
                                 isRandomEpisode = playbackInfo.isRandomEpisode || isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                             )
-                        )
+                        com.nuvio.tv.core.player.MiniPlayerManager.fullPlayerRoute = playerRoute
+                        navController.navigate(playerRoute)
                     }
                 },
                 onAutoPlayResolved = { playbackInfo ->
                     val autoPlayUrl = playbackInfo.url
                         ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else null
                     autoPlayUrl?.let { url ->
-                        navController.navigate(
-                            Screen.Player.createRoute(
+                        val autoPlayRoute = Screen.Player.createRoute(
                                 streamUrl = url,
                                 title = playbackInfo.title,
                                 streamName = playbackInfo.streamName,
@@ -708,7 +707,8 @@ private fun PlaybackNavHost(
                                 profileId = playbackInfo.profileId,
                                 isRandomEpisode = playbackInfo.isRandomEpisode || isRandomEpisode || com.nuvio.tv.core.playlist.PlaylistManager.isRandomEpisode
                             )
-                        ) {
+                        com.nuvio.tv.core.player.MiniPlayerManager.fullPlayerRoute = autoPlayRoute
+                        navController.navigate(autoPlayRoute) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
                         }
                     }

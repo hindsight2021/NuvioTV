@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -63,6 +64,8 @@ fun PosterOptionsDialog(
     onDetails: () -> Unit,
     onWatchlistClick: (() -> Unit)? = null,
     onQueueClick: (() -> Unit)? = null,
+    onPlayNextClick: (() -> Unit)? = null,
+    onAddToQueueClick: (() -> Unit)? = null,
     onToggleLibrary: () -> Unit,
     onToggleWatched: () -> Unit,
     onPlayRandomEpisode: (() -> Unit)? = null,
@@ -120,6 +123,42 @@ fun PosterOptionsDialog(
                 ) {
                     Text(
                         text = "Watchlist (Trakt / Simkl)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (onPlayNextClick != null) {
+                Button(
+                    onClick = onPlayNextClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        text = "Play Next",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (onAddToQueueClick != null) {
+                Button(
+                    onClick = onAddToQueueClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        text = "Add to Queue",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -301,6 +340,7 @@ fun PosterOptionsHost(
     onNavigateToDetail: (id: String, type: String, addonBaseUrl: String) -> Unit,
     onPlaySeriesEpisode: ((id: String, type: String, addonBaseUrl: String, season: Int, episode: Int) -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val watchlistTarget = controller.watchlistDialogTarget
     if (watchlistTarget != null) {
         TraktSimklWatchlistDialog(
@@ -370,6 +410,38 @@ fun PosterOptionsHost(
             onDismiss = { controller.dismiss() },
             onDetails = {
                 onNavigateToDetail(target.id, target.apiType, state.addonBaseUrl)
+                controller.dismiss()
+            },
+            onPlayNextClick = {
+                val isMovie = target.apiType.equals("movie", ignoreCase = true)
+                val playlistItem = com.nuvio.tv.core.playlist.PlaylistItem(
+                    contentId = target.id,
+                    videoId = if (isMovie) target.id else null,
+                    title = target.name,
+                    seriesTitle = if (isMovie) null else target.name,
+                    season = if (isMovie) null else 1,
+                    episode = if (isMovie) null else 1,
+                    thumbnail = target.poster,
+                    mediaType = target.apiType
+                )
+                com.nuvio.tv.core.playlist.PlaylistManager.playNext(playlistItem)
+                android.widget.Toast.makeText(context, "Set to Play Next: ${target.name}", android.widget.Toast.LENGTH_SHORT).show()
+                controller.dismiss()
+            },
+            onAddToQueueClick = {
+                val isMovie = target.apiType.equals("movie", ignoreCase = true)
+                val playlistItem = com.nuvio.tv.core.playlist.PlaylistItem(
+                    contentId = target.id,
+                    videoId = if (isMovie) target.id else null,
+                    title = target.name,
+                    seriesTitle = if (isMovie) null else target.name,
+                    season = if (isMovie) null else 1,
+                    episode = if (isMovie) null else 1,
+                    thumbnail = target.poster,
+                    mediaType = target.apiType
+                )
+                com.nuvio.tv.core.playlist.PlaylistManager.addToQueue(playlistItem)
+                android.widget.Toast.makeText(context, "Added to Queue: ${target.name}", android.widget.Toast.LENGTH_SHORT).show()
                 controller.dismiss()
             },
             onWatchlistClick = {

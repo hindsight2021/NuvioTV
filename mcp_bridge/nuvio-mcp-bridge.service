@@ -1,0 +1,25 @@
+[Unit]
+Description=Nuvio+ private MCP bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/nuvio-mcp-bridge
+EnvironmentFile=/etc/nuvio-alexa-bridge.env
+EnvironmentFile=/etc/nuvio-ha-mcp.env
+Environment=NUVIO_MCP_PORT=8765
+Environment=NUVIO_MCP_TAILSCALE_HOST=codexpi.tailefa84.ts.net:8443
+Environment=NUVIO_METADATA_URL=http://192.168.1.4:8765
+ExecStart=/opt/nuvio-mcp-bridge/.venv/bin/python /opt/nuvio-mcp-bridge/server.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

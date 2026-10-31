@@ -1,0 +1,22 @@
+[Unit]
+Description=OpenAI Secure MCP Tunnel for Nuvio+
+After=network-online.target nuvio-mcp-bridge.service
+Requires=nuvio-mcp-bridge.service
+PartOf=nuvio-mcp-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+EnvironmentFile=/etc/nuvio-mcp-tunnel.env
+ExecStartPre=/usr/bin/python3 /opt/nuvio-mcp-bridge/wait_for_nuvio.py
+ExecStart=/usr/local/bin/tunnel-client run --profile nuvio-home --profile-dir /opt/nuvio-mcp-bridge/tunnel-profiles --mcp.startup-wait-timeout 30s
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

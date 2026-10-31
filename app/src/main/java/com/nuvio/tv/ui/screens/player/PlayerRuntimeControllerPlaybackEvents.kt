@@ -137,6 +137,11 @@ internal fun PlayerRuntimeController.resetPostPlayStateAfterPlaybackEnded() {
         return
     }
 
+    if (com.nuvio.tv.core.playlist.PlaylistManager.hasQueuedItem()) {
+        _uiState.update { it.copy(playbackEnded = true) }
+        return
+    }
+
     // If auto-play is enabled and the user dismissed the card earlier,
     // still auto-play the next episode when playback ends naturally.
     val state = _uiState.value
@@ -149,7 +154,15 @@ internal fun PlayerRuntimeController.resetPostPlayStateAfterPlaybackEnded() {
         return
     }
 
+    if (autopilotEnabledSetting && _uiState.value.nextEpisode == null) {
+        checkAndTriggerAutopilotIfNeeded(forceRefresh = true)
+        if (_uiState.value.postPlayMode is PostPlayMode.Autopilot) {
+            return
+        }
+    }
+
     resetPostPlayOverlayState(clearEpisode = false)
+    _uiState.update { it.copy(playbackEnded = true) }
 }
 
 internal fun shouldResetPostPlayStateAfterPlaybackEnded(

@@ -288,6 +288,9 @@ class PlayerViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        if (com.nuvio.tv.core.player.MiniPlayerManager.isMiniPlayerActive.value) {
+            return
+        }
         continueWatchingPreScrapeCoordinator.setPlaybackActive(false)
         playerPlaybackBridge.unregister(controller)
         postPlayRecommendationController.stop()

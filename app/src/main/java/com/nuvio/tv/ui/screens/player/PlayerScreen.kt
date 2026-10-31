@@ -154,7 +154,7 @@ import kotlin.math.abs
 
 @Composable
 fun PlayerScreen(
-    viewModel: PlayerViewModel = hiltViewModel(),
+    viewModel: PlayerViewModel = com.nuvio.tv.core.player.MiniPlayerManager.activePlayerViewModel ?: hiltViewModel(),
     onBackPress: (currentVideoId: String?, currentSeason: Int?, currentEpisode: Int?, autoPlayEnabled: Boolean, playbackCompleted: Boolean) -> Unit,
     onPlaybackErrorBack: () -> Unit = { onBackPress(null, null, null, false, false) },
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?, exitReason: PlayerExitReason?) -> Unit)? = null,
@@ -202,6 +202,7 @@ fun PlayerScreen(
         if (completed) {
             viewModel.markCurrentPlaybackCompleted()
         }
+        com.nuvio.tv.core.player.MiniPlayerManager.stopAndDismiss()
         viewModel.stopAndRelease()
         onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, completed)
     }
@@ -223,6 +224,11 @@ fun PlayerScreen(
     val currentOnPlayRecommendation by rememberUpdatedState(onPlayRecommendation)
     val currentOnOpenRecommendationDetails by rememberUpdatedState(onOpenRecommendationDetails)
     val currentOnAutopilotPlay by rememberUpdatedState(onAutopilotPlay)
+
+    LaunchedEffect(viewModel) {
+        com.nuvio.tv.core.player.MiniPlayerManager.activePlayerViewModel = viewModel
+        com.nuvio.tv.core.player.MiniPlayerManager.exitMiniPlayer(stopPlayback = false)
+    }
 
     DisposableEffect(viewModel) {
         viewModel.controller.onAutopilotPlayCallback = { candidate ->
@@ -341,7 +347,14 @@ fun PlayerScreen(
         } else if (uiState.showControls) {
             viewModel.hideControls()
         } else {
-            exitPlayer()
+            // PRESSING BACK ONCE: Move video content right corner / hero banner location so you can browse!
+            com.nuvio.tv.core.player.MiniPlayerManager.enterMiniPlayer(
+                controller = viewModel.controller,
+                title = uiState.title,
+                route = com.nuvio.tv.core.player.MiniPlayerManager.fullPlayerRoute,
+                viewModel = viewModel
+            )
+            onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, false)
         }
     }
 
@@ -590,6 +603,13 @@ fun PlayerScreen(
                 if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ESCAPE ||
                     (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && !postPlayHandlesBack)
                 ) {
+                    val isLongPress = keyEvent.nativeKeyEvent.isLongPress ||
+                        (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && keyEvent.nativeKeyEvent.repeatCount > 0)
+                    if (isLongPress) {
+                        // A long press on back stops video
+                        exitPlayer()
+                        return@onPreviewKeyEvent true
+                    }
                     return@onPreviewKeyEvent when (keyEvent.nativeKeyEvent.action) {
                         KeyEvent.ACTION_DOWN -> true
                         KeyEvent.ACTION_UP -> {
@@ -2409,10 +2429,10 @@ private fun PlayerControlsOverlay(
                     val hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null
                     val hasSubtitleControl = uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()
                     val hasAudioControl = uiState.audioTracks.isNotEmpty()
-                    val showNextEpisodeButton = uiState.nextEpisode?.hasAired == true &&
+                    val showNextEpisodeButton = (uiState.nextEpisode?.hasAired == true &&
                         (uiState.postPlayMode as? PostPlayMode.AutoPlay)?.let {
                             !it.searching && it.countdownSec == null
-                        } != false
+                        } != false) || com.nuvio.tv.core.playlist.PlaylistManager.hasQueuedItem()
 
                     ControlButton(
                         icon = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
