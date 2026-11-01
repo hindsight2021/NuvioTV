@@ -122,7 +122,7 @@ fun PostPlayOverlay(
             ),
             scale = CardDefaults.scale(focusedScale = 1f),
             modifier = Modifier
-                .width(420.dp)
+                .width(if (mode is PostPlayMode.Autopilot) 540.dp else 420.dp)
                 .focusRequester(nextEpisodeFocusRequester)
                 .onPlaced {
                     if (isAutoPlay && !controlsVisible && !placedFocused) {
@@ -475,7 +475,7 @@ private fun AutopilotBody(
     var playFocused by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         NextEpisodeThumbnail(
@@ -484,7 +484,7 @@ private fun AutopilotBody(
             blurred = blurUnwatchedEpisodes
         )
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Column(
             modifier = Modifier.weight(1f),
@@ -505,7 +505,9 @@ private fun AutopilotBody(
                         text = "✈ " + stringResource(R.string.autopilot_badge).uppercase(),
                         color = Color(0xFF90E0EF),
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 
@@ -526,12 +528,14 @@ private fun AutopilotBody(
                         },
                         color = if (isAi) Color(0xFFFFD166) else Color.White.copy(alpha = 0.7f),
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             Text(
                 text = displayTitle,
@@ -576,16 +580,18 @@ private fun AutopilotBody(
             }
         }
 
-        // Action buttons.
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Action buttons
         Row(
-            modifier = Modifier.padding(start = NuvioTheme.spacing.sm),
+            modifier = Modifier.padding(start = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             PostPlayPillButton(
                 icon = Icons.Default.PlayArrow,
                 iconTint = Color.White,
-                label = stringResource(R.string.autopilot_play_now),
+                label = stringResource(R.string.next_episode_play),
                 textColor = Color.White,
                 onClick = onPlay,
                 focusRequester = playFocusRequester,
@@ -602,7 +608,7 @@ private fun AutopilotBody(
             PostPlayPillButton(
                 icon = Icons.Default.Close,
                 iconTint = Color.White.copy(alpha = 0.65f),
-                label = stringResource(R.string.autopilot_cancel),
+                label = stringResource(R.string.action_cancel),
                 textColor = Color.White.copy(alpha = 0.72f),
                 onClick = onDismiss,
                 focusRequester = cancelFocusRequester,

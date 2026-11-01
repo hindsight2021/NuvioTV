@@ -155,10 +155,44 @@ internal fun PlayerRuntimeController.resetPostPlayStateAfterPlaybackEnded() {
     }
 
     if (autopilotEnabledSetting && _uiState.value.nextEpisode == null) {
-        checkAndTriggerAutopilotIfNeeded(forceRefresh = true)
-        if (_uiState.value.postPlayMode is PostPlayMode.Autopilot) {
+        // Arm autopilot and keep postPlayMode active so PlayerScreen won't exit prematurely
+        val active = _uiState.value.postPlayMode as? PostPlayMode.Autopilot
+        if (active != null) {
+            // Already showing autopilot decision, countdown will transition
             return
         }
+        // Immediately present searching state to block natural completion while candidate resolves
+        _uiState.update {
+            it.copy(
+                postPlayMode = PostPlayMode.Autopilot(
+                    nextEpisode = NextEpisodeInfo(
+                        videoId = "",
+                        season = 1,
+                        episode = 1,
+                        title = "Autopilot",
+                        thumbnail = null,
+                        overview = null,
+                        released = null,
+                        hasAired = true,
+                        unairedMessage = null
+                    ),
+                    candidate = com.nuvio.tv.core.autopilot.AutopilotCandidate(
+                        contentId = "",
+                        contentType = "series",
+                        title = "Loading...",
+                        poster = null,
+                        backdrop = null,
+                        logo = null
+                    ),
+                    autopilotMode = autopilotModeSetting,
+                    aiRationale = null,
+                    countdownSec = null,
+                    searching = true
+                )
+            )
+        }
+        checkAndTriggerAutopilotIfNeeded(forceRefresh = true)
+        return
     }
 
     resetPostPlayOverlayState(clearEpisode = false)

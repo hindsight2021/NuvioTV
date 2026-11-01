@@ -105,6 +105,12 @@ fun PlayerRuntimeController.checkAndTriggerAutopilotIfNeeded(forceRefresh: Boole
 
             if (decision == null) {
                 Log.d("Autopilot", "No suitable CW candidate found")
+                _uiState.update {
+                    it.copy(
+                        postPlayMode = null,
+                        playbackEnded = true
+                    )
+                }
                 return@launch
             }
 
@@ -140,6 +146,12 @@ fun PlayerRuntimeController.checkAndTriggerAutopilotIfNeeded(forceRefresh: Boole
             startAutopilotCountdown(candidate)
         } catch (e: Exception) {
             Log.w("Autopilot", "Autopilot evaluation failed", e)
+            _uiState.update {
+                it.copy(
+                    postPlayMode = null,
+                    playbackEnded = true
+                )
+            }
         }
     }
 }
@@ -237,20 +249,4 @@ fun PlayerRuntimeController.showAutopilotBanner(text: String) {
     }
 }
 
-/**
- * Toggles in-app picture-in-picture (mini player on back press).
- */
-fun PlayerRuntimeController.onToggleInAppPip() {
-    val newSetting = !_uiState.value.inAppPipEnabled
-    inAppPipEnabledSetting = newSetting
-    scope.launch {
-        playerSettingsDataStore.setInAppPipEnabled(newSetting)
-    }
-    _uiState.update { it.copy(inAppPipEnabled = newSetting) }
-    val bannerText = if (newSetting) {
-        "Picture-in-Picture: ON (Back to browse)"
-    } else {
-        "Picture-in-Picture: OFF"
-    }
-    showAutopilotBanner(bannerText)
-}
+

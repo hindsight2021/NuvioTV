@@ -1170,7 +1170,12 @@ private fun PlaybackNavHost(
                     )
                 },
                 onAutopilotPlay = { candidate ->
-                    val resolvedVideoId = candidate.videoId
+                    val resolvedVideoId = candidate.videoId.takeIf { it.isNotBlank() }
+                        ?: if (candidate.season != null && candidate.episode != null && candidate.contentId.isNotBlank()) {
+                            "${candidate.contentId}:${candidate.season}:${candidate.episode}"
+                        } else {
+                            candidate.contentId
+                        }
                     val resolvedContentType = candidate.contentType.ifBlank { "series" }
                     val resolvedTitle = candidate.title
                     val route = Screen.Stream.createRoute(
@@ -1179,7 +1184,7 @@ private fun PlaybackNavHost(
                         title = resolvedTitle,
                         poster = candidate.poster,
                         backdrop = candidate.thumbnail ?: candidate.poster,
-                        logo = null,
+                        logo = candidate.logo,
                         season = candidate.season,
                         episode = candidate.episode,
                         episodeName = candidate.episodeTitle,
@@ -1188,6 +1193,7 @@ private fun PlaybackNavHost(
                         contentId = candidate.contentId.takeIf { it.isNotBlank() },
                         contentName = resolvedTitle,
                         runtime = null,
+                        manualSelection = false,
                         returnToDetailOnBack = false,
                         returnToHomeOnBack = true,
                         profileId = backStackEntry.arguments?.getString("profileId")?.toIntOrNull()

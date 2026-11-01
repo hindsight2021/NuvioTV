@@ -155,7 +155,7 @@ import kotlin.math.abs
 
 @Composable
 fun PlayerScreen(
-    viewModel: PlayerViewModel = com.nuvio.tv.core.player.MiniPlayerManager.activePlayerViewModel ?: hiltViewModel(),
+    viewModel: PlayerViewModel = hiltViewModel(),
     onBackPress: (currentVideoId: String?, currentSeason: Int?, currentEpisode: Int?, autoPlayEnabled: Boolean, playbackCompleted: Boolean) -> Unit,
     onPlaybackErrorBack: () -> Unit = { onBackPress(null, null, null, false, false) },
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?, exitReason: PlayerExitReason?) -> Unit)? = null,
@@ -227,12 +227,13 @@ fun PlayerScreen(
     val currentOnAutopilotPlay by rememberUpdatedState(onAutopilotPlay)
 
     LaunchedEffect(viewModel) {
-        com.nuvio.tv.core.player.MiniPlayerManager.activePlayerViewModel = viewModel
-        com.nuvio.tv.core.player.MiniPlayerManager.exitMiniPlayer(stopPlayback = false)
+
     }
 
+    var isAutopilotNavigating by remember { mutableStateOf(false) }
     DisposableEffect(viewModel) {
         viewModel.controller.onAutopilotPlayCallback = { candidate ->
+            isAutopilotNavigating = true
             viewModel.markCurrentPlaybackCompleted()
             viewModel.stopAndRelease()
             currentOnAutopilotPlay?.invoke(candidate)
@@ -348,18 +349,7 @@ fun PlayerScreen(
         } else if (uiState.showControls) {
             viewModel.hideControls()
         } else {
-            if (uiState.inAppPipEnabled) {
-                // In-App PiP enabled: move video content to corner so you can browse
-                com.nuvio.tv.core.player.MiniPlayerManager.enterMiniPlayer(
-                    controller = viewModel.controller,
-                    title = uiState.title,
-                    route = com.nuvio.tv.core.player.MiniPlayerManager.fullPlayerRoute,
-                    viewModel = viewModel
-                )
-                onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, false)
-            } else {
-                exitPlayer()
-            }
+            exitPlayer()
         }
     }
 
@@ -380,6 +370,7 @@ fun PlayerScreen(
             uiState.postPlayMode?.blocksNaturalCompletion() != true &&
             !postPlayRecommendationState.blocksNaturalCompletion &&
             !shouldConfirmNextEpisodeOnEnd &&
+            !isAutopilotNavigating &&
             explicitReason == null
         when {
             explicitReason == PlayerExitReason.StillWatchingPrompt -> {
@@ -2590,16 +2581,7 @@ private fun PlayerControlsOverlay(
                                 onDownKey = onHideControls,
                                 onFocused = onResetHideTimer
                             )
-                                                        ControlButton(
-                                icon = Icons.Default.PictureInPictureAlt,
-                                contentDescription = stringResource(R.string.cd_picture_in_picture),
-                                onClick = { viewModel.controller.onToggleInAppPip() },
-                                isActive = uiState.inAppPipEnabled,
-                                upFocusRequester = progressUpTarget,
-                                onDownKey = onHideControls,
-                                onFocused = onResetHideTimer
-                            )
-                            if (!hasEpisodeContext) {
+                                                        if (!hasEpisodeContext) {
                                 ControlButton(
                                     icon = Icons.Default.Flight,
                                     contentDescription = stringResource(R.string.cd_autopilot),
