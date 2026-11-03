@@ -1,4 +1,4 @@
-﻿package com.nuvio.tv.core.ha
+package com.nuvio.tv.core.ha
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,14 +18,18 @@ data class HomeAssistantWeather(
 )
 
 object HomeAssistantWeatherService {
-    private const val BASE_URL = "http://192.168.1.105:8123"
-    private const val TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2NTVkMzZmM2IzYmY0MmY1OGNjM2EyMzBjMmY3NWY0NiIsImlhdCI6MTc3NzY1MDM1NiwiZXhwIjoyMDkzMDEwMzU2fQ.s4JVciY2njEk6PSM2cCYv2m8k9z3nZ-GZmE9VPx8vI0"
+    private const val BASE_URL = ""
+    private const val TOKEN = ""
 
     private val _weatherState = MutableStateFlow(HomeAssistantWeather())
     val weatherState: StateFlow<HomeAssistantWeather> = _weatherState.asStateFlow()
 
     suspend fun refresh() {
         withContext(Dispatchers.IO) {
+            if (BASE_URL.isBlank() || TOKEN.isBlank()) {
+                _weatherState.value = HomeAssistantWeather(isAvailable = false)
+                return@withContext
+            }
             try {
                 // 1. Fetch outdoor weather: try weather.ihome, then weather.home_weather_station
                 val weatherJson = fetchEntity("weather.ihome")

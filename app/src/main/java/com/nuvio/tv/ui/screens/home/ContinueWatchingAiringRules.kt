@@ -173,15 +173,29 @@ fun isOngoingSeries(releaseInfo: String?, status: String? = null): Boolean {
  * Determines whether a next-up TV episode qualifies as a release alert (new episode / new season).
  * Ensures episodes that aired recently (within 60 days) are highlighted, while preventing unreleased
  * future episodes from triggering alerts prematurely.
+ *
+ * Requirements for qualifying as a release alert:
+ * 1. Must have already aired within the last 60 days.
+ * 2. Active watching qualification: One-off / random episode watches (<= 1 watched episode) do NOT
+ *    trigger release alerts unless the show is saved in the user's Library or Watchlist.
+ * 3. Shows abandoned for > 60 days do NOT trigger release alerts unless saved in Library or
+ *    welcoming a new season premiere.
  */
 fun computeNextUpReleaseAlert(
     hasAired: Boolean,
     releaseTimestamp: Long?,
     lastWatched: Long,
     isNewSeason: Boolean,
+    watchedEpisodeCount: Int = 2,
+    isInLibraryOrWatchlist: Boolean = false,
     nowMs: Long = System.currentTimeMillis()
 ): Boolean {
     if (!hasAired || releaseTimestamp == null) return false
+    // One-off / random episode watches are never release alerts unless saved in Library or Watchlist
+    if (watchedEpisodeCount <= 1 && !isInLibraryOrWatchlist) return false
+    // Stale abandoned shows (> 60 days since last watch) do not alert unless in Library or new season
+    if (nowMs - lastWatched > SIXTY_DAYS_MS && !isInLibraryOrWatchlist && !isNewSeason) return false
+
     val age = nowMs - releaseTimestamp
     if (age !in 0L..SIXTY_DAYS_MS) return false
     return releaseTimestamp > lastWatched ||

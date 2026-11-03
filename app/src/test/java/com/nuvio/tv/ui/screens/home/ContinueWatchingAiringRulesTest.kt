@@ -312,6 +312,120 @@ class ContinueWatchingAiringRulesTest {
         )
     }
 
+    @Test
+    fun `one-off episode watch not in library returns false even when newly aired`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 10L * 24 * 60 * 60 * 1000
+
+        assertFalse(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                watchedEpisodeCount = 1,
+                isInLibraryOrWatchlist = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `one-off episode watch in library returns true when newly aired`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 10L * 24 * 60 * 60 * 1000
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                watchedEpisodeCount = 1,
+                isInLibraryOrWatchlist = true,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `actively watched show not in library returns true`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 10L * 24 * 60 * 60 * 1000
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                watchedEpisodeCount = 2,
+                isInLibraryOrWatchlist = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `abandoned show not in library without new season returns false`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 90L * 24 * 60 * 60 * 1000
+
+        assertFalse(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                watchedEpisodeCount = 3,
+                isInLibraryOrWatchlist = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `abandoned show in library returns true`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 90L * 24 * 60 * 60 * 1000
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = false,
+                watchedEpisodeCount = 3,
+                isInLibraryOrWatchlist = true,
+                nowMs = nowMs
+            )
+        )
+    }
+
+    @Test
+    fun `new season premiere for show not watched in over 60 days returns true`() {
+        val nowMs = 1759359600000L
+        val releaseMs = nowMs - 5L * 24 * 60 * 60 * 1000
+        val lastWatchedMs = nowMs - 90L * 24 * 60 * 60 * 1000
+
+        assertTrue(
+            computeNextUpReleaseAlert(
+                hasAired = true,
+                releaseTimestamp = releaseMs,
+                lastWatched = lastWatchedMs,
+                isNewSeason = true,
+                watchedEpisodeCount = 10,
+                isInLibraryOrWatchlist = false,
+                nowMs = nowMs
+            )
+        )
+    }
+
     // --- isNextUpEpisodeEligible tests ---
 
     @Test

@@ -20,6 +20,8 @@ class ContinueWatchingDismissalTest {
         assertTrue(isContinueWatchingNextUpDismissed("tmdb:615", 11, 5, isReleaseAlert = false, dismissedKeys = setOf("tmdb:615")))
         assertTrue(isContinueWatchingNextUpDismissed("tt1442464", 2, 7, isReleaseAlert = false, dismissedKeys = setOf("tt1442464")))
         assertTrue(isContinueWatchingNextUpDismissed("tt13111078", 2, 8, isReleaseAlert = false, dismissedKeys = setOf("tt13111078")))
+        // The Simpsons: one-off watch is not a release alert, so it stays dismissed
+        assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 36, 5, isReleaseAlert = false, dismissedKeys = setOf("tt0096697")))
     }
 
     @Test

@@ -1,4 +1,4 @@
-﻿package com.nuvio.tv.core.ha
+package com.nuvio.tv.core.ha
 
 import android.content.Context
 import android.util.Log
@@ -95,6 +95,7 @@ class CinemaLightingController @Inject constructor() {
         rgbColor: List<Int>? = null,
         transition: Int = 2
     ) {
+        if (BASE_URL.isBlank() || TOKEN.isBlank()) return
         var conn: HttpURLConnection? = null
         try {
             val url = URL("$BASE_URL/api/services/light/turn_on")
@@ -138,8 +139,8 @@ class CinemaLightingController @Inject constructor() {
 
     companion object {
         private const val TAG = "CinemaLightingController"
-        private const val BASE_URL = "http://192.168.1.105:8123"
-        private const val TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2NTVkMzZmM2IzYmY0MmY1OGNjM2EyMzBjMmY3NWY0NiIsImlhdCI6MTc3NzY1MDM1NiwiZXhwIjoyMDkzMDEwMzU2fQ.s4JVciY2njEk6PSM2cCYv2m8k9z3nZ-GZmE9VPx8vI0"
+        private const val BASE_URL = ""
+        private const val TOKEN = ""
     }
 }
 

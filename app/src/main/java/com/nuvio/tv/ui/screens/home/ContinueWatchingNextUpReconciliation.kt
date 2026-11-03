@@ -285,7 +285,9 @@ internal fun List<ContinueWatchingItem>.toCachedNextUpSnapshot(
         isNewSeasonRelease = info.isNewSeasonRelease,
         seedSeason = info.seedSeason,
         seedEpisode = info.seedEpisode,
-        contentLanguage = info.contentLanguage
+        contentLanguage = info.contentLanguage,
+        watchedEpisodeCount = info.watchedEpisodeCount,
+        isInLibrary = info.isInLibrary
     )
 }
 

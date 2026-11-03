@@ -77,8 +77,49 @@ private data class ContinueWatchingSettingsSnapshot(
     val separateNextUpRow: Boolean = false,
     val nextUpRowPosition: NextUpRowPosition = NextUpRowPosition.BELOW_CONTINUE_WATCHING,
     val watchedItemsVersion: Int,  // triggers re-evaluation when watched items change
-    val hasLoadedRemoteProgress: Boolean
+    val hasLoadedRemoteProgress: Boolean,
+    val watchedItems: List<com.nuvio.tv.domain.model.WatchedItem> = emptyList(),
+    val libraryItemIds: Set<String> = emptySet()
 )
+
+private fun computeWatchedEpisodeCount(
+    contentId: String,
+    seedProgress: WatchProgress?,
+    watchedItems: List<com.nuvio.tv.domain.model.WatchedItem>,
+    progressItems: List<WatchProgress>,
+    siblingsMap: Map<String, Set<String>>
+): Int {
+    val allIds = (siblingsMap[contentId].orEmpty() + contentId)
+    val watchedSet = HashSet<Pair<Int, Int>>()
+    for (item in watchedItems) {
+        if (item.contentId in allIds && item.season != null && item.episode != null) {
+            watchedSet.add(item.season to item.episode)
+        }
+    }
+    for (p in progressItems) {
+        if (p.contentId in allIds && p.season != null && p.episode != null && (p.isCompleted() || (p.progressPercent != null && p.progressPercent >= 80f))) {
+            watchedSet.add(p.season to p.episode)
+        }
+    }
+    if (watchedSet.isNotEmpty()) {
+        return watchedSet.size
+    }
+    // If progress / watched item history was not loaded or is mocked in tests,
+    // infer commitment from the seed coordinates if it is deep into the series.
+    if (seedProgress != null && (seedProgress.season ?: 1) > 1) {
+        return 2
+    }
+    return 1
+}
+
+private fun isSeriesInLibrary(
+    contentId: String,
+    libraryItemIds: Set<String>,
+    siblingsMap: Map<String, Set<String>>
+): Boolean {
+    val allIds = (siblingsMap[contentId].orEmpty() + contentId)
+    return allIds.any { it in libraryItemIds }
+}
 
 /**
  * Lightweight projection of [Meta] for CW pipeline caching.
@@ -297,9 +338,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             ) { values ->
                 values
             },
-            watchProgressRepository.watchedItems.map { it.size },
+            watchProgressRepository.watchedItems,
             cwPipelineRefreshTrigger
-        ) { progressSnapshot, settingsSnapshot, watchedItemsSize, _ ->
+        ) { progressSnapshot, settingsSnapshot, watchedItems, _ ->
             val (items, nextUpSeeds, hasLoadedRemoteProgress) = progressSnapshot
             @Suppress("UNCHECKED_CAST")
             val daysCap = settingsSnapshot[0] as Int
@@ -319,11 +360,17 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 continueWatchingSortMode = continueWatchingSortMode,
                 separateNextUpRow = separateNextUpRow,
                 nextUpRowPosition = nextUpRowPosition,
-                watchedItemsVersion = watchedItemsSize,
-                hasLoadedRemoteProgress = hasLoadedRemoteProgress
+                watchedItemsVersion = watchedItems.size,
+                hasLoadedRemoteProgress = hasLoadedRemoteProgress,
+                watchedItems = watchedItems,
+                libraryItemIds = emptySet()
             )
         }.debounce(CW_PROGRESS_DEBOUNCE_MS).collectLatestCwSnapshot { snapshot ->
             val debug = CwDebugSession()
+            val resolvedLibraryIds = runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(300) { libraryRepository.libraryItems.first() }
+            }.getOrNull()?.mapTo(HashSet()) { it.id }.orEmpty()
+            val effectiveSnapshot = snapshot.copy(libraryItemIds = resolvedLibraryIds)
             val pipelineProfileId = profileManager.activeProfileId.value
             try {
                 debug.markPhase("filter-snapshot")
@@ -666,6 +713,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     showUnairedNextUp = showUnairedNextUp,
                     nextUpFromFurthestEpisode = nextUpFromFurthestEpisode,
                     cachedNextUp = cachedNextUp,
+                    watchedItems = snapshot.watchedItems,
+                    libraryItemIds = effectiveSnapshot.libraryItemIds,
                     debug = debug,
                     onPartialUpdate = { partialNextUpItems ->
                         partialPublishMutex.withLock {
@@ -920,9 +969,13 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     // Immediately materialize cached older next-up items so they are NEVER black-holed
                     for (seed in cachedPositiveOlderSeeds) {
                         val remappedSeed = watchProgressRepository.prepareNextUpSeed(seed)
+                        val watchedCount = computeWatchedEpisodeCount(seed.contentId, seed, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
+                        val inLibrary = isSeriesInLibrary(seed.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
                         val item = buildNextUpItem(
                             progress = remappedSeed,
-                            showUnairedNextUp = showUnairedNextUp
+                            showUnairedNextUp = showUnairedNextUp,
+                            watchedEpisodeCount = watchedCount,
+                            isInLibraryOrWatchlist = inLibrary
                         )
                         if (item != null) {
                             conclusivelyProcessedOlderContentIds += seed.contentId
@@ -998,9 +1051,13 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 }
                                 cwOlderSeedAttemptedAt[seed.contentId] = System.currentTimeMillis()
                                 val remappedSeed = watchProgressRepository.prepareNextUpSeed(seed)
+                                val watchedCount = computeWatchedEpisodeCount(seed.contentId, seed, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
+                                val inLibrary = isSeriesInLibrary(seed.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
                                 val item = buildNextUpItem(
                                     progress = remappedSeed,
-                                    showUnairedNextUp = showUnairedNextUp
+                                    showUnairedNextUp = showUnairedNextUp,
+                                    watchedEpisodeCount = watchedCount,
+                                    isInLibraryOrWatchlist = inLibrary
                                 ).also { resolved ->
                                     logSimklAsyncNextUpResolution(
                                         seed = remappedSeed,
@@ -1767,6 +1824,8 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
     showUnairedNextUp: Boolean,
     nextUpFromFurthestEpisode: Boolean = true,
     cachedNextUp: List<com.nuvio.tv.data.local.CachedNextUpItem> = emptyList(),
+    watchedItems: List<com.nuvio.tv.domain.model.WatchedItem> = emptyList(),
+    libraryItemIds: Set<String> = emptySet(),
     debug: CwDebugSession? = null,
     onPartialUpdate: suspend (List<ContinueWatchingItem.NextUp>) -> Unit = {}
 ): List<ContinueWatchingItem.NextUp> = withContext(Dispatchers.IO) {
@@ -1892,9 +1951,13 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                 // Remap seed from Trakt numbering to addon numbering (for anime).
                 // Done here (after filters) so only ~5-10 seeds are remapped, not all 189.
                 val remappedProgress = watchProgressRepository.prepareNextUpSeed(progress)
+                val watchedCount = computeWatchedEpisodeCount(remappedProgress.contentId, remappedProgress, watchedItems, allProgress, cwLastShowIdSiblings)
+                val inLibrary = isSeriesInLibrary(remappedProgress.contentId, libraryItemIds, cwLastShowIdSiblings)
                 val nextUp = buildNextUpItem(
                     progress = remappedProgress,
                     showUnairedNextUp = showUnairedNextUp,
+                    watchedEpisodeCount = watchedCount,
+                    isInLibraryOrWatchlist = inLibrary,
                     debug = debug
                 ) ?: run {
                     // If meta was not available (network error, addon timeout),
@@ -2206,6 +2269,8 @@ internal fun splitUpcomingItems(
 private suspend fun HomeViewModel.buildNextUpItem(
     progress: WatchProgress,
     showUnairedNextUp: Boolean,
+    watchedEpisodeCount: Int = 2,
+    isInLibraryOrWatchlist: Boolean = false,
     debug: CwDebugSession? = null
 ): ContinueWatchingItem.NextUp? {
     debug?.recordNextUpAttempt(progress)
@@ -2298,7 +2363,9 @@ private suspend fun HomeViewModel.buildNextUpItem(
         seedProgress = progress,
         nextSeason = nextUp.season,
         nextReleased = nextUp.released,
-        hasAired = nextUp.hasAired
+        hasAired = nextUp.hasAired,
+        watchedEpisodeCount = watchedEpisodeCount,
+        isInLibraryOrWatchlist = isInLibraryOrWatchlist
     )
     val airStatus = resolveSeriesAirStatus(seedMeta?.releaseInfo, seedMeta?.status)
     if (airStatus != SeriesAirStatus.UNKNOWN) {
@@ -2347,7 +2414,9 @@ private suspend fun HomeViewModel.buildNextUpItem(
         isNewSeasonRelease = releaseState.isNewSeasonRelease,
         seedSeason = progress.season,
         seedEpisode = progress.episode,
-        contentLanguage = normalizeLanguageCode(seedMeta?.language) ?: countryToLanguageCode(seedMeta?.country)
+        contentLanguage = normalizeLanguageCode(seedMeta?.language) ?: countryToLanguageCode(seedMeta?.country),
+        watchedEpisodeCount = watchedEpisodeCount,
+        isInLibrary = isInLibraryOrWatchlist
     )
     logNextUpDecision(
         "built contentId=${progress.contentId} name=${progress.name} next=${nextUp.season}x${nextUp.episode} " +
@@ -3780,7 +3849,9 @@ private fun resolveNextUpReleaseState(
     seedProgress: WatchProgress,
     nextSeason: Int,
     nextReleased: String?,
-    hasAired: Boolean
+    hasAired: Boolean,
+    watchedEpisodeCount: Int = 2,
+    isInLibraryOrWatchlist: Boolean = false
 ): NextUpReleaseState {
     val releaseTimestamp = parseEpisodeReleaseInstant(nextReleased)?.toEpochMilli()
     val isNewSeason = seedProgress.season != null && nextSeason != seedProgress.season
@@ -3788,7 +3859,9 @@ private fun resolveNextUpReleaseState(
         hasAired = hasAired,
         releaseTimestamp = releaseTimestamp,
         lastWatched = seedProgress.lastWatched,
-        isNewSeason = isNewSeason
+        isNewSeason = isNewSeason,
+        watchedEpisodeCount = watchedEpisodeCount,
+        isInLibraryOrWatchlist = isInLibraryOrWatchlist
     )
 
     return NextUpReleaseState(
@@ -3823,6 +3896,8 @@ internal fun recalculateCachedReleaseBadge(cached: com.nuvio.tv.data.local.Cache
         releaseTimestamp = releaseTimestamp,
         lastWatched = cached.lastWatched,
         isNewSeason = isNewSeason,
+        watchedEpisodeCount = cached.watchedEpisodeCount,
+        isInLibraryOrWatchlist = cached.isInLibrary,
         nowMs = nowMs
     )
     val isNewSeasonRelease = isReleaseAlert && isNewSeason

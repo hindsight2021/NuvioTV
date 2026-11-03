@@ -272,7 +272,9 @@ data class NextUpInfo(
     val isNewSeasonRelease: Boolean = false,
     val seedSeason: Int? = null,
     val seedEpisode: Int? = null,
-    val contentLanguage: String? = null
+    val contentLanguage: String? = null,
+    val watchedEpisodeCount: Int = 2,
+    val isInLibrary: Boolean = false
 )
 
 @Immutable

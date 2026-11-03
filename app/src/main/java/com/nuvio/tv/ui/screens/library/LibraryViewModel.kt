@@ -854,8 +854,14 @@ class LibraryViewModel @Inject constructor(
             .ifBlank { context.getString(R.string.type_unknown) }
     }
 
-    private fun LibraryEntry.extractYear(): String? =
-        releaseInfo?.let { YEAR_REGEX.find(it)?.value }
+    private val yearExtractCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun LibraryEntry.extractYear(): String? {
+        val info = releaseInfo ?: return null
+        return yearExtractCache.getOrPut(info) {
+            YEAR_REGEX.find(info)?.value ?: ""
+        }.takeIf { it.isNotEmpty() }
+    }
 
     private fun LibraryUiState.withVisibleItems(): LibraryUiState {
         val listFiltered = if (sourceMode.providerId != null) {
@@ -971,14 +977,20 @@ class LibraryViewModel @Inject constructor(
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.id } }
                     .thenBy { it.id }
             )
-            LibrarySortOption.TITLE_ASC -> watchedFiltered.sortedWith(
-                compareBy<LibraryEntry> { titleSortKey(it.name.ifBlank { it.id }) }
-                    .thenBy { it.id }
-            )
-            LibrarySortOption.TITLE_DESC -> watchedFiltered.sortedWith(
-                compareByDescending<LibraryEntry> { titleSortKey(it.name.ifBlank { it.id }) }
-                    .thenBy { it.id }
-            )
+            LibrarySortOption.TITLE_ASC -> {
+                val titleKeys = watchedFiltered.associate { it.id to titleSortKey(it.name.ifBlank { it.id }) }
+                watchedFiltered.sortedWith(
+                    compareBy<LibraryEntry> { titleKeys[it.id] }
+                        .thenBy { it.id }
+                )
+            }
+            LibrarySortOption.TITLE_DESC -> {
+                val titleKeys = watchedFiltered.associate { it.id to titleSortKey(it.name.ifBlank { it.id }) }
+                watchedFiltered.sortedWith(
+                    compareByDescending<LibraryEntry> { titleKeys[it.id] }
+                        .thenBy { it.id }
+                )
+            }
         }
 
         // Rebuild type tabs with counts
