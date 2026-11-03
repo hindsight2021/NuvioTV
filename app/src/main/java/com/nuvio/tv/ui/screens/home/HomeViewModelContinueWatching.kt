@@ -593,10 +593,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         mergeContinueWatchingItems(
                             inProgressItems = inProgressOnly,
                             nextUpItems = cachedNextUpItems,
-                            mode = continueWatchingSortMode
+                            mode = continueWatchingSortMode,
+                            siblingsMap = cwLastShowIdSiblings
                         )
                     )
-                    val (mainItems, upcomingOnly) = splitUpcomingItems(initialItems, continueWatchingSortMode, snapshot.separateNextUpRow)
+                    val (mainItems, upcomingOnly) = splitUpcomingItems(initialItems, continueWatchingSortMode, snapshot.separateNextUpRow, cwLastShowIdSiblings)
 
                     _uiState.update { state ->
                         if (mainItems.isEmpty() && upcomingOnly.isEmpty() && state.continueWatchingItems.isNotEmpty()) {
@@ -694,10 +695,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     mergeContinueWatchingItems(
                                         inProgressItems = inProgressOnly,
                                         nextUpItems = cachedPartialNextUp + retainedCached,
-                                        mode = continueWatchingSortMode
+                                        mode = continueWatchingSortMode,
+                                        siblingsMap = cwLastShowIdSiblings
                                     )
                                 )
-                                val (partialMain, partialUpcoming) = splitUpcomingItems(partialItems, continueWatchingSortMode, snapshot.separateNextUpRow)
+                                val (partialMain, partialUpcoming) = splitUpcomingItems(partialItems, continueWatchingSortMode, snapshot.separateNextUpRow, cwLastShowIdSiblings)
                                 _uiState.update { state ->
                                     if (state.continueWatchingItems == partialMain && state.upcomingItems == partialUpcoming) {
                                         state
@@ -711,7 +713,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                         if (anyMissingInvalid) {
                                             val validMissing = missing.filter { it.contentId() !in fullyWatched && !watchProgressRepository.isDroppedShow(it.contentId()) }
                                             val merged = sortContinueWatchingItems(partialMain + validMissing, continueWatchingSortMode)
-                                            val (finalMain, finalUpcoming) = splitUpcomingItems(merged, continueWatchingSortMode, snapshot.separateNextUpRow)
+                                            val (finalMain, finalUpcoming) = splitUpcomingItems(merged, continueWatchingSortMode, snapshot.separateNextUpRow, cwLastShowIdSiblings)
                                             state.copy(continueWatchingItems = finalMain, upcomingItems = finalUpcoming)
                                         } else {
                                             state
@@ -863,7 +865,12 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     val processedContentIds = synchronized(cwLastProcessedNextUpContentIds) {
                         cwLastProcessedNextUpContentIds.toSet()
                     }
-                    val olderSeedContentIds = allSeedContentIds - processedContentIds
+                    val allProcessedClusterKeys = processedContentIds.flatMapTo(mutableSetOf()) { id ->
+                        (cwLastShowIdSiblings[id].orEmpty() + id + resolveCanonicalClusterKey(id, cwLastShowIdSiblings))
+                    }
+                    val olderSeedContentIds = allSeedContentIds.filterNot { id ->
+                        id in allProcessedClusterKeys || resolveCanonicalClusterKey(id, cwLastShowIdSiblings) in allProcessedClusterKeys
+                    }
                     val candidateOlderSeedsFromNextUp = nextUpSeeds
                         .filter { it.contentId in olderSeedContentIds }
                         .filter { isSeriesTypeCW(it.contentType) && it.season != null && it.episode != null && it.season != 0 }
@@ -890,6 +897,10 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             )
                         }
                     val allOlderCandidateSeeds = (candidateOlderSeedsFromNextUp + candidateOlderSeedsFromWatched)
+                        .filterNot { seed ->
+                            seed.contentId in allProcessedClusterKeys ||
+                                resolveCanonicalClusterKey(seed.contentId, cwLastShowIdSiblings) in allProcessedClusterKeys
+                        }
                         .groupBy { resolveCanonicalClusterKey(it.contentId, cwLastShowIdSiblings) }
                         .mapNotNull { (_, items) -> choosePreferredNextUpSeed(items, nextUpFromFurthestEpisode) }
                         .sortedByDescending { computeSeedEffectiveSortTimestamp(it, cachedNextUp) }
@@ -1244,10 +1255,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 ))
                             } else nextUp
                         },
-                        mode = continueWatchingSortMode
+                        mode = continueWatchingSortMode,
+                        siblingsMap = cwLastShowIdSiblings
                     )
                 )
-                val (normalMain, normalUpcoming) = splitUpcomingItems(normalItems, continueWatchingSortMode, snapshot.separateNextUpRow)
+                val (normalMain, normalUpcoming) = splitUpcomingItems(normalItems, continueWatchingSortMode, snapshot.separateNextUpRow, cwLastShowIdSiblings)
 
                 _uiState.update { state ->
                     // Don't overwrite cached CW with empty data while sources are still loading.
@@ -1277,8 +1289,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 !episodeAlreadyWatched &&
                                 !watchProgressRepository.isDroppedShow(cid)
                         }
-                        val merged = sortContinueWatchingItems(normalMain + missingFromState, continueWatchingSortMode)
-                        val (finalMain, finalUpcoming) = splitUpcomingItems(merged, continueWatchingSortMode, snapshot.separateNextUpRow)
+                        val merged = sortContinueWatchingItems(
+                            deduplicateContinueWatchingItems(normalMain + missingFromState, cwLastShowIdSiblings),
+                            continueWatchingSortMode
+                        )
+                        val (finalMain, finalUpcoming) = splitUpcomingItems(merged, continueWatchingSortMode, snapshot.separateNextUpRow, cwLastShowIdSiblings)
                         state.copy(continueWatchingItems = finalMain, upcomingItems = finalUpcoming)
                     } else if (state.continueWatchingItems == normalMain && state.upcomingItems == normalUpcoming) {
                         state
@@ -2053,7 +2068,8 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
         val (enrichedMain, enrichedUpcoming) = splitUpcomingItems(
             sortedMergedItems,
             continueWatchingSortMode,
-            separateNextUpRow
+            separateNextUpRow,
+            cwLastShowIdSiblings
         )
         if (state.continueWatchingItems == enrichedMain && state.upcomingItems == enrichedUpcoming) {
             state
@@ -2125,31 +2141,11 @@ internal fun sortContinueWatchingItems(
 internal fun mergeContinueWatchingItems(
     inProgressItems: List<ContinueWatchingItem.InProgress>,
     nextUpItems: List<ContinueWatchingItem.NextUp>,
-    mode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT
+    mode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
+    siblingsMap: Map<String, Set<String>> = emptyMap()
 ): List<ContinueWatchingItem> {
-    val allInProgressIds = inProgressItems
-        .asSequence()
-        .map { it.progress }
-        .filter { isSeriesTypeCW(it.contentType) }
-        .map { it.contentId }
-        .filter { it.isNotBlank() }
-        .toSet()
-
-    val filteredNextUpItems = nextUpItems.filter { item ->
-        item.info.contentId !in allInProgressIds
-    }
-
-    val combined = inProgressItems + filteredNextUpItems
-
-    val seen = mutableSetOf<String>()
-    val deduplicated = combined.filter { item ->
-        val contentId = when (item) {
-            is ContinueWatchingItem.InProgress -> item.progress.contentId
-            is ContinueWatchingItem.NextUp -> item.info.contentId
-        }
-        contentId.isBlank() || seen.add(contentId)
-    }
-
+    val combined = inProgressItems + nextUpItems
+    val deduplicated = deduplicateContinueWatchingItems(combined, siblingsMap)
     return sortContinueWatchingItems(deduplicated, mode)
 }
 
@@ -2161,33 +2157,36 @@ internal fun mergeContinueWatchingItems(
 internal fun splitUpcomingItems(
     items: List<ContinueWatchingItem>,
     mode: ContinueWatchingSortMode,
-    separateNextUpRow: Boolean = false
+    separateNextUpRow: Boolean = false,
+    siblingsMap: Map<String, Set<String>> = emptyMap()
 ): Pair<List<ContinueWatchingItem>, List<ContinueWatchingItem>> {
+    val dedupedItems = deduplicateContinueWatchingItems(items, siblingsMap)
     if (separateNextUpRow) {
-        val (nextUpRowItems, mainRowItems) = items.partition { item ->
+        val (nextUpRowItems, mainRowItems) = dedupedItems.partition { item ->
             when (item) {
                 is ContinueWatchingItem.NextUp -> item.info.isReleaseAlert || (mode == ContinueWatchingSortMode.SPLIT_UPCOMING && !item.info.hasAired)
                 is ContinueWatchingItem.InProgress -> false
             }
         }
-        val sortedNextUp = nextUpRowItems.sortedWith { a, b ->
+        val sortedNextUp = deduplicateContinueWatchingItems(nextUpRowItems, siblingsMap).sortedWith { a, b ->
             val infoA = (a as? ContinueWatchingItem.NextUp)?.info
             val infoB = (b as? ContinueWatchingItem.NextUp)?.info
             val timeA = infoA?.releaseTimestamp ?: parseEpisodeReleaseInstant(infoA?.released)?.toEpochMilli() ?: infoA?.lastWatched ?: 0L
             val timeB = infoB?.releaseTimestamp ?: parseEpisodeReleaseInstant(infoB?.released)?.toEpochMilli() ?: infoB?.lastWatched ?: 0L
             timeB.compareTo(timeA)
         }
-        return mainRowItems to sortedNextUp
+        val sortedMain = deduplicateContinueWatchingItems(mainRowItems, siblingsMap)
+        return sortedMain to sortedNextUp
     }
 
     if (mode != ContinueWatchingSortMode.SPLIT_UPCOMING) {
-        return items to emptyList()
+        return dedupedItems to emptyList()
     }
-    val (upcoming, main) = items.partition { item ->
+    val (upcoming, main) = dedupedItems.partition { item ->
         item is ContinueWatchingItem.NextUp && !item.info.hasAired
     }
     // Sort upcoming by release date ascending (soonest first)
-    val sortedUpcoming = upcoming.sortedWith { a, b ->
+    val sortedUpcoming = deduplicateContinueWatchingItems(upcoming, siblingsMap).sortedWith { a, b ->
         val dateA = parseEpisodeReleaseDate(
             (a as? ContinueWatchingItem.NextUp)?.info?.released
         )
@@ -2201,7 +2200,7 @@ internal fun splitUpcomingItems(
             else -> dateA.compareTo(dateB)
         }
     }
-    return main to sortedUpcoming
+    return deduplicateContinueWatchingItems(main, siblingsMap) to sortedUpcoming
 }
 
 private suspend fun HomeViewModel.buildNextUpItem(
@@ -2354,6 +2353,18 @@ private suspend fun HomeViewModel.buildNextUpItem(
         "built contentId=${progress.contentId} name=${progress.name} next=${nextUp.season}x${nextUp.episode} " +
             "videoId=${nextUp.videoId} lastWatched=${nextUp.lastWatched}"
     )
+    val imdbFromVideo = extractImdbIdFromVideoId(nextUp.videoId)
+    if (imdbFromVideo != null && imdbFromVideo != progress.contentId) {
+        val current = cwLastShowIdSiblings
+        if (imdbFromVideo !in (current[progress.contentId] ?: emptySet())) {
+            val updated = current.toMutableMap()
+            val s1 = (updated[progress.contentId] ?: emptySet()) + imdbFromVideo
+            val s2 = (updated[imdbFromVideo] ?: emptySet()) + progress.contentId
+            updated[progress.contentId] = s1
+            updated[imdbFromVideo] = s2
+            cwLastShowIdSiblings = updated
+        }
+    }
     cwEnrichedNextUpOverlay[progress.contentId] = info
     return ContinueWatchingItem.NextUp(info)
 }

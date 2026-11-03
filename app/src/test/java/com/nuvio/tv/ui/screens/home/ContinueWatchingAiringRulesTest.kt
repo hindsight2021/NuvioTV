@@ -19,6 +19,7 @@ import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
 import com.nuvio.tv.data.local.SeriesAirStatus
 import com.nuvio.tv.data.local.computeDeadline
 import com.nuvio.tv.data.local.WatchedSeriesStateHolder
+import com.nuvio.tv.domain.model.WatchProgress
 import io.mockk.every
 import io.mockk.mockk
 
@@ -897,6 +898,121 @@ class ContinueWatchingAiringRulesTest {
         val siblings = buildShowIdSiblingsFromSeeds(seeds, existing)
         assertEquals(setOf("trakt:200", "tt300"), siblings["tmdb:100"])
         assertEquals(setOf("tmdb:100"), siblings["tt300"])
+    }
+
+    @Test
+    fun `buildShowIdSiblingsFromSeeds clusters show titles differing by leading article and season tag`() {
+        val seeds = listOf(
+            WatchProgressSeedRef(contentId = "tmdb:234613", name = "Traitors Canada", contentType = "series"),
+            WatchProgressSeedRef(contentId = "tt28251824", name = "The Traitors Canada", contentType = "tv")
+        )
+        val siblings = buildShowIdSiblingsFromSeeds(seeds)
+        assertTrue(siblings["tmdb:234613"]?.contains("tt28251824") == true)
+        assertTrue(siblings["tt28251824"]?.contains("tmdb:234613") == true)
+    }
+
+    @Test
+    fun `normalizeShowTitleForGrouping normalizes articles, season tags, and punctuation`() {
+        assertEquals("traitors canada", normalizeShowTitleForGrouping("The Traitors Canada"))
+        assertEquals("traitors canada", normalizeShowTitleForGrouping("Traitors Canada"))
+        assertEquals("traitors canada", normalizeShowTitleForGrouping("The Traitors: Canada (CA)"))
+        assertEquals("bear", normalizeShowTitleForGrouping("The Bear S5E8"))
+        assertEquals("dragons den", normalizeShowTitleForGrouping("Dragons' Den"))
+    }
+
+    @Test
+    fun `deduplicateContinueWatchingItems removes duplicate Traitors Canada and prefers rich episode title`() {
+        val item1 = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tmdb:234613",
+                contentType = "series",
+                name = "Traitors Canada",
+                poster = "poster1.jpg",
+                backdrop = null,
+                logo = null,
+                videoId = "tt28251824:4:7",
+                season = 4,
+                episode = 7,
+                episodeTitle = "Creepy Little Secret",
+                thumbnail = null,
+                lastWatched = 1793318618838L,
+                sortTimestamp = 1793318618838L,
+                isReleaseAlert = true
+            )
+        )
+        val item2 = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28251824",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = "poster2.jpg",
+                backdrop = null,
+                logo = null,
+                videoId = "tt28642270:4:7",
+                season = 4,
+                episode = 7,
+                episodeTitle = "Episode 7",
+                thumbnail = null,
+                lastWatched = 1793145989430L,
+                sortTimestamp = 1793145989430L,
+                isReleaseAlert = true
+            )
+        )
+
+        val siblings = mapOf(
+            "tmdb:234613" to setOf("tt28251824"),
+            "tt28251824" to setOf("tmdb:234613")
+        )
+
+        val deduplicated = deduplicateContinueWatchingItems(listOf(item1, item2), siblings)
+        assertEquals(1, deduplicated.size)
+        val survivor = deduplicated.first() as ContinueWatchingItem.NextUp
+        assertEquals("tmdb:234613", survivor.info.contentId)
+        assertEquals("Creepy Little Secret", survivor.info.episodeTitle)
+    }
+
+    @Test
+    fun `deduplicateContinueWatchingItems suppresses next up when in progress exists for sibling id`() {
+        val inProgress = ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tmdb:234613",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tmdb:234613:4:6",
+                season = 4,
+                episode = 6,
+                episodeTitle = null,
+                lastWatched = 1793318618838L,
+                position = 1000L,
+                duration = 2000L
+            )
+        )
+        val nextUp = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28251824",
+                contentType = "series",
+                name = "The Traitors Canada",
+                season = 4,
+                episode = 7,
+                episodeTitle = "Episode 7",
+                lastWatched = 1793145989430L,
+                sortTimestamp = 1793145989430L,
+                isReleaseAlert = true,
+                poster = null, backdrop = null, logo = null, videoId = "tt28251824:4:7", thumbnail = null
+            )
+        )
+
+        val siblings = mapOf(
+            "tmdb:234613" to setOf("tt28251824"),
+            "tt28251824" to setOf("tmdb:234613")
+        )
+
+        val deduplicated = deduplicateContinueWatchingItems(listOf(inProgress, nextUp), siblings)
+        assertEquals(1, deduplicated.size)
+        assertTrue(deduplicated.first() is ContinueWatchingItem.InProgress)
     }
 
     private fun mockWatchedSeriesStateHolder(ongoing: Set<String> = emptySet()): WatchedSeriesStateHolder {

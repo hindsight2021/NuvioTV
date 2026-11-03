@@ -4,6 +4,8 @@ import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
 import com.nuvio.tv.data.local.SeriesAirStatus
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.data.local.WatchedSeriesStateHolder
+import java.text.Normalizer
+import java.util.Locale
 
 /**
  * Pure Continue Watching rules for currently-airing / fully-watched series.
@@ -259,12 +261,43 @@ data class WatchProgressSeedRef(
     val contentType: String? = null
 )
 
+private val SEASON_EPISODE_TAG_REGEX = Regex("""\bs\d+e\d+\b""")
+private val SEASON_TAG_REGEX = Regex("""\bs\d+\b""")
+private val SEASON_WORD_REGEX = Regex("""\bseason\s*\d+\b""")
+private val EPISODE_WORD_REGEX = Regex("""\bepisode\s*\d+\b""")
+private val PARENTHETICAL_REGEX = Regex("""\([^)]*\)""")
+private val LEADING_ARTICLE_REGEX = Regex("""^(the|a|an)\s+""")
+private val NON_ALPHANUMERIC_REGEX = Regex("""[^a-z0-9]+""")
+private val WHITESPACE_REGEX = Regex("""\s+""")
+private val DIACRITICS_REGEX = Regex("""\p{Mn}+""")
+
+/**
+ * Normalizes a show title for grouping and duplicate detection.
+ * E.g. "The Traitors Canada" -> "traitors canada", "Traitors Canada" -> "traitors canada",
+ * "The Bear S5E8" -> "bear", "Dragons' Den" -> "dragons den".
+ */
+fun normalizeShowTitleForGrouping(name: String?): String {
+    if (name.isNullOrBlank()) return ""
+    var result = name.lowercase(Locale.ROOT)
+    result = Normalizer.normalize(result, Normalizer.Form.NFD).replace(DIACRITICS_REGEX, "")
+    result = SEASON_EPISODE_TAG_REGEX.replace(result, " ")
+    result = SEASON_TAG_REGEX.replace(result, " ")
+    result = SEASON_WORD_REGEX.replace(result, " ")
+    result = EPISODE_WORD_REGEX.replace(result, " ")
+    result = PARENTHETICAL_REGEX.replace(result, " ")
+    result = LEADING_ARTICLE_REGEX.replace(result, "")
+    result = NON_ALPHANUMERIC_REGEX.replace(result, " ")
+    return WHITESPACE_REGEX.replace(result, " ").trim()
+}
+
 /**
  * Derives and augments sibling mappings across content IDs from watch-progress seeds.
  *
- * 1. Groups seeds by normalized name (lowercased, trimmed) for series items, linking
- *    distinct contentIds (e.g. tmdb:234613 and tt28251824 both for "The Traitors Canada").
+ * 1. Groups seeds by normalized name (stripping leading articles, season tags, punctuation)
+ *    for series items, linking distinct contentIds (e.g. tmdb:234613 and tt28251824 both for "The Traitors Canada").
  * 2. Links contentId to any IMDb ID extracted from videoId (e.g. videoId "tt28251824:4:4").
+ * 3. Computes transitive closure across the connected components so that all sibling IDs are mutually linked,
+ *    while carefully protecting "__ambiguous__" markers from bridging distinct shows.
  */
 fun buildShowIdSiblingsFromSeeds(
     seeds: List<WatchProgressSeedRef>,
@@ -282,10 +315,11 @@ fun buildShowIdSiblingsFromSeeds(
     }
 
     val groupsByName = seeds
-        .filter { !it.name.isNullOrBlank() && isSeriesTypeCW(it.contentType) }
-        .groupBy { it.name!!.trim().lowercase() }
+        .filter { !it.name.isNullOrBlank() && (it.contentType == null || isSeriesTypeCW(it.contentType)) }
+        .groupBy { normalizeShowTitleForGrouping(it.name) }
 
-    for ((_, group) in groupsByName) {
+    for ((groupKey, group) in groupsByName) {
+        if (groupKey.length < 2) continue
         val distinctIds = group.map { it.contentId }.filter { it.isNotBlank() }.distinct()
         for (i in distinctIds.indices) {
             for (j in i + 1 until distinctIds.size) {

@@ -902,10 +902,11 @@ class HomeViewModel @Inject constructor(
             val items = mergeContinueWatchingItems(
                 inProgressItems = inProgressItems,
                 nextUpItems = nextUpItems,
-                mode = sortMode
+                mode = sortMode,
+                siblingsMap = cwLastShowIdSiblings
             )
             if (items.isNotEmpty()) {
-                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, separateNextUpRow)
+                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, separateNextUpRow, cwLastShowIdSiblings)
                 _uiState.update { state ->
                     if (profileManager.activeProfileId.value != restoringProfileId ||
                         _initialCwResolved.value || state.continueWatchingItems.isNotEmpty() ||

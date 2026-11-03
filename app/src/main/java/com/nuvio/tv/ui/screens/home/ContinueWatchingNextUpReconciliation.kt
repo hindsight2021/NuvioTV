@@ -7,11 +7,154 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
+private val GENERIC_EPISODE_REGEX = Regex("""(?i)^(episode|ep\.?)\s*\d+\.?$""")
+private val GENERIC_SXXEYY_REGEX = Regex("""(?i)^s\d+e\d+$""")
+
+/**
+ * Returns true when [title] is a generic episode placeholder such as "Episode 7", "Episode 07",
+ * "Ep. 7", "S4E7", or is null/blank.
+ */
+internal fun isGenericEpisodeTitle(title: String?): Boolean {
+    if (title.isNullOrBlank()) return true
+    val trimmed = title.trim()
+    if (GENERIC_EPISODE_REGEX.matches(trimmed)) return true
+    if (GENERIC_SXXEYY_REGEX.matches(trimmed)) return true
+    return false
+}
+
+private fun extractItemImdbId(item: ContinueWatchingItem): String? {
+    extractImdbIdFromVideoId(item.videoId())?.let { return it }
+    val contentId = item.contentId()
+    return if (contentId.startsWith("tt")) contentId else null
+}
+
+/**
+ * Determines whether [a] and [b] refer to the same show/movie according to deduplication rules.
+ */
+internal fun areContinueWatchingDuplicates(
+    a: ContinueWatchingItem,
+    b: ContinueWatchingItem,
+    siblingsMap: Map<String, Set<String>> = emptyMap()
+): Boolean {
+    val aId = a.contentId()
+    val bId = b.contentId()
+
+    // Rule 1: exact contentId match
+    if (aId == bId) return true
+
+    // Rule 2: sibling map match
+    val aSiblings = siblingsMap[aId]
+    if (aSiblings != null && bId in aSiblings) return true
+    val bSiblings = siblingsMap[bId]
+    if (bSiblings != null && aId in bSiblings) return true
+
+    val aCanonical = resolveCanonicalClusterKey(aId, siblingsMap)
+    val bCanonical = resolveCanonicalClusterKey(bId, siblingsMap)
+    if (aCanonical != aId && aCanonical == bCanonical) return true
+
+    // Rule 3: IMDb ID match
+    val aImdb = extractItemImdbId(a)
+    val bImdb = extractItemImdbId(b)
+    if (aImdb != null && bImdb != null && aImdb == bImdb) return true
+
+    // Rule 4: normalized series title match
+    if (a.isSeries() && b.isSeries()) {
+        val aTitle = normalizeShowTitleForGrouping(a.title())
+        val bTitle = normalizeShowTitleForGrouping(b.title())
+        if (aTitle.length >= 2 && aTitle == bTitle) return true
+    }
+
+    return false
+}
+
+/**
+ * Selects the preferred representative between two duplicates of the same show/movie.
+ */
+internal fun selectPreferredContinueWatchingDuplicate(
+    a: ContinueWatchingItem,
+    b: ContinueWatchingItem
+): ContinueWatchingItem {
+    val aInProgress = a is ContinueWatchingItem.InProgress
+    val bInProgress = b is ContinueWatchingItem.InProgress
+
+    // InProgress beats NextUp
+    if (aInProgress != bInProgress) {
+        return if (aInProgress) a else b
+    }
+
+    if (a is ContinueWatchingItem.InProgress && b is ContinueWatchingItem.InProgress) {
+        return if (b.progress.lastWatched > a.progress.lastWatched) b else a
+    }
+
+    // Both are NextUp
+    val nextA = (a as ContinueWatchingItem.NextUp).info
+    val nextB = (b as ContinueWatchingItem.NextUp).info
+
+    // 1. Release alert beats non-release alert
+    if (nextA.isReleaseAlert != nextB.isReleaseAlert) {
+        return if (nextA.isReleaseAlert) a else b
+    }
+
+    // 2. Higher season/episode
+    val aSeason = nextA.season
+    val bSeason = nextB.season
+    if (aSeason != bSeason) return if (bSeason > aSeason) b else a
+
+    val aEpisode = nextA.episode
+    val bEpisode = nextB.episode
+    if (aEpisode != bEpisode) return if (bEpisode > aEpisode) b else a
+
+    // 3. Non-generic episode title beats generic placeholder ("Creepy Little Secret" vs "Episode 7")
+    val aGeneric = isGenericEpisodeTitle(nextA.episodeTitle)
+    val bGeneric = isGenericEpisodeTitle(nextB.episodeTitle)
+    if (aGeneric != bGeneric) return if (aGeneric) b else a
+
+    // 4. Higher sortTimestamp / releaseTimestamp / lastWatched
+    val aSort = nextA.sortTimestamp.takeIf { it > 0 } ?: nextA.lastWatched
+    val bSort = nextB.sortTimestamp.takeIf { it > 0 } ?: nextB.lastWatched
+    if (aSort != bSort) return if (bSort > aSort) b else a
+
+    // 5. Prefer IMDb ID contentId
+    val aIsImdb = nextA.contentId.startsWith("tt")
+    val bIsImdb = nextB.contentId.startsWith("tt")
+    if (aIsImdb != bIsImdb) return if (aIsImdb) a else b
+
+    return a
+}
+
+/**
+ * Deduplicates Continue Watching items so that each logical show/movie appears at most once.
+ */
+fun deduplicateContinueWatchingItems(
+    items: List<ContinueWatchingItem>,
+    siblingsMap: Map<String, Set<String>> = emptyMap()
+): List<ContinueWatchingItem> {
+    if (items.size <= 1) return items
+
+    val result = ArrayList<ContinueWatchingItem>(items.size)
+
+    for (item in items) {
+        val duplicateIndex = result.indexOfFirst { existing ->
+            areContinueWatchingDuplicates(existing, item, siblingsMap)
+        }
+
+        if (duplicateIndex == -1) {
+            result.add(item)
+        } else {
+            val existing = result[duplicateIndex]
+            result[duplicateIndex] = selectPreferredContinueWatchingDuplicate(existing, item)
+        }
+    }
+
+    return result
+}
+
 internal fun reconcileConclusiveNextUpItems(
     currentItems: List<ContinueWatchingItem>,
     resolvedItems: List<ContinueWatchingItem.NextUp>,
     conclusivelyProcessedContentIds: Set<String>,
-    dismissedNextUpKeys: Set<String>
+    dismissedNextUpKeys: Set<String>,
+    siblingsMap: Map<String, Set<String>> = emptyMap()
 ): List<ContinueWatchingItem> {
     val resolvedByContentId = resolvedItems
         .distinctBy { item -> item.info.contentId }
@@ -34,7 +177,8 @@ internal fun reconcileConclusiveNextUpItems(
                 dismissedNextUpKeys
             )
     }
-    return retainedItems + acceptedResolvedItems
+    val combined = retainedItems + acceptedResolvedItems
+    return deduplicateContinueWatchingItems(combined, siblingsMap)
 }
 
 internal fun mergeConcurrentContinueWatchingEnrichment(
@@ -88,10 +232,11 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
             currentItems = state.continueWatchingItems + state.upcomingItems,
             resolvedItems = acceptedResolvedItems,
             conclusivelyProcessedContentIds = conclusivelyProcessedContentIds,
-            dismissedNextUpKeys = dismissedNextUpKeys
+            dismissedNextUpKeys = dismissedNextUpKeys,
+            siblingsMap = cwLastShowIdSiblings
         )
         val sorted = sortContinueWatchingItems(reconciled, sortMode)
-        val (main, upcoming) = splitUpcomingItems(sorted, sortMode, separateNextUpRow)
+        val (main, upcoming) = splitUpcomingItems(sorted, sortMode, separateNextUpRow, cwLastShowIdSiblings)
         if (state.continueWatchingItems == main && state.upcomingItems == upcoming) {
             state
         } else {
