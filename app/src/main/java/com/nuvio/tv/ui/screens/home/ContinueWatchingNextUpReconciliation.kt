@@ -58,7 +58,9 @@ internal fun areContinueWatchingDuplicates(
     if (aImdb != null && bImdb != null && aImdb == bImdb) return true
 
     // Rule 4: normalized series title match
-    if (a.isSeries() && b.isSeries()) {
+    val aIsSeries = a.isSeries() || a is ContinueWatchingItem.NextUp || a.season() != null || a.episode() != null
+    val bIsSeries = b.isSeries() || b is ContinueWatchingItem.NextUp || b.season() != null || b.episode() != null
+    if (aIsSeries && bIsSeries) {
         val aTitle = normalizeShowTitleForGrouping(a.title())
         val bTitle = normalizeShowTitleForGrouping(b.title())
         if (aTitle.length >= 2 && aTitle == bTitle) return true

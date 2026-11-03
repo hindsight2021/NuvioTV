@@ -5,6 +5,9 @@ import kotlinx.coroutines.flow.update
 
 /** Called only while Home is resumed; no player-time scans. */
 internal fun HomeViewModel.refreshContinueWatchingForClock() {
+    if (com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value) {
+        return
+    }
     val nowMs = System.currentTimeMillis()
     val checked = cwMetadataCheckedAt.toMap()
     val staleIds = watchedSeriesStateHolder.filterStaleIds(checked.keys)

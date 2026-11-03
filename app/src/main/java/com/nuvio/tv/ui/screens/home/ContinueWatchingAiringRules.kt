@@ -275,12 +275,13 @@ data class WatchProgressSeedRef(
     val contentType: String? = null
 )
 
-private val SEASON_EPISODE_TAG_REGEX = Regex("""\bs\d+e\d+\b""")
-private val SEASON_TAG_REGEX = Regex("""\bs\d+\b""")
-private val SEASON_WORD_REGEX = Regex("""\bseason\s*\d+\b""")
-private val EPISODE_WORD_REGEX = Regex("""\bepisode\s*\d+\b""")
+private val TITLE_YEAR_REGEX = Regex("""\b(19\d\d|20\d\d)\b""")
+private val SEASON_EPISODE_TAG_REGEX = Regex("""\bs\s*\d+\s*e\s*\d+\b""", RegexOption.IGNORE_CASE)
+private val SEASON_TAG_REGEX = Regex("""\bs\s*\d+\b""", RegexOption.IGNORE_CASE)
+private val SEASON_WORD_REGEX = Regex("""\bseason\s*\d+\b""", RegexOption.IGNORE_CASE)
+private val EPISODE_WORD_REGEX = Regex("""\bepisode\s*\d+\b""", RegexOption.IGNORE_CASE)
 private val PARENTHETICAL_REGEX = Regex("""\([^)]*\)""")
-private val LEADING_ARTICLE_REGEX = Regex("""^(the|a|an)\s+""")
+private val LEADING_ARTICLE_REGEX = Regex("""^(the|a|an)\s+""", RegexOption.IGNORE_CASE)
 private val NON_ALPHANUMERIC_REGEX = Regex("""[^a-z0-9]+""")
 private val WHITESPACE_REGEX = Regex("""\s+""")
 private val DIACRITICS_REGEX = Regex("""\p{Mn}+""")
@@ -288,20 +289,38 @@ private val DIACRITICS_REGEX = Regex("""\p{Mn}+""")
 /**
  * Normalizes a show title for grouping and duplicate detection.
  * E.g. "The Traitors Canada" -> "traitors canada", "Traitors Canada" -> "traitors canada",
- * "The Bear S5E8" -> "bear", "Dragons' Den" -> "dragons den".
+ * "The Traitors Canada 2023" -> "traitors canada", "The Bear S5E8" -> "bear", "Dragons' Den" -> "dragons den".
  */
 fun normalizeShowTitleForGrouping(name: String?): String {
     if (name.isNullOrBlank()) return ""
-    var result = name.lowercase(Locale.ROOT)
+    var result = name.trim().lowercase(Locale.ROOT)
     result = Normalizer.normalize(result, Normalizer.Form.NFD).replace(DIACRITICS_REGEX, "")
+    result = PARENTHETICAL_REGEX.replace(result, " ")
     result = SEASON_EPISODE_TAG_REGEX.replace(result, " ")
     result = SEASON_TAG_REGEX.replace(result, " ")
     result = SEASON_WORD_REGEX.replace(result, " ")
     result = EPISODE_WORD_REGEX.replace(result, " ")
-    result = PARENTHETICAL_REGEX.replace(result, " ")
-    result = LEADING_ARTICLE_REGEX.replace(result, "")
+    result = TITLE_YEAR_REGEX.replace(result, " ")
+    result = LEADING_ARTICLE_REGEX.replace(result.trim(), "")
     result = NON_ALPHANUMERIC_REGEX.replace(result, " ")
     return WHITESPACE_REGEX.replace(result, " ").trim()
+}
+
+/**
+ * Checks whether two content IDs belong to the same logical series cluster.
+ */
+fun areContentIdsSiblings(
+    a: String,
+    b: String,
+    siblingsMap: Map<String, Set<String>> = emptyMap()
+): Boolean {
+    if (a.isBlank() || b.isBlank()) return false
+    if (a == b) return true
+    if (siblingsMap[a]?.contains(b) == true) return true
+    if (siblingsMap[b]?.contains(a) == true) return true
+    val aCanonical = resolveCanonicalClusterKey(a, siblingsMap)
+    val bCanonical = resolveCanonicalClusterKey(b, siblingsMap)
+    return aCanonical != a && aCanonical == bCanonical
 }
 
 /**

@@ -11,6 +11,7 @@ import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.WatchProgress
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -49,6 +50,12 @@ internal fun HomeViewModel.observeLibraryState() {
                     if (updatedState == state) state else updatedState
                 }
             }
+    }
+
+    viewModelScope.launch(Dispatchers.IO) {
+        libraryRepository.libraryItems.collect { items ->
+            cachedLibraryItemIds = items.mapTo(HashSet()) { it.id }
+        }
     }
 
     viewModelScope.launch {

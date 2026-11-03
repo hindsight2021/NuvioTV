@@ -44,8 +44,8 @@ class MetaRepositoryImpl @Inject constructor(
          *  Prevents excessive re-fetching on every details screen visit for addons
          *  that don't set meaningful Cache-Control headers. */
         private const val MIN_META_TTL_MS = 5L * 60 * 1000
-        private const val MAX_META_CACHE_ENTRIES = 32
-        private const val MAX_PRIMARY_META_CACHE_ENTRIES = 16
+        private const val MAX_META_CACHE_ENTRIES = 256
+        private const val MAX_PRIMARY_META_CACHE_ENTRIES = 128
         /**
          * How long a meta lookup waits for the installed addon list to populate.
          *

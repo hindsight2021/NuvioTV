@@ -317,6 +317,8 @@ class HomeViewModel @Inject constructor(
     internal var separateNextUpRow: Boolean = false
     @Volatile
     internal var nextUpRowPosition: NextUpRowPosition = NextUpRowPosition.BELOW_CONTINUE_WATCHING
+    @Volatile
+    internal var cachedLibraryItemIds: Set<String> = emptySet()
     internal val startupStartedAtMs: Long = SystemClock.elapsedRealtime()
     @Volatile
     internal var startupGracePeriodActive: Boolean = true
@@ -830,9 +832,12 @@ class HomeViewModel @Inject constructor(
             val cachedInProgress = runCatching { cwEnrichmentCache.getInProgressSnapshot() }.getOrDefault(emptyList())
             val cachedNextUp = runCatching { cwEnrichmentCache.getNextUpSnapshot() }.getOrDefault(emptyList())
             if (cachedInProgress.isEmpty() && cachedNextUp.isEmpty()) return@launch
-            val dismissedNextUp = traktSettingsDataStore.dismissedNextUpKeys.first()
-            // Render cached items immediately — don't wait for Trakt/allProgress.
-            // The pipeline will replace these with live data once it completes.
+
+            val isSeparateNextUpRow = runCatching { layoutPreferenceDataStore.separateNextUpRow.first() }.getOrDefault(false)
+            val sortMode = runCatching { layoutPreferenceDataStore.continueWatchingSortMode.first() }.getOrDefault(ContinueWatchingSortMode.DEFAULT)
+            val dismissedNextUp = runCatching { traktSettingsDataStore.dismissedNextUpKeys.first() }.getOrDefault(emptySet())
+            separateNextUpRow = isSeparateNextUpRow
+
             val inProgressItems = cachedInProgress
                 .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
                 .map { cached ->
@@ -898,7 +903,6 @@ class HomeViewModel @Inject constructor(
                     )
                 )
             }
-            val sortMode = layoutPreferenceDataStore.continueWatchingSortMode.first()
             val items = mergeContinueWatchingItems(
                 inProgressItems = inProgressItems,
                 nextUpItems = nextUpItems,
@@ -906,15 +910,18 @@ class HomeViewModel @Inject constructor(
                 siblingsMap = cwLastShowIdSiblings
             )
             if (items.isNotEmpty()) {
-                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, separateNextUpRow, cwLastShowIdSiblings)
+                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, isSeparateNextUpRow, cwLastShowIdSiblings)
                 _uiState.update { state ->
                     if (profileManager.activeProfileId.value != restoringProfileId ||
-                        _initialCwResolved.value || state.continueWatchingItems.isNotEmpty() ||
-                        state.upcomingItems.isNotEmpty()) state
-                    else state.copy(continueWatchingItems = mainItems, upcomingItems = upcomingOnly)
+                        _initialCwResolved.value) state
+                    else state.copy(
+                        continueWatchingItems = mainItems,
+                        upcomingItems = upcomingOnly,
+                        separateNextUpRow = isSeparateNextUpRow
+                    )
                 }
                 if (profileManager.activeProfileId.value == restoringProfileId &&
-                    (_uiState.value.continueWatchingItems.isNotEmpty() || _uiState.value.upcomingItems.isNotEmpty())) {
+                    (mainItems.isNotEmpty() || upcomingOnly.isNotEmpty())) {
                     _initialCwResolved.value = true
                 }
             }
