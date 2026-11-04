@@ -396,6 +396,7 @@ class StartupSyncService @Inject constructor(
         activityPullJob = null
 
         startupPullJob = scope.launch {
+            if (!force) delay(1500L)
             val maxAttempts = 3
             var syncCompleted = false
             for (attempt in 1..maxAttempts) {
@@ -452,8 +453,6 @@ class StartupSyncService @Inject constructor(
             val profileId = profileManager.activeProfileId.value
             val syncState = startupSyncPreferences.getState(profileId)
             val canUseWarmSync = !force &&
-                lastPulledKey == pullKey(userId) &&
-                lastPulledAtMs > 0L &&
                 syncState.lastFullPullUserId == userId &&
                 syncState.lastFullPullAtMs > 0L &&
                 System.currentTimeMillis() - syncState.lastFullPullAtMs < FULL_STARTUP_PULL_TTL_MS &&
@@ -476,12 +475,13 @@ class StartupSyncService @Inject constructor(
                 "Watch progress sync: shouldUseSupabaseWatchProgressSync=$shouldUseSupabaseWatchProgressSync"
             )
             if (shouldUseSupabaseWatchProgressSync) {
-                pullWatchedItemsSnapshot(profileId)
+                // Sync active watch progress first so Continue Watching updates immediately
                 syncWatchProgressSnapshot(
                     profileId = profileId,
                     pushUnsynced = true,
                     failureMessage = "Failed to sync watch progress, continuing"
                 )
+                pullWatchedItemsSnapshot(profileId)
             } else {
                 libraryRepository.hasCompletedInitialPull = true
                 watchProgressRepository.hasCompletedInitialPull = true

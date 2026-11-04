@@ -365,17 +365,19 @@ fun HomeScreen(
             catalogLoadingStarted = true
         }
         // Wait until catalog loading has completed with content AND the CW
-        // pipeline has completed its first emission.
-        if (!homeStableGateReleased &&
-            catalogLoadingStarted &&
-            !uiState.isLoading &&
-            initialCwResolved &&
-            modernPresentationReady &&
-            // When addons are installed, require at least one catalog row.
-            (hasCatalogContent || uiState.installedAddonsCount == 0)
-        ) {
-            Log.d("HomeGate", "RELEASE: catalogs=$hasCatalogContent cwResolved=$initialCwResolved cwItems=${uiState.continueWatchingItems.size} addons=${uiState.installedAddonsCount}")
-            homeStableGateReleased = true
+        // pipeline has completed its first emission, OR release immediately if CW is cached.
+        if (!homeStableGateReleased) {
+            val hasCachedCw = uiState.continueWatchingItems.isNotEmpty() || uiState.upcomingItems.isNotEmpty()
+            if ((hasCachedCw && modernPresentationReady) ||
+                (catalogLoadingStarted &&
+                    !uiState.isLoading &&
+                    initialCwResolved &&
+                    modernPresentationReady &&
+                    (hasCatalogContent || uiState.installedAddonsCount == 0))
+            ) {
+                Log.d("HomeGate", "RELEASE: cachedCw=$hasCachedCw catalogs=$hasCatalogContent cwResolved=$initialCwResolved cwItems=${uiState.continueWatchingItems.size} addons=${uiState.installedAddonsCount}")
+                homeStableGateReleased = true
+            }
         }
     }
 
@@ -408,7 +410,7 @@ fun HomeScreen(
     val noAddonsError = stringResource(R.string.home_error_no_addons)
     val noCatalogAddonsError = stringResource(R.string.home_error_no_catalog_addons)
     val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
-        (uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()) ||
+        (uiState.continueWatchingEnabled && (uiState.continueWatchingItems.isNotEmpty() || uiState.upcomingItems.isNotEmpty())) ||
         uiState.heroItems.isNotEmpty() ||
         hasCollectionContent
     val showStartupLoader = when {
@@ -418,6 +420,7 @@ fun HomeScreen(
         uiState.error == noCatalogAddonsError && uiState.catalogRows.isEmpty() && !hasCollectionContent && !hasHeroContent -> !homeStableGateReleased
         uiState.error != null && uiState.catalogRows.isEmpty() -> false
         !uiState.isLoading && !hasAnyContent -> !homeStableGateReleased
+        hasAnyContent && homeStableGateReleased -> !modernPresentationReady
         else -> !homeStableGateReleased || !modernPresentationReady || !showHomeContentWithAnimation
     }
 

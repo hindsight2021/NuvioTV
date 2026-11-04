@@ -396,11 +396,15 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     && old.customPosterPattern == new.customPosterPattern
                     && old.rpdbApiKey == new.rpdbApiKey
             }
-            .debounce {
-                // Use a longer debounce while catalogs are still loading to
-                // avoid repeated expensive presentation builds during the
-                // initial burst of catalog arrivals.
-                if (catalogsLoadInProgress) 300L else 80L
+            .debounce { input ->
+                // Initial startup with cached CW: build immediately with 0ms delay.
+                if (_modernHomePresentation.value.rows.list.isEmpty() && (input.continueWatchingItems.isNotEmpty() || input.upcomingItems.isNotEmpty())) {
+                    0L
+                } else if (catalogsLoadInProgress) {
+                    300L
+                } else {
+                    80L
+                }
             }
             .collectLatest { input ->
                 val shouldWarmStart = _modernHomePresentation.value.rows.list.isEmpty()
