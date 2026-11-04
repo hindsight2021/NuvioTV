@@ -396,7 +396,7 @@ class StartupSyncService @Inject constructor(
         activityPullJob = null
 
         startupPullJob = scope.launch {
-            if (!force) delay(1500L)
+            if (!force) delay(4000L)
             val maxAttempts = 3
             var syncCompleted = false
             for (attempt in 1..maxAttempts) {

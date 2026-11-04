@@ -121,7 +121,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    internal val _uiState = MutableStateFlow(HomeUiState())
+    internal val _uiState = MutableStateFlow(
+        HomeUiState(
+            separateNextUpRow = runCatching { layoutPreferenceDataStore.separateNextUpRow.value }.getOrDefault(false),
+            nextUpRowPosition = runCatching { layoutPreferenceDataStore.nextUpRowPosition.value }.getOrDefault(NextUpRowPosition.BELOW_CONTINUE_WATCHING)
+        )
+    )
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     internal val _modernHomePresentation = MutableStateFlow(ModernHomePresentationState())
@@ -312,11 +317,11 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
-    internal var continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT
+    internal var continueWatchingSortMode: ContinueWatchingSortMode = runCatching { layoutPreferenceDataStore.continueWatchingSortMode.value }.getOrDefault(ContinueWatchingSortMode.DEFAULT)
     @Volatile
-    internal var separateNextUpRow: Boolean = false
+    internal var separateNextUpRow: Boolean = runCatching { layoutPreferenceDataStore.separateNextUpRow.value }.getOrDefault(false)
     @Volatile
-    internal var nextUpRowPosition: NextUpRowPosition = NextUpRowPosition.BELOW_CONTINUE_WATCHING
+    internal var nextUpRowPosition: NextUpRowPosition = runCatching { layoutPreferenceDataStore.nextUpRowPosition.value }.getOrDefault(NextUpRowPosition.BELOW_CONTINUE_WATCHING)
     @Volatile
     internal var cachedLibraryItemIds: Set<String> = emptySet()
     internal val startupStartedAtMs: Long = SystemClock.elapsedRealtime()
@@ -513,7 +518,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             var initial = true
             layoutPreferenceDataStore.continueWatchingSortMode
-                .distinctUntilChanged()
                 .collect { mode ->
                     continueWatchingSortMode = mode
                     if (initial) {
@@ -525,17 +529,20 @@ class HomeViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            var initial = true
             layoutPreferenceDataStore.separateNextUpRow
-                .distinctUntilChanged()
                 .collect { separate ->
                     separateNextUpRow = separate
                     _uiState.update { it.copy(separateNextUpRow = separate) }
+                    if (initial) {
+                        initial = false
+                        return@collect
+                    }
                     clearAllCwInMemoryCaches()
                 }
         }
         viewModelScope.launch {
             layoutPreferenceDataStore.nextUpRowPosition
-                .distinctUntilChanged()
                 .collect { position ->
                     nextUpRowPosition = position
                     _uiState.update { it.copy(nextUpRowPosition = position) }
@@ -833,9 +840,12 @@ class HomeViewModel @Inject constructor(
             val cachedNextUp = runCatching { cwEnrichmentCache.getNextUpSnapshot() }.getOrDefault(emptyList())
             if (cachedInProgress.isEmpty() && cachedNextUp.isEmpty()) return@launch
 
-            val isSeparateNextUpRow = separateNextUpRow
-            val sortMode = continueWatchingSortMode
-            val dismissedNextUp = runCatching { traktSettingsDataStore.dismissedNextUpKeys.first() }.getOrDefault(emptySet())
+            val isSeparateNextUpRow = runCatching { layoutPreferenceDataStore.separateNextUpRow.value }.getOrDefault(separateNextUpRow)
+            val sortMode = runCatching { layoutPreferenceDataStore.continueWatchingSortMode.value }.getOrDefault(continueWatchingSortMode)
+            val dismissedNextUp = runCatching { kotlinx.coroutines.withTimeoutOrNull(100L) { traktSettingsDataStore.dismissedNextUpKeys.first() } }.getOrNull() ?: emptySet()
+
+            separateNextUpRow = isSeparateNextUpRow
+            continueWatchingSortMode = sortMode
 
             val inProgressItems = cachedInProgress
                 .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
@@ -902,21 +912,28 @@ class HomeViewModel @Inject constructor(
                         )
                     )
                 }
-            val items = mergeContinueWatchingItems(
-                inProgressItems = inProgressItems,
-                nextUpItems = nextUpItems,
-                mode = sortMode,
-                siblingsMap = cwLastShowIdSiblings
-            )
-            if (items.isNotEmpty()) {
-                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, isSeparateNextUpRow, cwLastShowIdSiblings)
+
+            val (mainItems, upcomingOnly) = if (isSeparateNextUpRow) {
+                inProgressItems to nextUpItems
+            } else {
+                val items = mergeContinueWatchingItems(
+                    inProgressItems = inProgressItems,
+                    nextUpItems = nextUpItems,
+                    mode = sortMode,
+                    siblingsMap = cwLastShowIdSiblings
+                )
+                splitUpcomingItems(items, sortMode, false, cwLastShowIdSiblings)
+            }
+
+            if (mainItems.isNotEmpty() || upcomingOnly.isNotEmpty()) {
                 _uiState.update { state ->
                     if (profileManager.activeProfileId.value != restoringProfileId) state
                     else if (state.continueWatchingItems.isNotEmpty() || state.upcomingItems.isNotEmpty()) state
                     else state.copy(
                         continueWatchingItems = mainItems,
                         upcomingItems = upcomingOnly,
-                        separateNextUpRow = isSeparateNextUpRow
+                        separateNextUpRow = isSeparateNextUpRow,
+                        nextUpRowPosition = runCatching { layoutPreferenceDataStore.nextUpRowPosition.value }.getOrDefault(nextUpRowPosition)
                     )
                 }
                 _initialCwResolved.value = true
@@ -926,106 +943,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun loadContinueWatching() {
-        val restoringProfileId = profileManager.activeProfileId.value
-        // Immediately restore last known CW from disk cache for instant display.
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val cachedInProgress = runCatching { cwEnrichmentCache.getInProgressSnapshot() }.getOrDefault(emptyList())
-            val cachedNextUp = runCatching { cwEnrichmentCache.getNextUpSnapshot() }.getOrDefault(emptyList())
-            if (cachedInProgress.isEmpty() && cachedNextUp.isEmpty()) return@launch
-
-            val isSeparateNextUpRow = runCatching { layoutPreferenceDataStore.separateNextUpRow.first() }.getOrDefault(false)
-            val sortMode = runCatching { layoutPreferenceDataStore.continueWatchingSortMode.first() }.getOrDefault(ContinueWatchingSortMode.DEFAULT)
-            val dismissedNextUp = runCatching { traktSettingsDataStore.dismissedNextUpKeys.first() }.getOrDefault(emptySet())
-            separateNextUpRow = isSeparateNextUpRow
-
-            val inProgressItems = cachedInProgress
-                .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
-                .map { cached ->
-                    ContinueWatchingItem.InProgress(
-                        progress = com.nuvio.tv.domain.model.WatchProgress(
-                            contentId = cached.contentId,
-                            contentType = cached.contentType,
-                            name = cached.name,
-                            poster = cached.poster,
-                            backdrop = cached.backdrop,
-                            logo = cached.logo,
-                            videoId = cached.videoId,
-                            season = cached.season,
-                            episode = cached.episode,
-                            episodeTitle = cached.episodeTitle,
-                            position = cached.position,
-                            duration = cached.duration,
-                            lastWatched = cached.lastWatched,
-                            progressPercent = cached.progressPercent
-                        ),
-                        episodeThumbnail = cached.episodeThumbnail,
-                        episodeDescription = cached.episodeDescription,
-                        episodeImdbRating = cached.episodeImdbRating,
-                        genres = cached.genres,
-                        releaseInfo = cached.releaseInfo
-                    )
-                }
-            val nextUpItems = cachedNextUp
-                .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
-                .filter {
-                    !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
-                        recalculateCachedReleaseBadge(it).second, dismissedNextUp)
-                }
-                .map { cached ->
-                ContinueWatchingItem.NextUp(
-                    info = NextUpInfo(
-                        contentId = cached.contentId,
-                        contentType = cached.contentType,
-                        name = cached.name,
-                        poster = cached.poster,
-                        backdrop = cached.backdrop,
-                        logo = cached.logo,
-                        videoId = cached.videoId,
-                        season = cached.season,
-                        episode = cached.episode,
-                        episodeTitle = cached.episodeTitle,
-                        episodeDescription = cached.episodeDescription,
-                        thumbnail = cached.thumbnail,
-                        released = cached.released,
-                        hasAired = cached.hasAired,
-                        airDateLabel = cached.airDateLabel,
-                        lastWatched = cached.lastWatched,
-                        imdbRating = cached.imdbRating,
-                        genres = cached.genres,
-                        releaseInfo = cached.releaseInfo,
-                        sortTimestamp = cached.sortTimestamp,
-                        releaseTimestamp = cached.releaseTimestamp,
-                        isReleaseAlert = cached.isReleaseAlert,
-                        isNewSeasonRelease = cached.isNewSeasonRelease,
-                        seedSeason = cached.seedSeason,
-                        seedEpisode = cached.seedEpisode,
-                        contentLanguage = cached.contentLanguage
-                    )
-                )
-            }
-            val items = mergeContinueWatchingItems(
-                inProgressItems = inProgressItems,
-                nextUpItems = nextUpItems,
-                mode = sortMode,
-                siblingsMap = cwLastShowIdSiblings
-            )
-            if (items.isNotEmpty()) {
-                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode, isSeparateNextUpRow, cwLastShowIdSiblings)
-                _uiState.update { state ->
-                    if (profileManager.activeProfileId.value != restoringProfileId) state
-                    else if (state.continueWatchingItems.isNotEmpty() || state.upcomingItems.isNotEmpty()) state
-                    else state.copy(
-                        continueWatchingItems = mainItems,
-                        upcomingItems = upcomingOnly,
-                        separateNextUpRow = isSeparateNextUpRow
-                    )
-                }
-                if (profileManager.activeProfileId.value == restoringProfileId &&
-                    (mainItems.isNotEmpty() || upcomingOnly.isNotEmpty())) {
-                    _initialCwResolved.value = true
-                }
-            }
-        }
+        loadContinueWatchingFromCache()
         loadContinueWatchingPipeline()
     }
 

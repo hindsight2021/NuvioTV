@@ -36,6 +36,7 @@ import kotlinx.coroutines.sync.withPermit
 import com.nuvio.tv.core.util.filterReleasedItems
 import com.nuvio.tv.core.util.isRecentlyReleased
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 
 private data class CatalogUpdateResult(
@@ -155,6 +156,11 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
             .collectLatest { installedAddons ->
                 val addons = installedAddons.enabledAddons()
                 addonsCache = addons
+                if (!_initialCwResolved.value) {
+                    withTimeoutOrNull(300L) {
+                        _initialCwResolved.first { it }
+                    }
+                }
                 loadAllCatalogsPipeline(addons)
             }
     }

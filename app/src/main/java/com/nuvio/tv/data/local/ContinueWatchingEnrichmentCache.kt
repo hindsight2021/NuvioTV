@@ -86,6 +86,10 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
     @Volatile private var lastNextUpHash = 0
     @Volatile private var lastInProgressHash = 0
 
+    @Volatile private var inMemoryNextUpSnapshot: List<CachedNextUpItem>? = null
+    @Volatile private var inMemoryInProgressSnapshot: List<CachedInProgressItem>? = null
+    @Volatile private var cachedProfileId: Int? = null
+
     /** Incremented when cache is cleared; observers can collect to trigger refresh. */
     private val _cacheCleared = kotlinx.coroutines.flow.MutableStateFlow(0)
     val cacheCleared: kotlinx.coroutines.flow.StateFlow<Int> = _cacheCleared
@@ -104,16 +108,21 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
     }
 
     suspend fun getNextUpSnapshot(): List<CachedNextUpItem> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            try {
-                val file = nextUpFile()
-                if (!file.exists()) return@withContext emptyList()
-                gson.fromJson(file.readText(), object : TypeToken<List<CachedNextUpItem>>() {}.type)
-                    ?: emptyList()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to read next-up cache: ${e.message}")
-                emptyList()
-            }
+        val currentProfileId = profileManager.activeProfileId.value
+        if (cachedProfileId == currentProfileId) {
+            inMemoryNextUpSnapshot?.let { return@withContext it }
+        }
+        try {
+            val file = nextUpFile()
+            if (!file.exists()) return@withContext emptyList()
+            val parsed: List<CachedNextUpItem> = gson.fromJson(file.readText(), object : TypeToken<List<CachedNextUpItem>>() {}.type)
+                ?: emptyList()
+            cachedProfileId = currentProfileId
+            inMemoryNextUpSnapshot = parsed
+            parsed
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read next-up cache: ${e.message}")
+            emptyList()
         }
     }
 
@@ -127,6 +136,9 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
             val now = System.currentTimeMillis()
             if (now - lastNextUpWriteMs < THROTTLE_MS) return@withContext
         }
+        val currentProfileId = profileManager.activeProfileId.value
+        cachedProfileId = currentProfileId
+        inMemoryNextUpSnapshot = items
         mutex.withLock {
             try {
                 val file = nextUpFile()
@@ -150,16 +162,21 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
     }
 
     suspend fun getInProgressSnapshot(): List<CachedInProgressItem> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            try {
-                val file = inProgressFile()
-                if (!file.exists()) return@withContext emptyList()
-                gson.fromJson(file.readText(), object : TypeToken<List<CachedInProgressItem>>() {}.type)
-                    ?: emptyList()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to read in-progress cache: ${e.message}")
-                emptyList()
-            }
+        val currentProfileId = profileManager.activeProfileId.value
+        if (cachedProfileId == currentProfileId) {
+            inMemoryInProgressSnapshot?.let { return@withContext it }
+        }
+        try {
+            val file = inProgressFile()
+            if (!file.exists()) return@withContext emptyList()
+            val parsed: List<CachedInProgressItem> = gson.fromJson(file.readText(), object : TypeToken<List<CachedInProgressItem>>() {}.type)
+                ?: emptyList()
+            cachedProfileId = currentProfileId
+            inMemoryInProgressSnapshot = parsed
+            parsed
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read in-progress cache: ${e.message}")
+            emptyList()
         }
     }
 
@@ -173,6 +190,9 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
             val now = System.currentTimeMillis()
             if (now - lastInProgressWriteMs < THROTTLE_MS) return@withContext
         }
+        val currentProfileId = profileManager.activeProfileId.value
+        cachedProfileId = currentProfileId
+        inMemoryInProgressSnapshot = items
         mutex.withLock {
             try {
                 val file = inProgressFile()
@@ -190,6 +210,9 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
      * Deletes all CW enrichment cache files for the active profile.
      */
     suspend fun clearAll() = withContext(Dispatchers.IO) {
+        inMemoryNextUpSnapshot = null
+        inMemoryInProgressSnapshot = null
+        cachedProfileId = null
         mutex.withLock {
             try {
                 nextUpFile().delete()

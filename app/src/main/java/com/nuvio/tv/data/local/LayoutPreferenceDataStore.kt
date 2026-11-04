@@ -446,21 +446,21 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[blurContinueWatchingNextUpKey] ?: false
     }
 
-    val continueWatchingSortMode: Flow<ContinueWatchingSortMode> = profileFlow { prefs ->
+    val continueWatchingSortMode: StateFlow<ContinueWatchingSortMode> = profileFlow { prefs ->
         val stored = prefs[continueWatchingSortModeKey] ?: ContinueWatchingSortMode.DEFAULT.name
         runCatching { ContinueWatchingSortMode.valueOf(stored) }
             .getOrDefault(ContinueWatchingSortMode.DEFAULT)
-    }
+    }.stateIn(scope, SharingStarted.Eagerly, ContinueWatchingSortMode.DEFAULT)
 
-    val separateNextUpRow: Flow<Boolean> = profileFlow { prefs ->
-        prefs[separateNextUpRowKey] ?: false
-    }
+    val separateNextUpRow: StateFlow<Boolean> = profileFlow { prefs ->
+        prefs[separateNextUpRowKey] ?: true
+    }.stateIn(scope, SharingStarted.Eagerly, true)
 
-    val nextUpRowPosition: Flow<NextUpRowPosition> = profileFlow { prefs ->
-        val stored = prefs[nextUpRowPositionKey] ?: NextUpRowPosition.BELOW_CONTINUE_WATCHING.name
+    val nextUpRowPosition: StateFlow<NextUpRowPosition> = profileFlow { prefs ->
+        val stored = prefs[nextUpRowPositionKey] ?: NextUpRowPosition.ABOVE_CONTINUE_WATCHING.name
         runCatching { NextUpRowPosition.valueOf(stored) }
-            .getOrDefault(NextUpRowPosition.BELOW_CONTINUE_WATCHING)
-    }
+            .getOrDefault(NextUpRowPosition.ABOVE_CONTINUE_WATCHING)
+    }.stateIn(scope, SharingStarted.Eagerly, NextUpRowPosition.ABOVE_CONTINUE_WATCHING)
 
     val detailPageTrailerButtonEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[detailPageTrailerButtonEnabledKey] ?: true

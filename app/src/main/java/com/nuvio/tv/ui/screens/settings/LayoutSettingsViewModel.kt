@@ -450,21 +450,18 @@ class LayoutSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             layoutPreferenceDataStore.continueWatchingSortMode
-                .distinctUntilChanged()
                 .collect { mode ->
                     updateUiStateIfChanged { it.copy(continueWatchingSortMode = mode) }
                 }
         }
         viewModelScope.launch {
             layoutPreferenceDataStore.separateNextUpRow
-                .distinctUntilChanged()
                 .collect { enabled ->
                     updateUiStateIfChanged { it.copy(separateNextUpRow = enabled) }
                 }
         }
         viewModelScope.launch {
             layoutPreferenceDataStore.nextUpRowPosition
-                .distinctUntilChanged()
                 .collect { position ->
                     updateUiStateIfChanged { it.copy(nextUpRowPosition = position) }
                 }
