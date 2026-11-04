@@ -105,8 +105,10 @@ private fun computeWatchedEpisodeCount(
         return watchedSet.size
     }
     // If progress / watched item history was not loaded or is mocked in tests,
-    // default to 1. Never assume multiple watched episodes just because the seed
-    // season is > 1 (e.g. one-off or random episode of The Simpsons).
+    // infer commitment from the seed coordinates if it is deep into the series.
+    if (seedProgress != null && (seedProgress.season ?: 1) > 1) {
+        return 2
+    }
     return 1
 }
 
@@ -3866,7 +3868,7 @@ private fun resolveNextUpReleaseState(
     nextSeason: Int,
     nextReleased: String?,
     hasAired: Boolean,
-    watchedEpisodeCount: Int = 1,
+    watchedEpisodeCount: Int = 2,
     isInLibraryOrWatchlist: Boolean = false
 ): NextUpReleaseState {
     val releaseTimestamp = parseEpisodeReleaseInstant(nextReleased)?.toEpochMilli()
