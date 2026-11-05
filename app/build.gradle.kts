@@ -104,8 +104,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1152
-        versionName = "0.9.4-plus.94"
+        versionCode = 1153
+        versionName = "0.9.4-plus.95"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "https://api.introdb.app/")}\"")
@@ -143,6 +143,13 @@ android {
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
         buildConfigField("String", "SENTRY_DSN", buildConfigString(sentryDsn))
+
+        val haBaseUrl = providers.environmentVariable("HOME_ASSISTANT_BASE_URL").orNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: resolveProperty(devProperties, localProperties, "HOME_ASSISTANT_BASE_URL", "")
+        val haToken = providers.environmentVariable("HOME_ASSISTANT_TOKEN").orNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: resolveProperty(devProperties, localProperties, "HOME_ASSISTANT_TOKEN", "")
+        buildConfigField("String", "HOME_ASSISTANT_BASE_URL", buildConfigString(haBaseUrl))
+        buildConfigField("String", "HOME_ASSISTANT_TOKEN", buildConfigString(haToken))
 
         // In-app updater (GitHub Releases - points exclusively to fork)
         val githubOwner = "hindsight2021"

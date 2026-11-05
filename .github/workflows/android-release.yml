@@ -37,6 +37,8 @@ jobs:
       RELEASE_KEY_ALIAS: ${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
       RELEASE_KEY_PASSWORD: ${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
       RELEASE_STORE_PASSWORD: ${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
+      HOME_ASSISTANT_BASE_URL: ${{ secrets.HOME_ASSISTANT_BASE_URL }}
+      HOME_ASSISTANT_TOKEN: ${{ secrets.HOME_ASSISTANT_TOKEN }}
 
     steps:
       - name: Check out full history
@@ -174,6 +176,8 @@ jobs:
           set_property NUVIO_RELEASE_STORE_PASSWORD "${RELEASE_STORE_PASSWORD}"
           set_property GITHUB_OWNER "hindsight2021"
           set_property GITHUB_REPO "NuvioTV"
+          set_property HOME_ASSISTANT_BASE_URL "${HOME_ASSISTANT_BASE_URL}"
+          set_property HOME_ASSISTANT_TOKEN "${HOME_ASSISTANT_TOKEN}"
 
           for optional_prop in TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET SIMKL_CLIENT_ID; do
             if ! grep -Eq "^[[:space:]]*${optional_prop}[[:space:]]*=" local.properties; then

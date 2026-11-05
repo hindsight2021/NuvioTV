@@ -18,8 +18,8 @@ data class HomeAssistantWeather(
 )
 
 object HomeAssistantWeatherService {
-    private const val BASE_URL = ""
-    private const val TOKEN = ""
+    private val BASE_URL: String = com.nuvio.tv.BuildConfig.HOME_ASSISTANT_BASE_URL
+    private val TOKEN: String = com.nuvio.tv.BuildConfig.HOME_ASSISTANT_TOKEN
 
     private val _weatherState = MutableStateFlow(HomeAssistantWeather())
     val weatherState: StateFlow<HomeAssistantWeather> = _weatherState.asStateFlow()
@@ -31,9 +31,10 @@ object HomeAssistantWeatherService {
                 return@withContext
             }
             try {
-                // 1. Fetch outdoor weather: try weather.ihome, then weather.home_weather_station
+                // 1. Fetch outdoor weather: try weather.ihome, then weather.home_weather_station, then weather.fredericton
                 val weatherJson = fetchEntity("weather.ihome")
                     ?: fetchEntity("weather.home_weather_station")
+                    ?: fetchEntity("weather.fredericton")
 
                 var condition = ""
                 var conditionIcon = ""
@@ -74,7 +75,11 @@ object HomeAssistantWeatherService {
 
                 if (indoorSensor != null) {
                     val attributes = indoorSensor.optJSONObject("attributes")
-                    val tempFromAttr = attributes?.optDouble("current_temperature", Double.NaN)
+                    val tempFromAttr = attributes?.let { attrs ->
+                        var t = attrs.optDouble("current_temperature", Double.NaN)
+                        if (t.isNaN()) t = attrs.optDouble("temperature", Double.NaN)
+                        t
+                    } ?: Double.NaN
                     val unit = attributes?.optString("unit_of_measurement")
                         ?: attributes?.optString("temperature_unit", "°C")
                         ?: "°C"
@@ -109,7 +114,8 @@ object HomeAssistantWeatherService {
     private fun fetchEntity(entityId: String): JSONObject? {
         var conn: HttpURLConnection? = null
         return try {
-            val url = URL("$BASE_URL/api/states/$entityId")
+            val cleanBaseUrl = BASE_URL.trimEnd('/')
+            val url = URL("$cleanBaseUrl/api/states/$entityId")
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("Authorization", "Bearer $TOKEN")
