@@ -1,46 +1,100 @@
 <div align="center">
 
-  <img src="assets/brand/app_logo_wordmark.png" alt="Nuvio" width="300" />
+  <img src="assets/brand/app_logo_wordmark.png" alt="Nuvio+" width="320" />
+
+  <h1>🚀 Nuvio+ (The Couch Potato Edition)</h1>
 
   <p>
-    A free, open-source media app for your phone, your desktop, and the TV you already own.
+    <b>The unapologetically superior, feature-packed Android TV fork of Nuvio.</b>
     <br />
-    Bring your own sources. Nuvio turns them into a library with artwork, ratings, subtitles, and your place saved on every screen.
+    <i>Because reaching between couch cushions for the remote is a failure of modern engineering.</i>
   </p>
 
-  [Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioTV/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
+  <p>
+    <a href="https://github.com/hindsight2021/NuvioTV/releases/latest">📦 Latest Releases</a> •
+    <a href="HANDOVER.md">🛠 Architecture & Handover</a> •
+    <a href="https://github.com/NuvioMedia/NuvioTV"> upstream Vanilla Nuvio</a>
+  </p>
 
 </div>
 
-## Nuvio+ fork
+---
 
-This checkout is **Nuvio+**, the `hindsight2021/NuvioTV` fork. Development uses
-`plus-dev`; the full build installs as `com.nuvio.tv.plus` alongside official Nuvio.
+## 🛋️ Why Nuvio+? (An Honest Manifesto)
 
-- [Nuvio+ releases and manual APK downloads](https://github.com/hindsight2021/NuvioTV/releases)
-- [Project handover](HANDOVER.md)
-- [0.9.4-plus.50 implementation and acceptance plan](RELEASE_PLAN_0.9.4-plus.50.md)
+Look, vanilla Nuvio is great. It's clean. It's polite. It respects your screen time.
 
-Release candidates require device acceptance before being described as stable.
-Builds run through GitHub Actions; TV installation remains manual. Preserve the
-existing signing identity and app data when upgrading. Android may reject a
-downgrade to a lower versionCode; a previous APK alone is not a guaranteed rollback.
+**Nuvio+ does not respect your screen time.** Nuvio+ is engineered with a singular, uncompromising vision: to turn your living room into an autonomous entertainment temple where human thumb movement is considered an obsolete design flaw.
 
-## Get official upstream Nuvio TV
+If you believe that binge-watching should require roughly the same amount of physical exertion as a coma, welcome home.
 
-- [Android TV on Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app)
-- [Android TV APK](https://github.com/NuvioMedia/NuvioTV/releases/latest)
+---
 
-## Build from source
+## ✨ Superpowers That Vanilla Left On The Table
+
+### ✈️ 1. Autopilot Mode (AI-Powered Laziness)
+Why should an app stop playing when an episode ends? What are you supposed to do, *think* about what to watch next?
+- **Seamless Continuous Playback**: When your show finishes its latest release, Autopilot seamlessly scans your library and Continue Watching row, queues up the next hottest release or smart sequel, auto-selects a fast stream, and plays it.
+- **Gemini AI Curation**: Toggle into AI Curated Mode. Built-in intelligence analyzes narrative tone, genre pacing, and release recency so you don't get violently whiplashed from *The Bear* straight into *Peppa Pig*.
+- **Post-Play Countdown**: A slick, TV-optimized overlay gives you a countdown timer with 1-click **Play Now** and **Cancel** controls if you somehow decide you need to go to sleep.
+
+### 🧩 2. Metadata Diplomacy (`MetaMerger`)
+Have you ever waited for a new season premiere, only to find that Cinemeta thinks the season doesn't exist, TMDB is stuck in 2021, and Trakt gave up on life?
+- Nuvio+ refuses to participate in addon drama.
+- **Superset Aggregation**: Our custom metadata pipeline forcibly gathers Cinemeta, TMDB, Cyberflix, and Trakt into a room and merges their episode listings into a unified, conflict-free superset.
+- **Automatic Premiere Ingestion**: As soon as *any* provider knows an episode exists, it pops right into your Continue Watching row ready to scrape.
+
+### 💡 3. Home Assistant Cinema Mode
+Your TV shouldn't just be a screen; it should be the brain of your home theater:
+- **Automatic Ambient Dims**: When you start a movie in the evening, Nuvio+ signals Home Assistant to gently dim your living room lights over a velvety 7-second fade.
+- **Lego-Prevention Lighting**: Pause or stop the movie, and the lights gently rise so you don't break your toes navigating to the kitchen for popcorn.
+- **Live Climate Badges**: Indoor temperature and local weather sit right in the TV header, so you can scientifically confirm why you're freezing under your blanket.
+
+### 🛡️ 4. Anti-Freeze Hardware Decoder Armor
+Tired of AV1 and HEVC hardware decoders having an existential crisis at the end of a video and locking up your TV with a black screen?
+- We baked in upstream ExoPlayer end-of-stream overrun guards. When the audio finishes, the decoder yields cleanly. No stutters, no frozen frames, no rebooting your Shield TV.
+
+### 👯 5. Zero-Risk Side-by-Side Coexistence
+We use package ID `com.nuvio.tv.plus`.
+- Installing Nuvio+ will **never** overwrite or break your vanilla Nuvio install.
+- Keep them side-by-side. Use vanilla on days you feel like exercising your remote-clicking finger, and Nuvio+ for the other 364 days of the year.
+
+---
+
+## 🎮 Android TV D-Pad Masterclass
+
+Nuvio+ was built by people who actually use Android TV remotes in the dark:
+- **No Focus Traps**: Every card, overlay, pill, and button has deterministic D-pad focus routes.
+- **Instant Scrubbing**: Hold Left or Right on the remote to fluidly fast-forward at accelerating rates without stuttering the audio engine.
+- **No Unwanted PiP Surprises**: Clean, immersive fullscreen playback that stays fullscreen.
+
+---
+
+## 📥 Installation
+
+1. Grab the latest `app-full-arm64-v8a-release.apk` from the **[Releases](https://github.com/hindsight2021/NuvioTV/releases)** page.
+2. Sideload via your favorite tool (Send Files to TV, ADB, Downloader, or Local NAS).
+3. If using ADB:
+   ```bash
+   adb install -r app-full-arm64-v8a-release.apk
+   ```
+4. Sit back, put the remote out of arm's reach, and let Nuvio+ take the wheel.
+
+---
+
+## 🛠️ Building from Source
 
 ```bash
-git clone https://github.com/NuvioMedia/NuvioTV.git
+# Clone the Plus fork
+git clone -b plus-dev https://github.com/hindsight2021/NuvioTV.git
 cd NuvioTV
-./gradlew :app:assembleFullDebug
+
+# Build the release APK
+./gradlew :app:assembleFullRelease
 ```
 
-Nuvio TV is built with Kotlin, Jetpack Compose, TV Material 3, and Media3. Development requires Android Studio, a JDK, and the Android SDK.
+---
 
-## License
-
-[GNU General Public License v3.0](./LICENSE)
+<div align="center">
+  <sub>Built with ❤️, excessive caffeine, and a passionate hatred of reaching for the remote.</sub>
+</div>

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -148,7 +149,7 @@ fun PostPlayOverlay(
         } else {
             Box(
                 modifier = Modifier
-                    .width(if (mode is PostPlayMode.Autopilot) 540.dp else 420.dp)
+                    .width(if (mode is PostPlayMode.Autopilot) 500.dp else 420.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color(0xE3191919))
                     .border(
@@ -486,124 +487,128 @@ private fun AutopilotBody(
 
     val cancelFocusRequester = remember { FocusRequester() }
 
-    Row(
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        NextEpisodeThumbnail(
-            thumbnail = candidate.thumbnail ?: candidate.poster,
-            contentDescription = stringResource(R.string.autopilot_badge),
-            blurred = blurUnwatchedEpisodes
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.Center
+        // Top section: thumbnail + show info
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Badges row: autopilot pill + mode pill.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFF00B4D8).copy(alpha = 0.25f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "✈ " + stringResource(R.string.autopilot_badge).uppercase(),
-                        color = Color(0xFF90E0EF),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            if (isAi) Color(0xFFFFD166).copy(alpha = 0.22f)
-                            else Color.White.copy(alpha = 0.12f)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = if (isAi) {
-                            "✨ " + stringResource(R.string.autopilot_ai_badge).uppercase()
-                        } else {
-                            stringResource(R.string.autopilot_default_badge).uppercase()
-                        },
-                        color = if (isAi) Color(0xFFFFD166) else Color.White.copy(alpha = 0.7f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(3.dp))
-
-            Text(
-                text = displayTitle,
-                color = Color.White,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.SemiBold
+            NextEpisodeThumbnail(
+                thumbnail = candidate.thumbnail ?: candidate.poster,
+                contentDescription = stringResource(R.string.autopilot_badge),
+                blurred = blurUnwatchedEpisodes
             )
 
-            if (!candidate.episodeTitle.isNullOrBlank()) {
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Badges row: autopilot pill + mode pill.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF00B4D8).copy(alpha = 0.25f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "✈ " + stringResource(R.string.autopilot_badge).uppercase(),
+                            color = Color(0xFF90E0EF),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                if (isAi) Color(0xFFFFD166).copy(alpha = 0.22f)
+                                else Color.White.copy(alpha = 0.12f)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (isAi) {
+                                "✨ " + stringResource(R.string.autopilot_ai_badge).uppercase()
+                            } else {
+                                stringResource(R.string.autopilot_default_badge).uppercase()
+                            },
+                            color = if (isAi) Color(0xFFFFD166) else Color.White.copy(alpha = 0.7f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
                 Text(
-                    text = candidate.episodeTitle,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 12.sp,
+                    text = displayTitle,
+                    color = Color.White,
+                    fontSize = 14.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (!mode.aiRationale.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "✨ " + mode.aiRationale,
-                    color = Color(0xFFE0E1DD),
-                    fontSize = 11.sp,
-                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold
                 )
-            }
 
-            // Status line: source search or countdown.
-            val statusText = when {
-                mode.searching -> stringResource(R.string.next_episode_finding_source)
-                mode.countdownSec != null -> "Auto-playing in ${mode.countdownSec}s..."
-                else -> null
-            }
-            if (statusText != null) {
-                Spacer(modifier = Modifier.height(2.dp))
-                NextEpisodeStatusLine(text = statusText)
+                if (!candidate.episodeTitle.isNullOrBlank()) {
+                    Text(
+                        text = candidate.episodeTitle,
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (!mode.aiRationale.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "✨ " + mode.aiRationale,
+                        color = Color(0xFFE0E1DD),
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Status line: source search or countdown.
+                val statusText = when {
+                    mode.searching -> stringResource(R.string.next_episode_finding_source)
+                    mode.countdownSec != null -> "Auto-playing in ${mode.countdownSec}s..."
+                    else -> null
+                }
+                if (statusText != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    NextEpisodeStatusLine(text = statusText)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Action buttons
+        // Bottom action buttons row
         Row(
-            modifier = Modifier.padding(start = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
             PostPlayPillButton(
                 icon = Icons.Default.PlayArrow,
                 iconTint = Color.White,
-                label = stringResource(R.string.next_episode_play),
+                label = stringResource(R.string.autopilot_play_now),
                 textColor = Color.White,
                 onClick = onPlay,
                 focusRequester = primaryFocusRequester,
@@ -613,6 +618,8 @@ private fun AutopilotBody(
                     downFocusRequester?.let { down = it }
                 }
             )
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             PostPlayPillButton(
                 icon = Icons.Default.Close,

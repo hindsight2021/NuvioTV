@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Install an APK on remote Android device once media playback stops.
 
-Monitors the media session state of com.nuvio.tv.plus on 192.168.1.242:5555.
+Monitors the media session state of com.nuvio.tv.plus on target device.
 While the app reports PlaybackState.STATE_PLAYING (state=3), keeps waiting.
 As soon as playback stops, installs the APK with adb install -r.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -15,9 +16,9 @@ from pathlib import Path
 
 sys.stdout.reconfigure(line_buffering=True)
 
-DEVICE_SERIAL: str = "192.168.1.242:5555"
+DEVICE_SERIAL: str = os.environ.get("NUVIO_DEVICE_SERIAL", "192.168.1.242:5555")
 RELEASE_TAG: str = "0.9.4-plus.96"
-RELEASE_DIR: Path = Path("c:/Users/mboud/Nuvio_Skills/NuvioTV/release-apk")
+RELEASE_DIR: Path = Path(__file__).resolve().parent / "release-apk"
 APK_PATH: Path = RELEASE_DIR / "app-full-arm64-v8a-release.apk"
 TARGET_PACKAGE: str = "com.nuvio.tv.plus"
 

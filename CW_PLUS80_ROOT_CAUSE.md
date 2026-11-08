@@ -4,7 +4,7 @@ Investigation date: 29 October 2026. Baseline: `81f3278a8`, Plus 79, versionCode
 
 ## Observed incident
 
-ADB on Shield `192.168.1.242:5555` confirmed the installed version is Plus 79. Its process 10845 logged Scrubs `tt40197357:2:6` at 11:28:05.092 and South Park `tt0121955:29:4` at 11:28:05.173. Those messages prove resolution, not publication or rendered visibility. The production package is not debuggable; `run-as` correctly refused private-file access. UIAutomator could not obtain an idle state on the animated Home screen; screenshots remain usable.
+ADB on Shield `<target-device>:5555` confirmed the installed version is Plus 79. Its process 10845 logged Scrubs `tt40197357:2:6` at 11:28:05.092 and South Park `tt0121955:29:4` at 11:28:05.173. Those messages prove resolution, not publication or rendered visibility. The production package is not debuggable; `run-as` correctly refused private-file access. UIAutomator could not obtain an idle state on the animated Home screen; screenshots remain usable.
 
 The GitHub release inventory and comparison of every published Plus release are recorded in `CW_PLUS_RELEASE_AUDIT_2026-10-29.md`. Gaps in release numbers are preserved rather than inventing releases.
 
