@@ -61,6 +61,11 @@ internal fun areContinueWatchingDuplicates(
     val aIsSeries = a.isSeries() || a is ContinueWatchingItem.NextUp || a.season() != null || a.episode() != null
     val bIsSeries = b.isSeries() || b is ContinueWatchingItem.NextUp || b.season() != null || b.episode() != null
     if (aIsSeries && bIsSeries) {
+        val aImdb = extractItemImdbId(a)
+        val bImdb = extractItemImdbId(b)
+        if (aImdb != null && bImdb != null && aImdb != bImdb) {
+            return false
+        }
         val aTitle = normalizeShowTitleForGrouping(a.title())
         val bTitle = normalizeShowTitleForGrouping(b.title())
         if (aTitle.length >= 2 && aTitle == bTitle) return true

@@ -18,6 +18,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,7 +87,12 @@ fun PostPlayOverlay(
     val isAutoPlay = mode is PostPlayMode.AutoPlay
     val isAutoPlayPlayable = (mode as? PostPlayMode.AutoPlay)?.nextEpisode?.hasAired == true
 
-    var placedFocused by remember(isAutoPlay, controlsVisible) { mutableStateOf(false) }
+    LaunchedEffect(mode, controlsVisible) {
+        if (mode != null && !controlsVisible) {
+            kotlinx.coroutines.delay(150)
+            runCatching { nextEpisodeFocusRequester.requestFocus() }
+        }
+    }
 
     val transition = updateTransition(targetState = mode, label = "PostPlayMode")
 
@@ -97,75 +104,79 @@ fun PostPlayOverlay(
             fadeOut(animationSpec = tween(160)),
         modifier = modifier,
     ) {
-        val onCardClick: () -> Unit = when {
-            isAutoPlay && isAutoPlayPlayable -> onPlayNext
-            mode is PostPlayMode.StillWatching -> onContinueStillWatching
-            mode is PostPlayMode.Autopilot -> onPlayNext
-            else -> ({})
-        }
-        Card(
-            onClick = onCardClick,
-            shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
-            colors = CardDefaults.colors(
-                containerColor = Color(0xE3191919),
-                focusedContainerColor = Color(0xE3191919),
-            ),
-            border = CardDefaults.border(
-                border = Border(
-                    border = BorderStroke(NuvioTheme.spacing.hairline, Color.White.copy(alpha = 0.16f)),
-                    shape = RoundedCornerShape(14.dp),
+        if (isAutoPlay) {
+            Card(
+                onClick = { if (isAutoPlayPlayable) onPlayNext() },
+                shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
+                colors = CardDefaults.colors(
+                    containerColor = Color(0xE3191919),
+                    focusedContainerColor = Color(0xE3191919),
                 ),
-                focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                    shape = RoundedCornerShape(14.dp),
+                border = CardDefaults.border(
+                    border = Border(
+                        border = BorderStroke(NuvioTheme.spacing.hairline, Color.White.copy(alpha = 0.16f)),
+                        shape = RoundedCornerShape(14.dp),
+                    ),
+                    focusedBorder = Border(
+                        border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                        shape = RoundedCornerShape(14.dp),
+                    ),
                 ),
-            ),
-            scale = CardDefaults.scale(focusedScale = 1f),
-            modifier = Modifier
-                .width(if (mode is PostPlayMode.Autopilot) 540.dp else 420.dp)
-                .focusRequester(nextEpisodeFocusRequester)
-                .onPlaced {
-                    if (isAutoPlay && !controlsVisible && !placedFocused) {
-                        placedFocused = true
-                        runCatching { nextEpisodeFocusRequester.requestFocus() }
-                    }
-                }
-                .then(
-                    if (progressBarFocusRequester != null || leftFocusRequester != null) {
-                        Modifier.focusProperties {
-                            progressBarFocusRequester?.let { down = it }
-                            leftFocusRequester?.let { left = it }
+                scale = CardDefaults.scale(focusedScale = 1f),
+                modifier = Modifier
+                    .width(420.dp)
+                    .focusRequester(nextEpisodeFocusRequester)
+                    .then(
+                        if (progressBarFocusRequester != null || leftFocusRequester != null) {
+                            Modifier.focusProperties {
+                                progressBarFocusRequester?.let { down = it }
+                                leftFocusRequester?.let { left = it }
+                            }
+                        } else {
+                            Modifier
                         }
-                    } else {
-                        Modifier
-                    }
-                ),
-        ) {
-            transition.AnimatedContent(
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)) togetherWith
-                        fadeOut(animationSpec = tween(120))
-                },
-                contentKey = { it?.let { current -> current::class } },
-            ) { current ->
-                when (current) {
-                    is PostPlayMode.AutoPlay -> AutoPlayBody(
-                        mode = current,
+                    ),
+            ) {
+                val autoPlayMode = mode as? PostPlayMode.AutoPlay
+                if (autoPlayMode != null) {
+                    AutoPlayBody(
+                        mode = autoPlayMode,
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     )
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .width(if (mode is PostPlayMode.Autopilot) 540.dp else 420.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xE3191919))
+                    .border(
+                        BorderStroke(NuvioTheme.spacing.hairline, Color.White.copy(alpha = 0.16f)),
+                        RoundedCornerShape(14.dp)
+                    )
+                    .focusGroup()
+            ) {
+                when (mode) {
                     is PostPlayMode.StillWatching -> StillWatchingBody(
-                        mode = current,
+                        mode = mode,
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                        primaryFocusRequester = nextEpisodeFocusRequester,
+                        leftFocusRequester = leftFocusRequester,
+                        downFocusRequester = progressBarFocusRequester,
                         onContinue = onContinueStillWatching,
                         onDismiss = onDismissStillWatching,
                     )
                     is PostPlayMode.Autopilot -> AutopilotBody(
-                        mode = current,
+                        mode = mode,
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                        primaryFocusRequester = nextEpisodeFocusRequester,
+                        leftFocusRequester = leftFocusRequester,
+                        downFocusRequester = progressBarFocusRequester,
                         onDismiss = onDismissAutopilot,
                         onPlay = onPlayNext,
                     )
-                    null -> Unit
+                    else -> Unit
                 }
             }
         }
@@ -255,12 +266,13 @@ private fun AutoPlayBody(
 private fun StillWatchingBody(
     mode: PostPlayMode.StillWatching,
     blurUnwatchedEpisodes: Boolean,
+    primaryFocusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    downFocusRequester: FocusRequester?,
     onContinue: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val continueFocusRequester = remember { FocusRequester() }
     val exitFocusRequester = remember { FocusRequester() }
-    var continueFocused by remember { mutableStateOf(false) }
 
     val nextEpisode = mode.nextEpisode
     Row(
@@ -312,15 +324,12 @@ private fun StillWatchingBody(
                 label = stringResource(R.string.still_watching_continue),
                 textColor = Color.White,
                 onClick = onContinue,
-                focusRequester = continueFocusRequester,
-                modifier = Modifier
-                    .onPlaced {
-                        if (!continueFocused) {
-                            continueFocused = true
-                            runCatching { continueFocusRequester.requestFocus() }
-                        }
-                    }
-                    .focusProperties { right = exitFocusRequester },
+                focusRequester = primaryFocusRequester,
+                modifier = Modifier.focusProperties {
+                    right = exitFocusRequester
+                    leftFocusRequester?.let { left = it }
+                    downFocusRequester?.let { down = it }
+                },
             )
             PostPlayPillButton(
                 icon = Icons.Default.Close,
@@ -329,7 +338,10 @@ private fun StillWatchingBody(
                 textColor = Color.White.copy(alpha = 0.72f),
                 onClick = onDismiss,
                 focusRequester = exitFocusRequester,
-                modifier = Modifier.focusProperties { left = continueFocusRequester },
+                modifier = Modifier.focusProperties {
+                    left = primaryFocusRequester
+                    downFocusRequester?.let { down = it }
+                },
             )
         }
     }
@@ -455,6 +467,9 @@ private fun nextEpisodeDisplayLabel(nextEpisode: NextEpisodeInfo): String {
 private fun AutopilotBody(
     mode: PostPlayMode.Autopilot,
     blurUnwatchedEpisodes: Boolean,
+    primaryFocusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    downFocusRequester: FocusRequester?,
     onDismiss: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -469,10 +484,7 @@ private fun AutopilotBody(
     }
     val displayTitle = if (code != null) "${candidate.title} • $code" else candidate.title
 
-    // Focus management for the action buttons.
-    val playFocusRequester = remember { FocusRequester() }
     val cancelFocusRequester = remember { FocusRequester() }
-    var playFocused by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -594,15 +606,12 @@ private fun AutopilotBody(
                 label = stringResource(R.string.next_episode_play),
                 textColor = Color.White,
                 onClick = onPlay,
-                focusRequester = playFocusRequester,
-                modifier = Modifier
-                    .onPlaced {
-                        if (!playFocused) {
-                            playFocused = true
-                            runCatching { playFocusRequester.requestFocus() }
-                        }
-                    }
-                    .focusProperties { right = cancelFocusRequester }
+                focusRequester = primaryFocusRequester,
+                modifier = Modifier.focusProperties {
+                    right = cancelFocusRequester
+                    leftFocusRequester?.let { left = it }
+                    downFocusRequester?.let { down = it }
+                }
             )
 
             PostPlayPillButton(
@@ -612,7 +621,10 @@ private fun AutopilotBody(
                 textColor = Color.White.copy(alpha = 0.72f),
                 onClick = onDismiss,
                 focusRequester = cancelFocusRequester,
-                modifier = Modifier.focusProperties { left = playFocusRequester }
+                modifier = Modifier.focusProperties {
+                    left = primaryFocusRequester
+                    downFocusRequester?.let { down = it }
+                }
             )
         }
     }

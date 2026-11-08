@@ -1035,6 +1035,42 @@ class ContinueWatchingAiringRulesTest {
     }
 
     @Test
+    fun `normalizeShowTitleForGrouping distinguishes international franchise editions`() {
+        assertEquals("traitors us", normalizeShowTitleForGrouping("The Traitors (US)"))
+        assertEquals("traitors uk", normalizeShowTitleForGrouping("The Traitors (UK)"))
+        assertEquals("traitors uk", normalizeShowTitleForGrouping("The Traitors UK"))
+        assertEquals("traitors", normalizeShowTitleForGrouping("The Traitors"))
+        assertEquals("office us", normalizeShowTitleForGrouping("The Office (US)"))
+        assertEquals("ghosts uk", normalizeShowTitleForGrouping("Ghosts (UK)"))
+        assertEquals("traitors canada", normalizeShowTitleForGrouping("The Traitors: Canada (CA)"))
+    }
+
+    @Test
+    fun `buildShowIdSiblingsFromSeeds never links distinct IMDb IDs`() {
+        val imdbA = "tt15557874"
+        val imdbB = "tt23743442"
+        val seeds = listOf(
+            WatchProgressSeedRef(contentId = imdbA, name = "The Traitors", contentType = "series"),
+            WatchProgressSeedRef(contentId = imdbB, name = "The Traitors", contentType = "series")
+        )
+        val siblings = buildShowIdSiblingsFromSeeds(seeds)
+        assertFalse(siblings[imdbA]?.contains(imdbB) == true)
+        assertFalse(siblings[imdbB]?.contains(imdbA) == true)
+    }
+
+    @Test
+    fun `resolveCanonicalClusterKey never remaps an authoritative IMDb ID to another IMDb ID`() {
+        val authoritative = "tt15557874"
+        val other = "tt23743442"
+        val cluster = mapOf(
+            authoritative to setOf(other),
+            other to setOf(authoritative)
+        )
+        val resolved = resolveCanonicalClusterKey(authoritative, cluster)
+        assertEquals(authoritative, resolved)
+    }
+
+    @Test
     fun `deduplicateContinueWatchingItems removes duplicate Traitors Canada and prefers rich episode title`() {
         val item1 = ContinueWatchingItem.NextUp(
             info = NextUpInfo(

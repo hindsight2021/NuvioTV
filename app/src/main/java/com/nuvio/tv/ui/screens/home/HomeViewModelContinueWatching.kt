@@ -433,7 +433,14 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         cutoffMs == null ||
                             progress.lastWatched >= cutoffMs ||
                             isKnownReleaseAlert(progress, cachedNextUp) ||
-                            fullyWatchedSeriesIds.isKnownOngoing(progress.contentId)
+                            fullyWatchedSeriesIds.isKnownOngoing(progress.contentId) ||
+                            computePersistedNextAirBoost(
+                                contentId = progress.contentId,
+                                videoId = progress.videoId,
+                                lastWatched = progress.lastWatched,
+                                stateHolder = fullyWatchedSeriesIds,
+                                siblings = cwLastShowIdSiblings[progress.contentId].orEmpty()
+                            ) != null
                     }
                     .sortedByDescending { computeSeedEffectiveSortTimestamp(it, cachedNextUp) }
                     .take(CW_MAX_RECENT_PROGRESS_ITEMS)
@@ -1122,6 +1129,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     val seedKey = buildNextUpSeedCacheKey(seed, showUnairedNextUp)
                                     synchronized(cwNextUpResolutionCache) {
                                         cwNextUpResolutionCache[seedKey] = null
+                                        cwNextUpNegativeCacheTimestamps[seedKey] = SystemClock.elapsedRealtime()
                                     }
                                     // No next-up — mark as validated with smart deadline
                                     // ONLY if meta was actually resolved (confirming no next episode).
@@ -1918,6 +1926,14 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                 if (cachedValue != null) return@filter true // positive hit — has next-up
                 // Negative hit (no next-up) — skip only if negative cache TTL is fresh (<5 min)
                 // AND the series is actively validated as fully watched.
+                val hasAirBoost = computePersistedNextAirBoost(
+                    contentId = progress.contentId,
+                    videoId = progress.videoId,
+                    lastWatched = progress.lastWatched,
+                    stateHolder = fullyWatchedSeriesIds,
+                    siblings = cwLastShowIdSiblings[progress.contentId].orEmpty()
+                ) != null
+                if (hasAirBoost) return@filter true
                 val negativeCachedAt = synchronized(cwNextUpNegativeCacheTimestamps) {
                     cwNextUpNegativeCacheTimestamps[cacheKey]
                 }
@@ -2667,9 +2683,21 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                 cwNextUpResolutionCache.remove(cacheKey)
                 cwNextUpNegativeCacheTimestamps.remove(cacheKey)
             }
-            // Negative cache entry — check TTL
+            // Negative cache entry — check TTL & air schedule
             val negativeCachedAt = cwNextUpNegativeCacheTimestamps[cacheKey]
-            if (negativeCachedAt != null &&
+            val shouldInvalidateNegative = run {
+                val nextAir = fullyWatchedSeriesIds.getNextAirTimestamp(progress.contentId)
+                val isStale = fullyWatchedSeriesIds.filterStaleIds(setOf(progress.contentId)).isNotEmpty()
+                val hasPersistedBoost = computePersistedNextAirBoost(
+                    contentId = progress.contentId,
+                    videoId = progress.videoId,
+                    lastWatched = progress.lastWatched,
+                    stateHolder = fullyWatchedSeriesIds,
+                    siblings = cwLastShowIdSiblings[progress.contentId].orEmpty()
+                ) != null
+                (nextAir != null && nextAir <= System.currentTimeMillis()) || isStale || hasPersistedBoost
+            }
+            if (!shouldInvalidateNegative && negativeCachedAt != null &&
                 SystemClock.elapsedRealtime() - negativeCachedAt < CW_META_NEGATIVE_CACHE_TTL_MS
             ) {
                 debug?.recordNextUpCacheHit(
@@ -2679,7 +2707,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                 )
                 return null
             }
-            // TTL expired — retry
+            // TTL expired or new air date arrived — retry
             cwNextUpResolutionCache.remove(cacheKey)
             cwNextUpNegativeCacheTimestamps.remove(cacheKey)
         }
@@ -3079,9 +3107,10 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
     }
 
     val siblings = cwLastShowIdSiblings[progress.contentId].orEmpty()
-    val imdbSibling = siblings.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
-        ?: extractImdbIdFromVideoId(progress.videoId)
-        ?: if (progress.contentId.startsWith("tmdb:")) {
+    val imdbSibling = if (progress.contentId.startsWith("tt")) null
+        else siblings.firstOrNull { it.startsWith("tt") && it != "__ambiguous__" }
+            ?: extractImdbIdFromVideoId(progress.videoId)
+            ?: if (progress.contentId.startsWith("tmdb:")) {
             val numericId = progress.contentId.substringAfter(':').toIntOrNull()
             if (numericId != null) {
                 val tmdbCacheKey = "imdb_for_${progress.contentId}"
@@ -3099,8 +3128,8 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         } else null
 
     val idCandidates = buildList {
-        imdbSibling?.let { add(it) }
         add(progress.contentId)
+        imdbSibling?.let { add(it) }
         if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
         synchronized(cwTmdbIdCache) {
             cwTmdbIdCache["${progress.contentType}:${progress.contentId}"]
@@ -3109,7 +3138,7 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
             add(tmdbId)
         }
         for (sib in siblings) {
-            if (sib != "__ambiguous__" && !sib.startsWith("trakt:")) {
+            if (sib != "__ambiguous__" && !sib.startsWith("trakt:") && !(progress.contentId.startsWith("tt") && sib.startsWith("tt"))) {
                 add(sib)
             }
         }
@@ -3560,6 +3589,9 @@ private fun HomeViewModel.clearStaleFullyWatchedForAiredNextUp(
     val current = fullyWatchedSeriesIds.fullyWatchedSeriesIds.value
     if (toRemove.any { it in current }) {
         fullyWatchedSeriesIds.removeFullyWatched(toRemove)
+    }
+    viewModelScope.launch {
+        traktSettingsDataStore.removeDismissedNextUpKeysForContents(toRemove)
     }
     synchronized(cwBadgeEpisodeCache) {
         listOf("series:$contentId", "tv:$contentId").forEach { key ->

@@ -227,6 +227,10 @@ fun resolveCanonicalClusterKey(
     contentId: String,
     siblingsMap: Map<String, Set<String>>
 ): String {
+    // An authoritative IMDb ID is already canonical and must never be remapped to another show.
+    if (contentId.startsWith("tt")) {
+        return contentId
+    }
     val siblings = siblingsMap[contentId]
     if (siblings.isNullOrEmpty() || "__ambiguous__" in siblings) {
         return contentId
@@ -280,21 +284,36 @@ private val SEASON_EPISODE_TAG_REGEX = Regex("""\bs\s*\d+\s*e\s*\d+\b""", RegexO
 private val SEASON_TAG_REGEX = Regex("""\bs\s*\d+\b""", RegexOption.IGNORE_CASE)
 private val SEASON_WORD_REGEX = Regex("""\bseason\s*\d+\b""", RegexOption.IGNORE_CASE)
 private val EPISODE_WORD_REGEX = Regex("""\bepisode\s*\d+\b""", RegexOption.IGNORE_CASE)
-private val PARENTHETICAL_REGEX = Regex("""\([^)]*\)""")
+private val PARENTHETICAL_REGEX = Regex("""\(([^)]*)\)""")
 private val LEADING_ARTICLE_REGEX = Regex("""^(the|a|an)\s+""", RegexOption.IGNORE_CASE)
 private val NON_ALPHANUMERIC_REGEX = Regex("""[^a-z0-9]+""")
 private val WHITESPACE_REGEX = Regex("""\s+""")
 private val DIACRITICS_REGEX = Regex("""\p{Mn}+""")
 
+private val COUNTRY_EDITION_TAGS = setOf(
+    "us", "uk", "au", "nz", "ca", "canada", "gb", "usa", "australia", "new zealand"
+)
+
 /**
  * Normalizes a show title for grouping and duplicate detection.
  * E.g. "The Traitors Canada" -> "traitors canada", "Traitors Canada" -> "traitors canada",
- * "The Traitors Canada 2023" -> "traitors canada", "The Bear S5E8" -> "bear", "Dragons' Den" -> "dragons den".
+ * "The Traitors Canada 2023" -> "traitors canada", "The Bear S5E8" -> "bear", "Dragons' Den" -> "dragons den",
+ * "The Traitors (US)" -> "traitors us", "The Traitors (UK)" -> "traitors uk".
  */
 fun normalizeShowTitleForGrouping(name: String?): String {
     if (name.isNullOrBlank()) return ""
     var result = name.trim().lowercase(Locale.ROOT)
     result = Normalizer.normalize(result, Normalizer.Form.NFD).replace(DIACRITICS_REGEX, "")
+
+    // Extract country/edition tags inside parentheses before stripping parentheticals
+    val editionTags = mutableListOf<String>()
+    PARENTHETICAL_REGEX.findAll(result).forEach { match ->
+        val inner = match.groupValues[1].replace(".", "").trim()
+        if (inner in COUNTRY_EDITION_TAGS) {
+            editionTags.add(inner)
+        }
+    }
+
     result = PARENTHETICAL_REGEX.replace(result, " ")
     result = SEASON_EPISODE_TAG_REGEX.replace(result, " ")
     result = SEASON_TAG_REGEX.replace(result, " ")
@@ -303,7 +322,18 @@ fun normalizeShowTitleForGrouping(name: String?): String {
     result = TITLE_YEAR_REGEX.replace(result, " ")
     result = LEADING_ARTICLE_REGEX.replace(result.trim(), "")
     result = NON_ALPHANUMERIC_REGEX.replace(result, " ")
-    return WHITESPACE_REGEX.replace(result, " ").trim()
+    var normalizedBase = WHITESPACE_REGEX.replace(result, " ").trim()
+
+    // Keep edition tags if not already present in the base title (e.g. "The Traitors: Canada (CA)" -> "ca" is redundant with "canada")
+    val keptTags = editionTags.filter { tag ->
+        val tagWord = if (tag == "ca") "canada" else tag
+        !normalizedBase.split(" ").contains(tag) && !normalizedBase.split(" ").contains(tagWord)
+    }
+
+    if (keptTags.isNotEmpty()) {
+        normalizedBase = (listOf(normalizedBase) + keptTags).joinToString(" ")
+    }
+    return WHITESPACE_REGEX.replace(normalizedBase, " ").trim()
 }
 
 /**
@@ -343,6 +373,12 @@ fun buildShowIdSiblingsFromSeeds(
 
     fun link(a: String, b: String) {
         if (a.isBlank() || b.isBlank() || a == b) return
+        // Two distinct IMDb IDs can NEVER represent the same show.
+        if (a.startsWith("tt") && b.startsWith("tt")) return
+        // Two distinct numeric TMDB IDs can NEVER represent the same show.
+        val aTmdb = a.removePrefix("tmdb:")
+        val bTmdb = b.removePrefix("tmdb:")
+        if (a.startsWith("tmdb:") && b.startsWith("tmdb:") && aTmdb != bTmdb) return
         siblings.getOrPut(a) { mutableSetOf() }.add(b)
         siblings.getOrPut(b) { mutableSetOf() }.add(a)
     }

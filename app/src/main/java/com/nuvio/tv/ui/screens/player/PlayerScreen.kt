@@ -528,7 +528,7 @@ fun PlayerScreen(
         } else if (!uiState.showControls) {
             // When controls are hidden, let skip intro button take focus if visible
             val skipVisible = uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed
-            val nextEpisodeVisible = uiState.postPlayMode is PostPlayMode.AutoPlay
+            val nextEpisodeVisible = uiState.postPlayMode != null
             if (!skipVisible && !nextEpisodeVisible) {
                 try {
                     containerFocusRequester.requestFocus()
@@ -758,7 +758,7 @@ fun PlayerScreen(
                         uiState.showMoreDialog ||
                         uiState.showLiveTvMiniGuide ||
                         shouldConfirmNextEpisodeOnEnd ||
-                        uiState.postPlayMode is PostPlayMode.StillWatching ||
+                        uiState.postPlayMode != null ||
                         postPlayRecommendationState.isVisible ||
                         uiState.error != null
                 if (panelOrDialogOpen) return@onKeyEvent false
@@ -799,8 +799,16 @@ fun PlayerScreen(
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                             if (!uiState.showControls) {
-                                viewModel.onEvent(PlayerEvent.OnPlayPause)
-                                true
+                                if (uiState.postPlayMode is PostPlayMode.Autopilot) {
+                                    viewModel.onEvent(PlayerEvent.OnAutopilotPlayNow)
+                                    true
+                                } else if (uiState.postPlayMode != null) {
+                                    viewModel.onEvent(PlayerEvent.OnPlayNextEpisode)
+                                    true
+                                } else {
+                                    viewModel.onEvent(PlayerEvent.OnPlayPause)
+                                    true
+                                }
                             } else {
                                 // Let the focused button handle it
                                 false
@@ -831,8 +839,9 @@ fun PlayerScreen(
                                 return@onKeyEvent true
                             }
                             val overlayButtonsCoexist = skipButtonActuallyVisible &&
-                                uiState.postPlayMode is PostPlayMode.AutoPlay
-                            if (!uiState.showControls && !overlayButtonsCoexist) {
+                                (uiState.postPlayMode is PostPlayMode.AutoPlay || uiState.postPlayMode is PostPlayMode.Autopilot)
+                            val hasPostPlayOverlay = uiState.postPlayMode != null
+                            if (!uiState.showControls && !overlayButtonsCoexist && !hasPostPlayOverlay) {
                                 val isLeft =
                                     keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
                                 val deltaMs = PlayerScrubRates.deltaMsForKeyRepeat(
@@ -860,7 +869,7 @@ fun PlayerScreen(
                                                 skipIntroFocusRequester.requestFocus()
                                             } catch (_: Exception) {
                                             }
-                                        } else if (uiState.postPlayMode is PostPlayMode.AutoPlay) {
+                                        } else if (uiState.postPlayMode != null) {
                                             try {
                                                 nextEpisodeFocusRequester.requestFocus()
                                             } catch (_: Exception) {
@@ -1216,7 +1225,7 @@ fun PlayerScreen(
             targetsPostCredits = uiState.activeSkipTargetsPostCredits,
             controlsVisible = uiState.showControls,
             // Autoplay next-episode card owns focus; subtitle menu must keep D-pad focus (#2874).
-            suppressFocus = (uiState.postPlayMode is PostPlayMode.AutoPlay &&
+            suppressFocus = (uiState.postPlayMode != null &&
                 postPlayRecommendationState.recommendation == null) || !skipIntroCanFocus,
             canFocus = skipIntroCanFocus,
             onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
@@ -1234,7 +1243,7 @@ fun PlayerScreen(
             } else {
                 null
             },
-            rightFocusRequester = if (uiState.postPlayMode is PostPlayMode.AutoPlay || uiState.postPlayMode is PostPlayMode.Autopilot) nextEpisodeFocusRequester else null,
+            rightFocusRequester = if (uiState.postPlayMode != null) nextEpisodeFocusRequester else null,
             onHideControls = {
                 if (uiState.showControls) viewModel.hideControls()
                 else viewModel.onEvent(PlayerEvent.OnToggleControls)
@@ -1411,7 +1420,7 @@ fun PlayerScreen(
                 reportCodeVisible = reportCodeVisible,
                 progressBarUpFocusRequester = when {
                     skipButtonActuallyVisible -> skipIntroFocusRequester
-                    uiState.postPlayMode is PostPlayMode.AutoPlay || uiState.postPlayMode is PostPlayMode.Autopilot -> nextEpisodeFocusRequester
+                    uiState.postPlayMode != null -> nextEpisodeFocusRequester
                     else -> null
                 },
                 onPlayPause = { viewModel.onEvent(PlayerEvent.OnPlayPause) },
