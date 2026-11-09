@@ -34,6 +34,7 @@ import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
@@ -160,6 +161,7 @@ internal fun PlayerRuntimeController.initializePlayer(
         return
     }
     mpvMediaLoadPrepared = false
+    val afrPreflightToken = afrPreflightGate.token()
 
     scope.launch {
         try {
@@ -279,7 +281,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                     headers = headers,
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode,
                     resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
-                    mimeType = currentStreamMimeType
+                    mimeType = currentStreamMimeType,
+                    preflightToken = afrPreflightToken
                 )
             }
             if (effectiveInternalPlayerEngine == InternalPlayerEngine.MVP_PLAYER) {
@@ -292,6 +295,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                         Log.w(PlayerRuntimeController.TAG, "AFR preflight await timed out in MPV branch; cancelling afrJob")
                         afrJob.cancel()
                     }
+                    // A switch or release during the preflight replaced this start-up.
+                    if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
                     if (mpvDelayStartAfterAfrSwitch) {
                         Log.d(PlayerRuntimeController.TAG, "AFR display mode switched; delaying MPV start by ${MPV_AFR_SETTLE_DELAY_MS}ms")
                         delay(MPV_AFR_SETTLE_DELAY_MS)
@@ -300,6 +305,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         phase = "mpv_buffering",
                         message = context.getString(R.string.player_loading_buffering)
                     )
+                    if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
                     initializeMpvPlayer(url = url, headers = headers, allowEngineFailover = allowEngineFailover)
                     fetchAddonSubtitles()
                 } finally {
@@ -638,6 +644,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                 afrJob.cancel()
             }
 
+            if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
+
             // ── Libass Setup (From 0.5.7-beta/Left) ──
             requestedUseLibassByUser = playerSettings.useLibass
             val useLibass = when {
@@ -853,8 +861,8 @@ internal fun PlayerRuntimeController.initializePlayer(
             isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
             val convertToDv81Active = !mapDv7ToHevcEnabled &&
                     dv7AutoResult?.decision == DolbyVisionBaseLayerPolicy.Decision.CONVERT_TO_DV81
-            val codecSelector = createDolbyVisionFallbackCodecSelector(
-                convertToDv81Active = convertToDv81Active
+            val codecSelector = hardwareFirstVideoCodecSelector(
+                createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active)
             )
             // Bluetooth media sink (A2DP / LE Audio): Media3 only advertises PCM. Do not attempt
             // optical/HDMI passthrough — decode to PCM and let the BT stack encode SBC/AAC/aptX/LDAC.
@@ -1714,7 +1722,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                         )
                         Log.i(
                             PlayerRuntimeController.TAG,
-                            "VIDEO_DECODER: name=$decoderName initMs=$initializationDurationMs host=${currentStreamUrl.safeHost()}"
+                            "VIDEO_DECODER: name=$decoderName " +
+                                "software=${isSoftwareVideoDecoderName(decoderName, softwareOnlyDecoderNames)} " +
+                                "initMs=$initializationDurationMs host=${currentStreamUrl.safeHost()}"
                         )
                     }
 
@@ -2107,6 +2117,11 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
 
 // ── CUSTOM RENDERERS FOR AUDIO/SUBTITLES ──
 
+// Media3 gives passthrough 250ms and only multiplies it for AC3 and DTS-HD, leaving E-AC3 JOC on
+// the smallest buffer of the three. A full second halved the underruns but drifted lip sync, so
+// this sits between the AC3 and DTS-HD headroom rather than at either end.
+private const val PASSTHROUGH_BUFFER_DURATION_US = 768_000
+
 private class SubtitleOffsetRenderersFactory(
     context: Context,
     private val subtitleDelayUsProvider: () -> Long,
@@ -2183,6 +2198,14 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor))
+            // Media3 gives passthrough 250ms and only multiplies it for AC3 and DTS-HD, so an
+            // E-AC3 JOC track runs on the smallest buffer of the three and underruns when the
+            // sink is starved for a moment.
+            .setAudioTrackBufferSizeProvider(
+                DefaultAudioTrackBufferSizeProvider.Builder()
+                    .setPassthroughBufferDurationUs(PASSTHROUGH_BUFFER_DURATION_US)
+                    .build()
+            )
         val baseAudioSink = builder.build()
         val defaultStartThresholdFrames = 262144 // ~5.5 s at 48 kHz
         val reducedStartThresholdFrames = runCatching {
@@ -2380,7 +2403,7 @@ private class CueNormalizingTextOutput(
         var processed = SubtitleMojibakeSanitizer.sanitizeCue(cue)
         processed = PlayerSubtitleRtlFix.fixCueText(processed, isBuiltInSubtitleProvider())
         if (shouldNormalizeCuePositionProvider()) {
-            processed = normalizeCuePosition(processed)
+            processed = PlayerSubtitleUtils.normalizeBottomCuePosition(processed)
         }
         if (processed.bitmap != null) {
             val bounds = videoBoundsFractionProvider()
@@ -2410,16 +2433,6 @@ private class CueNormalizingTextOutput(
             builder.setBitmapHeight(cue.bitmapHeight * bounds.height())
         }
         return builder.build()
-    }
-
-    private fun normalizeCuePosition(cue: Cue): Cue {
-        if (cue.bitmap != null || cue.verticalType != Cue.TYPE_UNSET || cue.line == Cue.DIMEN_UNSET) {
-            return cue
-        }
-        return cue.buildUpon()
-            .setLine(Cue.DIMEN_UNSET, Cue.TYPE_UNSET)
-            .setLineAnchor(Cue.TYPE_UNSET)
-            .build()
     }
 }
 

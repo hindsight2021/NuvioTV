@@ -44,6 +44,7 @@ internal fun PlayerRuntimeController.releasePlayer(
     watchProgressSaveJob?.cancel()
     seekProgressSyncJob?.cancel()
     frameRateProbeJob?.cancel()
+    cancelAfrPreflight()
     hideStreamSourceIndicatorJob?.cancel()
     hideStreamSourceIndicatorJob = null
     _uiState.update { it.copy(showStreamSourceIndicator = false) }
@@ -69,6 +70,8 @@ internal fun PlayerRuntimeController.releasePlayer(
     errorRetryJob = null
     stableProgressResetJob?.cancel()
     stableProgressResetJob = null
+    mpvStableProgressResetJob?.cancel()
+    mpvStableProgressResetJob = null
     releaseMpvPlayer()
     _exoPlayer?.let { player ->
         runCatching { player.playWhenReady = false }

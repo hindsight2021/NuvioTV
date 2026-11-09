@@ -181,6 +181,7 @@ fun PlayerScreen(
     val postPlayRecommendationPlayerWindowFocusRequester = remember { FocusRequester() }
     var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     var restoreStreamInfoFocus by remember { mutableStateOf(false) }
+    var focusPlayAfterMoreBack by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
     var subtitleDelayFocusTarget by remember { mutableStateOf(SubtitleDelayFocusTarget.SLIDER) }
     val subtitleDelayResetFocusRequester = remember { FocusRequester() }
@@ -313,6 +314,7 @@ fun PlayerScreen(
         } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showMoreDialog) {
+            focusPlayAfterMoreBack = true
             viewModel.onEvent(PlayerEvent.OnDismissMoreDialog)
         } else if (uiState.showSubtitleTimingDialog) {
             viewModel.onEvent(PlayerEvent.OnDismissSubtitleTimingDialog)
@@ -560,6 +562,18 @@ fun PlayerScreen(
             runCatching { streamInfoFocusRequester.requestFocus() }
             restoreStreamInfoFocus = false
         }
+    }
+    val moreDialogOpen by rememberUpdatedState(uiState.showMoreDialog)
+    val controlsVisibleForMoreBack by rememberUpdatedState(uiState.showControls)
+    val playerHasError by rememberUpdatedState(uiState.error != null)
+    LaunchedEffect(focusPlayAfterMoreBack) {
+        if (!focusPlayAfterMoreBack) return@LaunchedEffect
+        runCatching { playPauseFocusRequester.requestFocus() }
+        delay(200)
+        if (!moreDialogOpen && controlsVisibleForMoreBack && !playerHasError) {
+            playPauseFocusRequester.requestFocusAfterFrames(frames = 0)
+        }
+        focusPlayAfterMoreBack = false
     }
 
     val transparentLetterbox = LetterboxRenderPolicy.defaultTransparentLetterbox() &&
@@ -1049,6 +1063,7 @@ fun PlayerScreen(
                 playFocusRequester = postPlayRecommendationFocusRequester,
                 playerWindowFocusRequester = postPlayRecommendationPlayerWindowFocusRequester,
                 onBack = handleBackPress,
+                onForceExit = { exitPlayer() },
                 onStopTrailer = viewModel::onPostPlayTrailerEnded,
                 onPlay = { recommendation ->
                     if (!exitDispatched) {
@@ -1228,7 +1243,12 @@ fun PlayerScreen(
             suppressFocus = (uiState.postPlayMode != null &&
                 postPlayRecommendationState.recommendation == null) || !skipIntroCanFocus,
             canFocus = skipIntroCanFocus,
-            onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
+            onSkip = {
+                if (uiState.showControls) {
+                    runCatching { playPauseFocusRequester.requestFocus() }
+                }
+                viewModel.onEvent(PlayerEvent.OnSkipIntro)
+            },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissSkipIntro) },
             onVisibilityChanged = { skipButtonActuallyVisible = it },
             onFocused = { viewModel.scheduleHideControls() },
@@ -2857,7 +2877,7 @@ private fun ProgressBar(
     var isFocused by remember { mutableStateOf(false) }
     val remoteInputRouter = remember { PlayerRemoteInputRouter() }
 
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(if (isFocused) NuvioTheme.spacing.md else NuvioTheme.spacing.sm)
@@ -2925,29 +2945,13 @@ private fun ProgressBar(
                 if (isFocused) Color.White.copy(alpha = 0.45f)
                 else Color.White.copy(alpha = 0.3f)
             )
-    ) {
-        val trackWidth = maxWidth
-
-        // Buffered-ahead overlay: the theme accent, faded so it reads under the played
-        // fill and on light themes.
-        if (animatedBufferedProgress > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(trackWidth * animatedBufferedProgress)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(NuvioTheme.colors.Secondary.copy(alpha = 0.35f))
+            .playerProgressFill(
+                progress = { animatedProgress },
+                bufferedProgress = { animatedBufferedProgress },
+                bufferedColor = NuvioTheme.colors.Secondary,
+                playedBrush = accentBrush
             )
-        }
-        // Played fill.
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(trackWidth * animatedProgress)
-                .clip(RoundedCornerShape(3.dp))
-                .background(accentBrush)
-        )
-    }
+    )
 }
 
 @Composable

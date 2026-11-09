@@ -250,6 +250,7 @@ internal fun AddonFilterChips(
     externalFocusRequesters: List<FocusRequester>? = null,
     externalOrderedNames: List<String>? = null,
     onUpKey: (() -> Unit)? = null,
+    onFocusIndexChanged: (Int) -> Unit = {},
     debugTag: String = "AddonFilterChips"
 ) {
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
@@ -406,7 +407,10 @@ internal fun AddonFilterChips(
                     isLoading = isStillFetching,
                     onFocusChanged = { isFocused ->
                         refreshHasFocus = isFocused
-                        if (isFocused) focusedChipIndex = 0
+                        if (isFocused) {
+                            focusedChipIndex = 0
+                            onFocusIndexChanged(0)
+                        }
                     },
                     modifier = Modifier
                         .focusRequester(focusRequesters[0])
@@ -430,6 +434,7 @@ internal fun AddonFilterChips(
                         if (it.isFocused) {
                             focusedChipIndex = allChipIndex
                             refreshHasFocus = false
+                            onFocusIndexChanged(allChipIndex)
                         }
                     }
             )
@@ -452,6 +457,7 @@ internal fun AddonFilterChips(
                         if (it.isFocused) {
                             focusedChipIndex = requesterIdx
                             refreshHasFocus = false
+                            onFocusIndexChanged(requesterIdx)
                         }
                     }
             )

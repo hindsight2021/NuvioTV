@@ -71,8 +71,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -110,7 +108,7 @@ fun PluginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = NuvioTheme.spacing.xxxl, vertical = NuvioTheme.spacing.xl)
+            .background(NuvioTheme.colors.Background)
     ) {
         PluginScreenContent(
             uiState = uiState,
@@ -146,12 +144,21 @@ fun PluginScreenContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            contentPadding = PaddingValues(bottom = NuvioTheme.spacing.xxl),
-            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
-            modifier = Modifier.fillMaxSize()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioTheme.colors.Background)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = NuvioTheme.spacing.xxxl, vertical = NuvioTheme.spacing.xl)
         ) {
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = NuvioTheme.spacing.xxl),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+                modifier = Modifier.fillMaxSize()
+            ) {
             if (viewModel.isReadOnly) {
                 item {
                     androidx.compose.material3.Card(
@@ -268,6 +275,7 @@ fun PluginScreenContent(
                     )
                 }
             }
+            }
         }
 
     // Success/Error Messages
@@ -276,9 +284,8 @@ fun PluginScreenContent(
         errorMessage = uiState.errorMessage
     )
 
-    // QR Code overlay — Popup renders above the entire screen
-    if (uiState.isQrModeActive) {
-        Popup(properties = PopupProperties(focusable = true)) {
+    if (uiState.isQrModeActive || uiState.pendingRepoChange != null || uiState.pendingScraperEnable != null) {
+        if (uiState.isQrModeActive) {
             QrCodeOverlay(
                 qrBitmap = uiState.qrCodeBitmap,
                 serverUrl = uiState.serverUrl,
@@ -286,30 +293,21 @@ fun PluginScreenContent(
                 hasPendingChange = uiState.pendingRepoChange != null
             )
         }
-    }
 
-    // Confirmation dialog overlay
-    if (uiState.pendingRepoChange != null) {
-        Popup(properties = PopupProperties(focusable = true)) {
-            uiState.pendingRepoChange?.let { pending ->
-                ConfirmRepoChangesDialog(
-                    pendingChange = pending,
-                    onConfirm = { viewModel.onEvent(PluginUiEvent.ConfirmPendingRepoChange) },
-                    onReject = { viewModel.onEvent(PluginUiEvent.RejectPendingRepoChange) }
-                )
-            }
+        uiState.pendingRepoChange?.let { pending ->
+            ConfirmRepoChangesDialog(
+                pendingChange = pending,
+                onConfirm = { viewModel.onEvent(PluginUiEvent.ConfirmPendingRepoChange) },
+                onReject = { viewModel.onEvent(PluginUiEvent.RejectPendingRepoChange) }
+            )
         }
-    }
 
-    if (uiState.pendingScraperEnable != null) {
-        Popup(properties = PopupProperties(focusable = true)) {
-            uiState.pendingScraperEnable?.let { pending ->
-                ConfirmScraperEnableDialog(
-                    scraperName = pending.scraperName,
-                    onConfirm = { viewModel.onEvent(PluginUiEvent.ConfirmPendingScraperEnable) },
-                    onDismiss = { viewModel.onEvent(PluginUiEvent.DismissPendingScraperEnable) }
-                )
-            }
+        uiState.pendingScraperEnable?.let { pending ->
+            ConfirmScraperEnableDialog(
+                scraperName = pending.scraperName,
+                onConfirm = { viewModel.onEvent(PluginUiEvent.ConfirmPendingScraperEnable) },
+                onDismiss = { viewModel.onEvent(PluginUiEvent.DismissPendingScraperEnable) }
+            )
         }
     }
     }

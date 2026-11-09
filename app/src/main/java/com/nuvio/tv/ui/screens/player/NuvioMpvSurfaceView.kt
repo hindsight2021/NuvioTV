@@ -22,18 +22,15 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
     private var lastMediaRequestKey: String? = null
     private var pendingInitialMediaUrl: String? = null
     private var pendingInitialStartOption: String? = null
+    private var deferredLoadUntilSurface: Boolean = false
     private var requestedMediaUrl: String? = null
     private var pathAtMediaRequest: String? = null
     private var hardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE
     private var hi10pGnextSoftwareFallbackActive = false
     private var appliedHi10pGnextSoftwareFallback: Boolean? = null
+    private var cachedTrackList: MpvTrackListCache? = null
     private var currentAspectMode: AspectMode = AspectMode.ORIGINAL
     private var pendingAspectRetryCount = 0
-    // mpv can seek a live HLS stream inside its cache, so `seekable` alone misses it. Its duration,
-    // though, is what has been loaded so far and keeps growing, while a VOD's stays put: the first
-    // duration seen for the current media, and whether it grew.
-    private var firstDurationMs = 0L
-    private var durationGrows = false
     private val aspectReapplyRunnable = Runnable {
         applyAspectModeInternal(currentAspectMode, allowRetry = true)
     }
@@ -72,9 +69,11 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             hasQueuedInitialMedia = true
             pendingInitialMediaUrl = null
             pendingInitialStartOption = null
+            deferredLoadUntilSurface = false
         } else if (startOption != null) {
             pendingInitialMediaUrl = url
             pendingInitialStartOption = startOption
+            deferredLoadUntilSurface = true
             hasQueuedInitialMedia = true
         } else if (hasQueuedInitialMedia) {
             pendingInitialMediaUrl = null
@@ -82,14 +81,17 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             if (holder.surface?.isValid == true) {
                 ensureSurfaceAttachedIfAlreadyAvailable()
                 mpv.command("loadfile", url, "replace")
+                deferredLoadUntilSurface = false
             } else {
                 playFile(url)
+                deferredLoadUntilSurface = true
             }
         } else {
             pendingInitialMediaUrl = null
             pendingInitialStartOption = null
             playFile(url)
             ensureSurfaceAttachedIfAlreadyAvailable()
+            deferredLoadUntilSurface = holder.surface?.isValid != true
             hasQueuedInitialMedia = true
         }
         lastMediaRequestKey = requestKey
@@ -99,6 +101,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         super.surfaceCreated(holder)
+        deferredLoadUntilSurface = false
         val url = pendingInitialMediaUrl ?: return
         val startOption = pendingInitialStartOption
         pendingInitialMediaUrl = null
@@ -129,8 +132,10 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         if (holder.surface?.isValid == true) {
             ensureSurfaceAttachedIfAlreadyAvailable()
             mpv.command("loadfile", url, "replace")
+            deferredLoadUntilSurface = false
         } else {
             playFile(url)
+            deferredLoadUntilSurface = true
         }
         hasQueuedInitialMedia = true
         lastMediaRequestKey = requestKey
@@ -192,9 +197,10 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         val path = if (initialized) mpv.getPropertyString("path") else null
         pathAtMediaRequest = mpvPathBaselineForRequest(url, requestedMediaUrl, pathAtMediaRequest, path)
         requestedMediaUrl = url
-        firstDurationMs = 0L
-        durationGrows = false
     }
+
+    val hasPendingInitialMedia: Boolean
+        get() = pendingInitialMediaUrl != null || deferredLoadUntilSurface
 
     /** False while mpv still reports the path recorded at the last media request. */
     fun isPositionFromRequestedMedia(): Boolean {
@@ -231,19 +237,10 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         return (seconds * 1000.0).roundToLong().coerceAtLeast(0L)
     }
 
-    /**
-     * Live HLS/DASH in mpv is typically reported as not seekable. VOD HLS is seekable. A live
-     * stream mpv can seek in its cache shows by its duration growing.
-     */
+    /** Live HLS/DASH in mpv is typically reported as not seekable. VOD HLS is seekable. */
     fun isLiveStreamNow(): Boolean {
         if (!initialized) return false
-        if (mpv.getPropertyBoolean("seekable") == false) return true
-        val duration = durationMs()
-        if (duration > 0L) {
-            if (firstDurationMs == 0L) firstDurationMs = duration
-            else if (duration > firstDurationMs + LIVE_DURATION_GROWTH_MS) durationGrows = true
-        }
-        return durationGrows
+        return mpv.getPropertyBoolean("seekable") == false
     }
 
     fun hasVideoTrackSelectedNow(): Boolean {
@@ -560,6 +557,11 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Polled with playback progress, so only the selection is read each time: what each track is
+     * comes from [readTrackList], read again only when the file or its track count changes (a file
+     * can carry close to a hundred tracks, a dozen properties each).
+     */
     fun readTrackSnapshot(): MpvTrackSnapshot {
         if (!initialized) return MpvTrackSnapshot(emptyList(), emptyList())
         val trackCount = runCatching { mpv.getPropertyInt("track-list/count") ?: 0 }
@@ -568,16 +570,31 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             return MpvTrackSnapshot(emptyList(), emptyList())
         }
 
+        val path = mpv.getPropertyString("path")
+        val tracks = cachedTrackList
+            ?.takeIf { it.path == path && it.count == trackCount }
+            ?.tracks
+            ?: readTrackList(trackCount).also { cachedTrackList = MpvTrackListCache(path, trackCount, it) }
+
         val selectedAudioTrackId = mpv.getPropertyString("aid")?.toIntOrNull()
             ?: mpv.getPropertyInt("current-tracks/audio/id")
         val selectedSubtitleTrackId = mpv.getPropertyString("sid")?.toIntOrNull()
             ?: mpv.getPropertyInt("current-tracks/sub/id")
 
-        val audioTracks = mutableListOf<MpvTrack>()
-        val subtitleTracks = mutableListOf<MpvTrack>()
+        return MpvTrackSnapshot(
+            audioTracks = tracks.filter { it.type == "audio" }
+                .map { it.copy(isSelected = it.id == selectedAudioTrackId) },
+            subtitleTracks = tracks.filter { it.type == "sub" }
+                .map { it.copy(isSelected = it.id == selectedSubtitleTrackId) }
+        )
+    }
 
+    /** The audio and subtitle tracks of the loaded file, without their selection. */
+    private fun readTrackList(trackCount: Int): List<MpvTrack> {
+        val tracks = mutableListOf<MpvTrack>()
         for (i in 0 until trackCount) {
             val type = mpv.getPropertyString("track-list/$i/type")?.lowercase() ?: continue
+            if (type != "audio" && type != "sub") continue
             val id = mpv.getPropertyInt("track-list/$i/id") ?: continue
             val language = mpv.getPropertyString("track-list/$i/lang")
                 ?.trim()
@@ -588,55 +605,39 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             val codec = mpv.getPropertyString("track-list/$i/codec")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-            val selectedByFlag = mpv.getPropertyBoolean("track-list/$i/selected") == true
             val external = mpv.getPropertyBoolean("track-list/$i/external") == true
-            val channelCount = mpv.getPropertyInt("track-list/$i/demux-channel-count")
-                ?: mpv.getPropertyInt("track-list/$i/audio-channels")
-                ?: mpv.getPropertyInt("track-list/$i/channels")
-            val forced = (mpv.getPropertyBoolean("track-list/$i/forced") == true) || listOfNotNull(title, language).any {
-                it.contains("forced", ignoreCase = true)
-            }
-            val selected = when (type) {
-                "audio" -> (selectedAudioTrackId != null && selectedAudioTrackId == id) || selectedByFlag
-                "sub" -> (selectedSubtitleTrackId != null && selectedSubtitleTrackId == id) || selectedByFlag
-                else -> selectedByFlag
-            }
 
-            when (type) {
-                "audio" -> {
-                    audioTracks += MpvTrack(
-                        id = id,
-                        type = type,
-                        name = title ?: language ?: context.getString(com.nuvio.tv.R.string.player_track_audio_fallback, id),
-                        language = language,
-                        codec = codec,
-                        channelCount = channelCount,
-                        isSelected = selected,
-                        isForced = false,
-                        isExternal = external
-                    )
-                }
-
-                "sub" -> {
-                    subtitleTracks += MpvTrack(
-                        id = id,
-                        type = type,
-                        name = title ?: language ?: context.getString(com.nuvio.tv.R.string.player_track_subtitle_fallback, id),
-                        language = language,
-                        codec = codec,
-                        channelCount = null,
-                        isSelected = selected,
-                        isForced = forced,
-                        isExternal = external
-                    )
-                }
+            tracks += if (type == "audio") {
+                MpvTrack(
+                    id = id,
+                    type = type,
+                    name = title ?: language ?: context.getString(com.nuvio.tv.R.string.player_track_audio_fallback, id),
+                    language = language,
+                    codec = codec,
+                    channelCount = mpv.getPropertyInt("track-list/$i/demux-channel-count")
+                        ?: mpv.getPropertyInt("track-list/$i/audio-channels")
+                        ?: mpv.getPropertyInt("track-list/$i/channels"),
+                    isSelected = false,
+                    isForced = false,
+                    isExternal = external
+                )
+            } else {
+                val forced = (mpv.getPropertyBoolean("track-list/$i/forced") == true) ||
+                    listOfNotNull(title, language).any { it.contains("forced", ignoreCase = true) }
+                MpvTrack(
+                    id = id,
+                    type = type,
+                    name = title ?: language ?: context.getString(com.nuvio.tv.R.string.player_track_subtitle_fallback, id),
+                    language = language,
+                    codec = codec,
+                    channelCount = null,
+                    isSelected = false,
+                    isForced = forced,
+                    isExternal = external
+                )
             }
         }
-
-        return MpvTrackSnapshot(
-            audioTracks = audioTracks,
-            subtitleTracks = subtitleTracks
-        )
+        return tracks
     }
 
     fun releasePlayer() {
@@ -649,13 +650,16 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         lastMediaRequestKey = null
         pendingInitialMediaUrl = null
         pendingInitialStartOption = null
+        deferredLoadUntilSurface = false
         requestedMediaUrl = null
         pathAtMediaRequest = null
         appliedHi10pGnextSoftwareFallback = null
+        cachedTrackList = null
     }
 
     override fun initOptions() {
         mpv.setOptionString("profile", "fast")
+        mpv.setOptionString("msg-level", "ffmpeg=warn,vd=warn,ad=warn,vo=warn,ao=warn,demux=warn,lavf=warn,cplayer=warn,autoconvert=warn,hwupload=warn")
         setVo(if (hi10pGnextSoftwareFallbackActive) MPV_VIDEO_OUTPUT_GPU_NEXT else MPV_VIDEO_OUTPUT_GPU)
         mpv.setOptionString("gpu-context", "android")
         mpv.setOptionString("opengl-es", "yes")
@@ -786,7 +790,6 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         private const val MPV_HWDEC_DISABLED = "no"
         /** `loadfile` insertion index; only meaningful for insert-at flags, -1 is mpv's default. */
         private const val LOADFILE_DEFAULT_INDEX = "-1"
-        private const val LIVE_DURATION_GROWTH_MS = 10_000L
         private const val MPV_COVER_FALLBACK_SCALE = 1.15f
         private const val MPV_MAX_VOLUME_PERCENT = 400.0
         private const val ASPECT_RETRY_DELAY_MS = 120L
@@ -799,6 +802,12 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         private const val MPV_SUB_MARGIN_Y_MAX = 60
     }
 }
+
+private class MpvTrackListCache(
+    val path: String?,
+    val count: Int,
+    val tracks: List<MpvTrack>
+)
 
 data class MpvTrackSnapshot(
     val audioTracks: List<MpvTrack>,

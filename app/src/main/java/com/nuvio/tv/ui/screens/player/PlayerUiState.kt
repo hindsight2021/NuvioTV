@@ -249,6 +249,12 @@ data class PlayerUiState(
     val isLiveContent: Boolean get() = contentType.equals("live", ignoreCase = true)
 }
 
+internal fun PlayerUiState.clearFrameRateDetection(): PlayerUiState = copy(
+    detectedFrameRateRaw = 0f,
+    detectedFrameRate = 0f,
+    detectedFrameRateSource = null
+)
+
 data class PlaybackTimelineState(
     val currentPosition: Long = 0L,
     val duration: Long = 0L,

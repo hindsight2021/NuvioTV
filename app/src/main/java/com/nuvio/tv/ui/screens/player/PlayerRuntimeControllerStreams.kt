@@ -273,7 +273,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                             filteredStreams
                         }
                         it.copy(
-                            isLoadingSourceStreams = false,
+                            isLoadingSourceStreams = true,
                             sourceAllStreams = badgePreserved,
                             sourceFilteredStreams = paginatedStreams,
                             sourceAvailableAddons = mergedAvailableAddons,
@@ -309,6 +309,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
             }
         }
         sourceStreamsFetchCompleted = true
+        _uiState.update { it.copy(isLoadingSourceStreams = false) }
         markRemainingSourceChipsAsError()
     }
 }
@@ -340,7 +341,8 @@ private fun PlayerRuntimeController.launchSourceDebridPreparationIfNeeded(
         return
     }
     markLaunched()
-    scope.launch {
+    // Off the main thread, like the stream screen: each prepared link rewrites the stream list.
+    scope.launch(kotlinx.coroutines.Dispatchers.Default) {
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         directDebridStreamPreparer.prepare(
             streams = streams,
@@ -866,7 +868,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
-        it.copy(
+        it.clearFrameRateDetection().copy(
             isBuffering = true,
             error = null,
             currentStreamName = stream.name ?: stream.addonName,
@@ -977,7 +979,7 @@ private fun PlayerRuntimeController.switchToTorrentSourceStream(
     pendingRestoredAddonSubtitle = null
     lastSavedPosition = 0L
     _uiState.update {
-        it.copy(
+        it.clearFrameRateDetection().copy(
             isBuffering = true,
             error = null,
             currentStreamName = stream.name ?: stream.addonName,
@@ -1220,7 +1222,8 @@ private fun PlayerRuntimeController.launchEpisodeDebridPreparationIfNeeded(
         return
     }
     markLaunched()
-    scope.launch {
+    // Off the main thread, like the stream screen: each prepared link rewrites the stream list.
+    scope.launch(kotlinx.coroutines.Dispatchers.Default) {
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         directDebridStreamPreparer.prepare(
             streams = streams,
@@ -1380,6 +1383,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     // Pause current playback immediately so the old stream doesn't continue
     // playing audio/video in the background while the new episode is being prepared.
     _exoPlayer?.stop()
+    cancelAfrPreflight()
 
     val newHeaders = PlayerMediaSourceFactory.sanitizeHeaders(
         stream.behaviorHints?.proxyHeaders?.request
@@ -1428,7 +1432,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     lastSavedPosition = 0L
 
     _uiState.update {
-        it.copy(
+        it.clearFrameRateDetection().copy(
             isBuffering = true,
             error = null,
             currentSeason = currentSeason,
@@ -1551,7 +1555,7 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
-        it.copy(
+        it.clearFrameRateDetection().copy(
             isBuffering = true,
             error = null,
             currentSeason = currentSeason,
