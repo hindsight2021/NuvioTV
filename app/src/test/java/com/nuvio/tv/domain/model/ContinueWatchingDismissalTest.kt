@@ -7,36 +7,42 @@ import org.junit.Test
 class ContinueWatchingDismissalTest {
 
     @Test
-    fun `whole show dismissal hides show even if newly released`() {
-        // Simpsons S38E6, South Park S29E4, Scrubs S2E6: if user dismissed/deleted the whole show, it stays dismissed!
-        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955")))
-        assertTrue(isContinueWatchingNextUpDismissed("tt40197357", 2, 6, isReleaseAlert = true, dismissedKeys = setOf("tt40197357")))
-        assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 38, 6, isReleaseAlert = true, dismissedKeys = setOf("tt0096697")))
+    fun `newly released episodes for actively followed shows are not dismissed even if legacy bare show ID exists`() {
+        // South Park S29E4 and Scrubs S2E6: user actively watches them (hasActiveProgress = true),
+        // so legacy bare show ID does NOT hide new release alerts!
+        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955"), hasActiveProgress = true))
+        assertFalse(isContinueWatchingNextUpDismissed("tt40197357", 2, 6, isReleaseAlert = true, dismissedKeys = setOf("tt40197357"), hasActiveProgress = true))
+    }
+
+    @Test
+    fun `newly released episodes for deleted or unfollowed shows stay dismissed`() {
+        // The Simpsons: user deleted watch progress (hasActiveProgress = false), so bare show ID in dismissedKeys remains inviolable!
+        assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 38, 6, isReleaseAlert = true, dismissedKeys = setOf("tt0096697"), hasActiveProgress = false))
     }
 
     @Test
     fun `episode dismissal does not hide future released episodes`() {
         // Dismissing an earlier episode does not hide a newly released episode
-        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955|1|1")))
-        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf(nextUpEpisodeDismissKey("tt0121955", 29, 3))))
+        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955|1|1"), hasActiveProgress = true))
+        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf(nextUpEpisodeDismissKey("tt0121955", 29, 3)), hasActiveProgress = true))
     }
 
     @Test
     fun `non-release alerts stay dismissed if bare show ID exists`() {
         // Futurama, The Middle, Lioness have no new episodes and were previously dismissed/completed
-        assertTrue(isContinueWatchingNextUpDismissed("tmdb:615", 11, 5, isReleaseAlert = false, dismissedKeys = setOf("tmdb:615")))
-        assertTrue(isContinueWatchingNextUpDismissed("tt1442464", 2, 7, isReleaseAlert = false, dismissedKeys = setOf("tt1442464")))
-        assertTrue(isContinueWatchingNextUpDismissed("tt13111078", 2, 8, isReleaseAlert = false, dismissedKeys = setOf("tt13111078")))
-        assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 36, 5, isReleaseAlert = false, dismissedKeys = setOf("tt0096697")))
+        assertTrue(isContinueWatchingNextUpDismissed("tmdb:615", 11, 5, isReleaseAlert = false, dismissedKeys = setOf("tmdb:615"), hasActiveProgress = true))
+        assertTrue(isContinueWatchingNextUpDismissed("tt1442464", 2, 7, isReleaseAlert = false, dismissedKeys = setOf("tt1442464"), hasActiveProgress = true))
+        assertTrue(isContinueWatchingNextUpDismissed("tt13111078", 2, 8, isReleaseAlert = false, dismissedKeys = setOf("tt13111078"), hasActiveProgress = true))
+        assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 36, 5, isReleaseAlert = false, dismissedKeys = setOf("tt0096697"), hasActiveProgress = false))
     }
 
     @Test
     fun `explicit episode dismissal hides that exact episode regardless of release alert`() {
         val key = nextUpEpisodeDismissKey("tt0121955", 29, 4)
-        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf(key)))
-        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = false, dismissedKeys = setOf(key)))
+        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf(key), hasActiveProgress = true))
+        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = false, dismissedKeys = setOf(key), hasActiveProgress = true))
         // Next episode 29x5 is not hidden
-        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 5, isReleaseAlert = true, dismissedKeys = setOf(key)))
+        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 5, isReleaseAlert = true, dismissedKeys = setOf(key), hasActiveProgress = true))
     }
 
     @Test

@@ -1001,12 +1001,15 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         val watchedEpisodes = computeWatchedEpisodeSet(seed.contentId, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
                         val watchedCount = computeWatchedEpisodeCount(seed.contentId, seed, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
                         val inLibrary = isSeriesInLibrary(seed.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
+                        val seedSiblingIds = (cwLastShowIdSiblings[seed.contentId].orEmpty() + seed.contentId)
+                        val hasProgress = snapshot.items.any { it.contentId in seedSiblingIds }
                         val item = buildNextUpItem(
                             progress = remappedSeed,
                             showUnairedNextUp = showUnairedNextUp,
                             watchedEpisodeCount = watchedCount,
                             isInLibraryOrWatchlist = inLibrary,
-                            watchedEpisodes = watchedEpisodes
+                            watchedEpisodes = watchedEpisodes,
+                            hasActiveProgress = hasProgress
                         )
                         if (item != null) {
                             if (seed.contentId in fullyWatchedSeriesIds.fullyWatchedSeriesIds.value) {
@@ -1089,12 +1092,15 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 val watchedEpisodes = computeWatchedEpisodeSet(seed.contentId, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
                                 val watchedCount = computeWatchedEpisodeCount(seed.contentId, seed, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
                                 val inLibrary = isSeriesInLibrary(seed.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
+                                val seedSiblingIds = (cwLastShowIdSiblings[seed.contentId].orEmpty() + seed.contentId)
+                                val hasProgress = snapshot.items.any { it.contentId in seedSiblingIds }
                                 val item = buildNextUpItem(
                                     progress = remappedSeed,
                                     showUnairedNextUp = showUnairedNextUp,
                                     watchedEpisodeCount = watchedCount,
                                     isInLibraryOrWatchlist = inLibrary,
-                                    watchedEpisodes = watchedEpisodes
+                                    watchedEpisodes = watchedEpisodes,
+                                    hasActiveProgress = hasProgress
                                 ).also { resolved ->
                                     logSimklAsyncNextUpResolution(
                                         seed = remappedSeed,
@@ -2007,12 +2013,15 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                 val watchedEpisodes = computeWatchedEpisodeSet(remappedProgress.contentId, watchedItems, allProgress, cwLastShowIdSiblings)
                 val watchedCount = computeWatchedEpisodeCount(remappedProgress.contentId, remappedProgress, watchedItems, allProgress, cwLastShowIdSiblings)
                 val inLibrary = isSeriesInLibrary(remappedProgress.contentId, libraryItemIds, cwLastShowIdSiblings)
+                val remapSiblingIds = (cwLastShowIdSiblings[remappedProgress.contentId].orEmpty() + remappedProgress.contentId)
+                val hasProgress = allProgress.any { it.contentId in remapSiblingIds }
                 val nextUp = buildNextUpItem(
                     progress = remappedProgress,
                     showUnairedNextUp = showUnairedNextUp,
                     watchedEpisodeCount = watchedCount,
                     isInLibraryOrWatchlist = inLibrary,
                     watchedEpisodes = watchedEpisodes,
+                    hasActiveProgress = hasProgress,
                     debug = debug
                 ) ?: run {
                     // If meta was not available (network error, addon timeout),
@@ -2333,6 +2342,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
     watchedEpisodeCount: Int = 2,
     isInLibraryOrWatchlist: Boolean = false,
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
+    hasActiveProgress: Boolean = true,
     debug: CwDebugSession? = null
 ): ContinueWatchingItem.NextUp? {
     debug?.recordNextUpAttempt(progress)
@@ -2348,6 +2358,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
         progress = progress,
         showUnairedNextUp = showUnairedNextUp,
         watchedEpisodes = watchedEpisodes,
+        hasActiveProgress = hasActiveProgress,
         debug = debug
     ) ?: run {
         // Populate badge episode cache from meta that was already resolved by
@@ -2678,6 +2689,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
     progress: WatchProgress,
     showUnairedNextUp: Boolean,
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
+    hasActiveProgress: Boolean = true,
     debug: CwDebugSession? = null
 ): NextUpResolution? {
     val startedAtMs = SystemClock.elapsedRealtime()
@@ -2701,7 +2713,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                     val freshHasAired = hasEpisodeAired(cached.released, fallback = cached.hasAired)
                     val releaseAlert = resolveNextUpReleaseState(progress, cached.season, cached.released, freshHasAired).isReleaseAlert
                     if (!isContinueWatchingNextUpDismissed(progress.contentId, cached.season, cached.episode,
-                            releaseAlert, dismissedKeys)) {
+                            releaseAlert, dismissedKeys, hasActiveProgress)) {
                         if (freshHasAired == cached.hasAired) return cached
                         val refreshed = cached.copy(
                             hasAired = freshHasAired,
@@ -2784,7 +2796,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
         return null
     }
     var currentMeta = meta
-    var nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp, dismissedKeys, watchedEpisodes)
+    var nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp, dismissedKeys, watchedEpisodes, hasActiveProgress)
     if (nextVideo == null && isSeriesTypeCW(progress.contentType)) {
         val supplemented = withTimeoutOrNull(6000L) {
             try {
@@ -2868,7 +2880,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
             synchronized(cwMetaCache) {
                 cwMetaCache["${progress.contentType}:${progress.contentId}"] = supplemented
             }
-            nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp, dismissedKeys, watchedEpisodes)
+            nextVideo = resolveNextUpVideoFromMeta(progress, currentMeta, showUnairedNextUp, dismissedKeys, watchedEpisodes, hasActiveProgress)
         }
     }
     if (nextVideo == null &&
@@ -2929,7 +2941,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromMetaSeed(
                     synchronized(cwMetaCache) {
                         cwMetaCache["${progress.contentType}:${progress.contentId}"] = updatedMeta
                     }
-                    nextVideo = resolveNextUpVideoFromMeta(progress, updatedMeta, showUnairedNextUp, dismissedKeys, watchedEpisodes)
+                    nextVideo = resolveNextUpVideoFromMeta(progress, updatedMeta, showUnairedNextUp, dismissedKeys, watchedEpisodes, hasActiveProgress)
                 }
             }
         }
@@ -3023,7 +3035,8 @@ private fun resolveNextUpVideoFromMeta(
     meta: CwMetaSummary,
     showUnairedNextUp: Boolean,
     dismissedKeys: Set<String> = emptySet(),
-    watchedEpisodes: Set<Pair<Int, Int>> = emptySet()
+    watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
+    hasActiveProgress: Boolean = true
 ): CwVideoSummary? {
     val episodes = meta.videos
         .filter { video ->
@@ -3111,7 +3124,8 @@ private fun resolveNextUpVideoFromMeta(
         ) && !isContinueWatchingNextUpDismissed(
             progress.contentId, video.season, video.episode,
             resolveNextUpReleaseState(progress, video.season ?: seedSeason, video.released, aired).isReleaseAlert,
-            dismissedKeys
+            dismissedKeys,
+            hasActiveProgress
         )
     }
 

@@ -161,7 +161,7 @@ class HomeContinueWatchingRefreshTest {
         )
         val seeds = listOf(seed(southPark, "South Park", 29, 3), seed(scrubs, "Scrubs", 2, 5),
             seed("tt999", "Slow provider", 1, 1))
-        every { vm.watchProgressRepository.allProgress } returns MutableStateFlow(emptyList())
+        every { vm.watchProgressRepository.allProgress } returns MutableStateFlow(seeds.take(2))
         every { vm.watchProgressRepository.observeNextUpSeeds() } returns MutableStateFlow(seeds)
         every { vm.watchProgressRepository.observeRemoteProgressLoaded() } returns MutableStateFlow(true)
         every { vm.watchProgressRepository.watchedItems } returns MutableStateFlow(emptyList())
@@ -177,7 +177,7 @@ class HomeContinueWatchingRefreshTest {
         coEvery { vm.watchProgressRepository.getShowIdSiblings() } returns emptyMap()
         every { holder.fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
         every { vm.traktSettingsDataStore.continueWatchingDaysCap } returns MutableStateFlow(0)
-        val dismissals = MutableStateFlow(setOf(nextUpEpisodeDismissKey(southPark, 29, 3), nextUpEpisodeDismissKey(scrubs, 2, 4)))
+        val dismissals = MutableStateFlow(setOf(southPark, scrubs))
         every { vm.traktSettingsDataStore.dismissedNextUpKeys } returns dismissals
         every { vm.layoutPreferenceDataStore.showUnairedNextUp } returns MutableStateFlow(false)
         every { vm.layoutPreferenceDataStore.nextUpFromFurthestEpisode } returns MutableStateFlow(true)
