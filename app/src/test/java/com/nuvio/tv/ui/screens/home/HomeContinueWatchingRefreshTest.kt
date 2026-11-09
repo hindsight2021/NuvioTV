@@ -177,7 +177,7 @@ class HomeContinueWatchingRefreshTest {
         coEvery { vm.watchProgressRepository.getShowIdSiblings() } returns emptyMap()
         every { holder.fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
         every { vm.traktSettingsDataStore.continueWatchingDaysCap } returns MutableStateFlow(0)
-        val dismissals = MutableStateFlow(setOf(southPark, scrubs))
+        val dismissals = MutableStateFlow(setOf(nextUpEpisodeDismissKey(southPark, 29, 3), nextUpEpisodeDismissKey(scrubs, 2, 4)))
         every { vm.traktSettingsDataStore.dismissedNextUpKeys } returns dismissals
         every { vm.layoutPreferenceDataStore.showUnairedNextUp } returns MutableStateFlow(false)
         every { vm.layoutPreferenceDataStore.nextUpFromFurthestEpisode } returns MutableStateFlow(true)

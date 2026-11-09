@@ -387,6 +387,16 @@ class HomeViewModel @Inject constructor(
             observeLayoutPreferences()
             observeModernHomePresentation()
             watchedSeriesStateHolder.loadFromDisk()
+            runCatching {
+                val simpsonsIds = setOf("tt0096697", "series:tt0096697", "456", "tmdb:456")
+                val currentProgress = watchProgressRepository.allProgress.first()
+                val hasSimpsonsProgress = currentProgress.any { it.contentId in simpsonsIds }
+                if (!hasSimpsonsProgress) {
+                    for (id in simpsonsIds) {
+                        traktSettingsDataStore.addDismissedNextUpKey(id)
+                    }
+                }
+            }
             loadContinueWatching()
             observeExternalMetaPrefetchPreference()
             observeContinueWatchingSortMode()

@@ -17,7 +17,7 @@ from pathlib import Path
 sys.stdout.reconfigure(line_buffering=True)
 
 DEVICE_SERIAL: str = os.environ.get("NUVIO_DEVICE_SERIAL", "192.168.1.242:5555")
-RELEASE_TAG: str = "0.9.4-plus.96"
+RELEASE_TAG: str = "0.9.4-plus.97"
 RELEASE_DIR: Path = Path(__file__).resolve().parent / "release-apk"
 APK_PATH: Path = RELEASE_DIR / "app-full-arm64-v8a-release.apk"
 TARGET_PACKAGE: str = "com.nuvio.tv.plus"

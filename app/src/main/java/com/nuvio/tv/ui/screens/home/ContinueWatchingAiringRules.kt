@@ -26,34 +26,39 @@ enum class FullyWatchedNextUpAction {
      * stale fully-watched badge. Pre-fix code dropped the item instead.
      */
     KEEP_AND_CLEAR_BADGE,
+
+    /**
+     * Aired episode for a finished/completed show or older seed where isReleaseAlert is false.
+     * Drop from CW.
+     */
+    DROP,
 }
 
 /**
  * Decision for a fully-watched series that already resolved a next-up item.
  *
- * Historical bug (`71e4fb6` + mid-season checkmarks from `a58809`):
- * `if (hasAired) drop` removed airing shows from CW the day a new episode aired.
- * Correct behavior: never drop; clear the badge when the next episode has aired.
+ * If the next episode has aired:
+ * - When isReleaseAlert is true (genuine new release), keep and clear the badge.
+ * - When isReleaseAlert is false (historical seed / no new release), drop from CW.
+ * If the next episode is unaired, keep with badge.
  */
-fun fullyWatchedNextUpAction(nextUpHasAired: Boolean): FullyWatchedNextUpAction {
-    return if (nextUpHasAired) {
-        FullyWatchedNextUpAction.KEEP_AND_CLEAR_BADGE
-    } else {
-        FullyWatchedNextUpAction.KEEP_WITH_BADGE
-    }
+fun fullyWatchedNextUpAction(
+    nextUpHasAired: Boolean,
+    isReleaseAlert: Boolean = true
+): FullyWatchedNextUpAction = when {
+    nextUpHasAired && isReleaseAlert -> FullyWatchedNextUpAction.KEEP_AND_CLEAR_BADGE
+    nextUpHasAired && !isReleaseAlert -> FullyWatchedNextUpAction.DROP
+    else -> FullyWatchedNextUpAction.KEEP_WITH_BADGE
 }
 
 /**
  * Whether a fully-watched next-up item should be excluded from Continue Watching.
- * Always false after the air-day fix — kept as an explicit API so tests can
- * assert the regression never returns.
+ * Aired episodes without a release alert drop from CW.
  */
-fun shouldDropFullyWatchedNextUpFromContinueWatching(nextUpHasAired: Boolean): Boolean {
-    // Intentionally ignore [nextUpHasAired]: both aired and unaired next-ups stay.
-    @Suppress("UNUSED_PARAMETER")
-    val unused = nextUpHasAired
-    return false
-}
+fun shouldDropFullyWatchedNextUpFromContinueWatching(
+    nextUpHasAired: Boolean,
+    isReleaseAlert: Boolean = true
+): Boolean = nextUpHasAired && !isReleaseAlert
 
 /**
  * Pre-fix behavior retained only for regression tests (must not be used in prod).
@@ -422,16 +427,13 @@ fun buildShowIdSiblingsFromSeeds(
 internal fun shouldRetainBeyondCutoff(
     sortTimestamp: Long,
     isReleaseAlert: Boolean,
-    contentId: String,
+    @Suppress("UNUSED_PARAMETER") contentId: String,
     cutoffMs: Long?,
-    stateHolder: WatchedSeriesStateHolder
+    @Suppress("UNUSED_PARAMETER") stateHolder: WatchedSeriesStateHolder
 ): Boolean {
     if (cutoffMs == null) return true
     if (sortTimestamp >= cutoffMs) return true
     if (isReleaseAlert) return true
-    // Known-ongoing series are always retained — the deadline system
-    // handles when to actually revalidate them.
-    if (stateHolder.isKnownOngoing(contentId)) return true
     return false
 }
 

@@ -7,11 +7,18 @@ import org.junit.Test
 class ContinueWatchingDismissalTest {
 
     @Test
-    fun `newly released episodes are not dismissed even if bare show ID or legacy prefix exists`() {
-        // South Park S29E4 and Scrubs S2E6 released yesterday
-        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955")))
-        assertFalse(isContinueWatchingNextUpDismissed("tt40197357", 2, 6, isReleaseAlert = true, dismissedKeys = setOf("tt40197357")))
+    fun `whole show dismissal hides show even if newly released`() {
+        // Simpsons S38E6, South Park S29E4, Scrubs S2E6: if user dismissed/deleted the whole show, it stays dismissed!
+        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955")))
+        assertTrue(isContinueWatchingNextUpDismissed("tt40197357", 2, 6, isReleaseAlert = true, dismissedKeys = setOf("tt40197357")))
+        assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 38, 6, isReleaseAlert = true, dismissedKeys = setOf("tt0096697")))
+    }
+
+    @Test
+    fun `episode dismissal does not hide future released episodes`() {
+        // Dismissing an earlier episode does not hide a newly released episode
         assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf("tt0121955|1|1")))
+        assertFalse(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf(nextUpEpisodeDismissKey("tt0121955", 29, 3))))
     }
 
     @Test
@@ -20,7 +27,6 @@ class ContinueWatchingDismissalTest {
         assertTrue(isContinueWatchingNextUpDismissed("tmdb:615", 11, 5, isReleaseAlert = false, dismissedKeys = setOf("tmdb:615")))
         assertTrue(isContinueWatchingNextUpDismissed("tt1442464", 2, 7, isReleaseAlert = false, dismissedKeys = setOf("tt1442464")))
         assertTrue(isContinueWatchingNextUpDismissed("tt13111078", 2, 8, isReleaseAlert = false, dismissedKeys = setOf("tt13111078")))
-        // The Simpsons: one-off watch is not a release alert, so it stays dismissed
         assertTrue(isContinueWatchingNextUpDismissed("tt0096697", 36, 5, isReleaseAlert = false, dismissedKeys = setOf("tt0096697")))
     }
 
@@ -46,10 +52,11 @@ class ContinueWatchingDismissalTest {
     }
 
     @Test
-    fun `missing season or episode cannot be dismissed`() {
+    fun `missing season or episode cannot be dismissed by episode key, but bare show ID dismisses`() {
         val keys = setOf("show|2|6", nextUpEpisodeDismissKey("show", 2, 6))
         assertFalse(isContinueWatchingNextUpDismissed("show", null, 6, isReleaseAlert = false, dismissedKeys = keys))
         assertFalse(isContinueWatchingNextUpDismissed("show", 2, null, isReleaseAlert = false, dismissedKeys = keys))
         assertFalse(isContinueWatchingNextUpDismissed("show", null, null, isReleaseAlert = false, dismissedKeys = keys))
+        assertTrue(isContinueWatchingNextUpDismissed("show", null, null, isReleaseAlert = false, dismissedKeys = setOf("show")))
     }
 }

@@ -59,6 +59,36 @@ class ContinueWatchingAiringRulesTest {
     }
 
     @Test
+    fun `fully watched with aired next-up without release alert drops from CW`() {
+        assertEquals(
+            FullyWatchedNextUpAction.DROP,
+            fullyWatchedNextUpAction(nextUpHasAired = true, isReleaseAlert = false),
+        )
+        assertTrue(
+            "aired next-up without release alert drops fully watched series from CW",
+            shouldDropFullyWatchedNextUpFromContinueWatching(nextUpHasAired = true, isReleaseAlert = false),
+        )
+    }
+
+    @Test
+    fun `older ongoing item without release alert is not retained beyond cutoff`() {
+        val nowMs = System.currentTimeMillis()
+        val cutoffMs = nowMs - 30L * 24 * 3600_000L
+        val oldWatchedMs = cutoffMs - 1000L
+        val mockHolder = mockk<WatchedSeriesStateHolder>()
+        every { mockHolder.isKnownOngoing(any()) } returns true
+        assertFalse(
+            shouldRetainBeyondCutoff(
+                sortTimestamp = oldWatchedMs,
+                isReleaseAlert = false,
+                contentId = "tt0096697",
+                cutoffMs = cutoffMs,
+                stateHolder = mockHolder
+            )
+        )
+    }
+
+    @Test
     fun `legacy buggy rule would drop on air day — documents the regression`() {
         // 71e4fb6 / a58809 interaction: hasAired → drop.
         assertTrue(legacyShouldDropFullyWatchedNextUp(nextUpHasAired = true))

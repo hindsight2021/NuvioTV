@@ -8,27 +8,24 @@ fun nextUpEpisodeDismissKey(contentId: String, season: Int?, episode: Int?): Str
  * Checks whether a NextUp item is dismissed from Continue Watching.
  *
  * Rules:
- * 1. An explicit episode removal (e.g. "episode|id|s|e" or "id|s|e") always hides that specific episode.
- * 2. A newly released episode (isReleaseAlert == true) is NEVER hidden by historical bare show IDs —
- *    new episodes for actively watched shows (e.g. South Park S29E4, Scrubs S2E6) always appear on CW.
- * 3. For non-release-alerts (isReleaseAlert == false, e.g. one-offs or shows with no new releases),
- *    whole-show dismissals keep previously dismissed/completed shows (The Simpsons, Futurama, The Middle)
- *    off CW so they never reappear unprompted.
- * 4. When a user actively watches an episode of any show, clearDismissalsForSeriesAndSiblings
+ * 1. A whole-show dismissal is strictly inviolable: if the trimmed contentId is present in
+ *    dismissedKeys, the item is always considered dismissed — even when isReleaseAlert is true.
+ * 2. An explicit episode removal (e.g. "episode|id|s|e" or "id|s|e") always hides that specific episode.
+ * 3. When a user actively watches an episode of any show, clearDismissalsForSeriesAndSiblings
  *    purges all dismissal keys for that show across all sibling IDs, allowing it to stick back to CW.
  */
 fun isContinueWatchingNextUpDismissed(
     contentId: String,
     season: Int?,
     episode: Int?,
-    isReleaseAlert: Boolean,
+    isReleaseAlert: Boolean = false,
     dismissedKeys: Set<String>
 ): Boolean {
     val id = contentId.trim()
+    if (id in dismissedKeys) return true
     if (season != null && episode != null) {
         if (nextUpEpisodeDismissKey(id, season, episode) in dismissedKeys) return true
         if ("$id|$season|$episode" in dismissedKeys) return true
     }
-    if (isReleaseAlert) return false
-    return id in dismissedKeys
+    return false
 }
