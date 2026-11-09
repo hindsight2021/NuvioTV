@@ -3591,7 +3591,9 @@ private fun HomeViewModel.clearStaleFullyWatchedForAiredNextUp(
         fullyWatchedSeriesIds.removeFullyWatched(toRemove)
     }
     viewModelScope.launch {
-        traktSettingsDataStore.removeDismissedNextUpKeysForContents(toRemove)
+        runCatching {
+            traktSettingsDataStore.removeDismissedNextUpKeysForContents(toRemove)
+        }
     }
     synchronized(cwBadgeEpisodeCache) {
         listOf("series:$contentId", "tv:$contentId").forEach { key ->

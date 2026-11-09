@@ -152,9 +152,14 @@ class TraktSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun removeDismissedNextUpKeysForContents(contentIds: Collection<String>) {
+        val resolvedProfileId = runCatching { profileManager.activeProfileId.value }.getOrDefault(0)
+        removeDismissedNextUpKeysForContents(contentIds, resolvedProfileId)
+    }
+
     suspend fun removeDismissedNextUpKeysForContents(
         contentIds: Collection<String>,
-        profileId: Int = profileManager.activeProfileId.value
+        profileId: Int
     ) {
         val targets = contentIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         if (targets.isEmpty()) return
@@ -171,9 +176,14 @@ class TraktSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun removeDismissedNextUpKeysForContent(contentId: String) {
+        val resolvedProfileId = runCatching { profileManager.activeProfileId.value }.getOrDefault(0)
+        removeDismissedNextUpKeysForContent(contentId, resolvedProfileId)
+    }
+
     suspend fun removeDismissedNextUpKeysForContent(
         contentId: String,
-        profileId: Int = profileManager.activeProfileId.value
+        profileId: Int
     ) {
         removeDismissedNextUpKeysForContents(listOf(contentId), profileId)
     }
