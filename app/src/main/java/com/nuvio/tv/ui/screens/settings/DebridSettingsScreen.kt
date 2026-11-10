@@ -386,7 +386,11 @@ fun DebridSettingsContent(
                 viewModel = viewModel,
                 onConnected = { token -> viewModel.saveProviderCredential(provider.id, token) },
                 onDisconnect = { viewModel.saveProviderCredential(provider.id, "") },
-                onDismiss = { activeDeviceAuthDialog = null }
+                onDismiss = { activeDeviceAuthDialog = null },
+                onEnterApiKey = {
+                    activeDeviceAuthDialog = null
+                    activeApiKeyDialog = provider.id
+                }
             )
         }
     }
@@ -1226,7 +1230,8 @@ private fun DebridDeviceAuthDialog(
     viewModel: DebridSettingsViewModel,
     onConnected: (String) -> Unit,
     onDisconnect: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onEnterApiKey: (() -> Unit)? = null
 ) {
     val isConnected = currentValue.isNotBlank()
     var restartNonce by remember(provider.id) { mutableStateOf(0) }
@@ -1412,6 +1417,13 @@ private fun DebridDeviceAuthDialog(
                     text = stringResource(R.string.action_retry),
                     onClick = { restartNonce += 1 }
                 )
+                onEnterApiKey?.let { enterKey ->
+                    SettingsDialogActionButton(
+                        text = stringResource(R.string.debrid_api_key_dialog_title, provider.displayName),
+                        onClick = enterKey,
+                        primary = true
+                    )
+                }
             }
         }
     }

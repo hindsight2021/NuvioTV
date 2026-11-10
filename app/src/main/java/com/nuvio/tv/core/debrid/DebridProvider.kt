@@ -1,5 +1,7 @@
 package com.nuvio.tv.core.debrid
 
+import com.nuvio.tv.BuildConfig
+
 import com.nuvio.tv.domain.model.DebridSettings
 
 data class DebridProvider(
@@ -50,7 +52,11 @@ object DebridProviders {
         id = PREMIUMIZE_ID,
         displayName = "Premiumize",
         shortName = "PM",
-        authMethod = DebridProviderAuthMethod.DeviceCode,
+        authMethod = if (BuildConfig.PREMIUMIZE_CLIENT_ID.isNotBlank()) {
+            DebridProviderAuthMethod.DeviceCode
+        } else {
+            DebridProviderAuthMethod.ApiKey
+        },
         capabilities = setOf(
             DebridProviderCapability.ClientResolve,
             DebridProviderCapability.LocalTorrentCacheCheck,

@@ -1,5 +1,6 @@
 package com.nuvio.tv.core.debrid
 
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.domain.model.DebridSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,5 +21,12 @@ class DebridProvidersTest {
         assertEquals(listOf(DebridProviders.Torbox), services.map { it.provider })
         assertTrue(DebridProviders.isVisible(DebridProviders.TORBOX_ID))
         assertFalse(DebridProviders.isVisible(DebridProviders.REAL_DEBRID_ID))
+    }
+
+    @Test
+    fun `premiumize auth method is api key when client id is blank`() {
+        if (BuildConfig.PREMIUMIZE_CLIENT_ID.isBlank()) {
+            assertEquals(DebridProviderAuthMethod.ApiKey, DebridProviders.Premiumize.authMethod)
+        }
     }
 }
