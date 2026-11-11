@@ -673,6 +673,9 @@ private fun PlayerRuntimeController.persistSelectedStreamForReuse(
     val key = streamCacheKey ?: return
     val streamName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName)?.takeIf { it.isNotBlank() }
         ?: title
+    val resolveMeta = stream.clientResolve
+    val isDebrid = stream.isDirectDebrid() ||
+        com.nuvio.tv.data.local.CachedStreamLink.isLikelyDebridCdnUrl(url)
 
     scope.launch {
         streamLinkCacheDataStore.save(
@@ -683,9 +686,17 @@ private fun PlayerRuntimeController.persistSelectedStreamForReuse(
             filename = currentFilename,
             videoHash = currentVideoHash,
             videoSize = currentVideoSize,
+            infoHash = stream.getEffectiveInfoHash() ?: resolveMeta?.infoHash,
+            fileIdx = stream.getEffectiveFileIdx() ?: resolveMeta?.fileIdx,
+            sources = stream.sources ?: resolveMeta?.sources,
             bingeGroup = stream.behaviorHints?.bingeGroup,
             contentLanguage = contentLanguage,
-            year = year
+            year = year,
+            isDebridLink = isDebrid,
+            clientResolveService = resolveMeta?.service,
+            clientResolveMagnet = resolveMeta?.magnetUri,
+            clientResolveType = resolveMeta?.type,
+            clientResolveTorrentName = resolveMeta?.torrentName
         )
     }
 }
@@ -773,11 +784,16 @@ private fun PlayerRuntimeController.openExternalStreamInBrowser(
 
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.switchToSourceStream(
-    stream: Stream
+    stream: Stream,
+    preserveDeadSourceFailoverCount: Boolean = false
 ) {
     sourceStreamsScope?.cancel()
     sourceStreamsScope = null
     sourceStreamsJob = null
+    if (!preserveDeadSourceFailoverCount) {
+        startupSourceFailoverJob?.cancel()
+        startupSourceFailoverJob = null
+    }
     streamRepository.setLocalPluginSearchPaused(true)
     if (openExternalStreamInBrowser(stream = stream, fromEpisodePanel = false)) {
         return
@@ -790,7 +806,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             val resolved = resolveDirectDebridStreamIfNeeded(stream, currentSeason, currentEpisode)
             debridResolveJob = null
             if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
-                switchToSourceStream(resolved)
+                switchToSourceStream(resolved, preserveDeadSourceFailoverCount = preserveDeadSourceFailoverCount)
             } else if (resolved != null) {
                 switchToTorrentSourceStream(resolved)
             } else {
@@ -814,7 +830,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                 val resolved = resolveDirectDebridStreamIfNeeded(stream, currentSeason, currentEpisode)
                 if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
                     debridResolveJob = null
-                    switchToSourceStream(resolved)
+                    switchToSourceStream(resolved, preserveDeadSourceFailoverCount = preserveDeadSourceFailoverCount)
                 } else {
                     debridResolveJob = null
                     _uiState.update {
@@ -857,7 +873,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
 
     // Reset stream-state error flags for the new stream.
     hasRetriedCurrentStreamAfter416 = false
-    resetErrorRetryState()
+    resetErrorRetryState(resetDeadSourceFailoverCount = !preserveDeadSourceFailoverCount)
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     subtitleDisabledByPersistedPreference = false

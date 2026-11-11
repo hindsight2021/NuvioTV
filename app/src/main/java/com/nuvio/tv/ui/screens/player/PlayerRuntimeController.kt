@@ -588,6 +588,10 @@ class PlayerRuntimeController(
     internal var hasRetriedCurrentStreamAfterMediaPeriodHolderCrash: Boolean = false
     internal var timeoutRecoveryAttempts: Int = 0
     internal var errorRetryCount: Int = 0
+    internal var deadSourceFailoverCount: Int = 0
+    internal val failedPlaybackUrls: MutableSet<String> = mutableSetOf()
+    internal val failedPlaybackHashes: MutableSet<String> = mutableSetOf()
+    internal var startupSourceFailoverJob: Job? = null
     internal var consecutiveAutoPlayCount: Int = 0
     internal var errorRetryJob: Job? = null
     internal var stableProgressResetJob: Job? = null
@@ -718,6 +722,8 @@ class PlayerRuntimeController(
         startupLoadingReportJob?.cancel()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()
+        startupSourceFailoverJob?.cancel()
+        startupSourceFailoverJob = null
         sourceChipErrorDismissJob?.cancel()
         sourceStreamsScope?.cancel()
         sourceStreamsScope = null

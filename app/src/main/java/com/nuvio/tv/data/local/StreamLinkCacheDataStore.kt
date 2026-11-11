@@ -24,8 +24,48 @@ data class CachedStreamLink(
     val sources: List<String>? = null,
     val bingeGroup: String? = null,
     val contentLanguage: String? = null,
-    val year: String? = null
-)
+    val year: String? = null,
+    val isDebridLink: Boolean = false,
+    val clientResolveService: String? = null,
+    val clientResolveMagnet: String? = null,
+    val clientResolveType: String? = null,
+    val clientResolveTorrentName: String? = null
+) {
+    fun isDebridUrlExpired(nowMs: Long = System.currentTimeMillis()): Boolean =
+        (isDebridLink || isLikelyDebridCdnUrl(url)) &&
+            cachedAtMs > 0L &&
+            (nowMs - cachedAtMs) > DEBRID_CDN_MAX_AGE_MS
+
+    fun canRefreshDebridLink(): Boolean =
+        !clientResolveService.isNullOrBlank() &&
+            (!infoHash.isNullOrBlank() ||
+                !clientResolveMagnet.isNullOrBlank() ||
+                !clientResolveTorrentName.isNullOrBlank() ||
+                !filename.isNullOrBlank())
+
+    companion object {
+        const val DEBRID_CDN_MAX_AGE_MS = 45L * 60L * 1000L
+
+        private val DEBRID_CDN_HOSTS = listOf(
+            "tb-cdn.io",
+            "torbox.app",
+            "premiumize.me",
+            "real-debrid.com",
+            "rdeb.io",
+            "alldebrid",
+            "debrid-link",
+            "offcloud",
+            "easynews",
+            "put.io"
+        )
+
+        fun isLikelyDebridCdnUrl(url: String): Boolean {
+            if (url.isBlank()) return false
+            val lower = url.lowercase()
+            return DEBRID_CDN_HOSTS.any { lower.contains(it) }
+        }
+    }
+}
 
 @Singleton
 class StreamLinkCacheDataStore @Inject constructor(
@@ -52,8 +92,14 @@ class StreamLinkCacheDataStore @Inject constructor(
         sources: List<String>? = null,
         bingeGroup: String? = null,
         contentLanguage: String? = null,
-        year: String? = null
+        year: String? = null,
+        isDebridLink: Boolean = false,
+        clientResolveService: String? = null,
+        clientResolveMagnet: String? = null,
+        clientResolveType: String? = null,
+        clientResolveTorrentName: String? = null
     ) {
+        val effectiveIsDebrid = isDebridLink || CachedStreamLink.isLikelyDebridCdnUrl(url)
         val payload = JSONObject().apply {
             put("url", url)
             put("streamName", streamName)
@@ -68,6 +114,11 @@ class StreamLinkCacheDataStore @Inject constructor(
             bingeGroup?.let { put("bingeGroup", it) }
             contentLanguage?.let { put("contentLanguage", it) }
             year?.let { put("year", it) }
+            put("isDebridLink", effectiveIsDebrid)
+            clientResolveService?.let { put("clientResolveService", it) }
+            clientResolveMagnet?.let { put("clientResolveMagnet", it) }
+            clientResolveType?.let { put("clientResolveType", it) }
+            clientResolveTorrentName?.let { put("clientResolveTorrentName", it) }
         }.toString()
 
         store().edit { prefs ->
@@ -75,7 +126,11 @@ class StreamLinkCacheDataStore @Inject constructor(
         }
     }
 
-    suspend fun getValid(contentKey: String, maxAgeMs: Long): CachedStreamLink? {
+    suspend fun getValid(
+        contentKey: String,
+        maxAgeMs: Long,
+        allowExpiredDebridRefresh: Boolean = false
+    ): CachedStreamLink? {
         if (maxAgeMs <= 0L) return null
 
         val key = cachePrefKey(contentKey)
@@ -121,7 +176,12 @@ class StreamLinkCacheDataStore @Inject constructor(
                 sources = sources,
                 bingeGroup = json.optString("bingeGroup", "").ifBlank { null },
                 contentLanguage = json.optString("contentLanguage", "").ifBlank { null },
-                year = json.optString("year", "").ifBlank { null }
+                year = json.optString("year", "").ifBlank { null },
+                isDebridLink = json.optBoolean("isDebridLink", false),
+                clientResolveService = json.optString("clientResolveService", "").ifBlank { null },
+                clientResolveMagnet = json.optString("clientResolveMagnet", "").ifBlank { null },
+                clientResolveType = json.optString("clientResolveType", "").ifBlank { null },
+                clientResolveTorrentName = json.optString("clientResolveTorrentName", "").ifBlank { null }
             )
         }.getOrNull()
 
@@ -129,9 +189,29 @@ class StreamLinkCacheDataStore @Inject constructor(
             store().edit { mutablePrefs ->
                 mutablePrefs.remove(key)
             }
+            return null
+        }
+
+        if (parsed.isDebridUrlExpired()) {
+            if (allowExpiredDebridRefresh && parsed.canRefreshDebridLink()) {
+                return parsed
+            }
+            if (!parsed.canRefreshDebridLink()) {
+                store().edit { mutablePrefs ->
+                    mutablePrefs.remove(key)
+                }
+            }
+            return null
         }
 
         return parsed
+    }
+
+    suspend fun remove(contentKey: String) {
+        val key = cachePrefKey(contentKey)
+        store().edit { prefs ->
+            prefs.remove(key)
+        }
     }
 
     private fun cachePrefKey(contentKey: String): Preferences.Key<String> {

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -41,6 +42,7 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,6 +98,10 @@ import com.nuvio.tv.ui.screens.home.HeroBackdropState
 import com.nuvio.tv.ui.screens.stream.PlayerChoiceDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import coil3.imageLoader
+import coil3.memory.MemoryCache
+import coil3.request.ImageRequest
+import coil3.size.Precision
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.domain.model.localizedTitle
 import com.nuvio.tv.ui.components.LoadingIndicator
@@ -104,7 +110,8 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
 import com.nuvio.tv.ui.util.localizedContentType
 import com.nuvio.tv.ui.util.localizedGenreLabel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -143,22 +150,41 @@ fun LibraryScreen(
     var showCloudPlayerChoice by remember { mutableStateOf(false) }
     val primaryFocusRequester = remember { FocusRequester() }
     val selectorFocusRequester = remember { FocusRequester() }
+    val firstPosterFocusRequester = remember { FocusRequester() }
+    val restorePosterFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     var pendingPrimaryFocus by remember { mutableStateOf(true) }
     var lastFocusedPosterKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val visibleItemKeys = remember(uiState.visibleItems) {
-        uiState.visibleItems.map { "${it.type}:${it.id}" }
+    val visibleItemIndexByKey = remember(uiState.visibleItems) {
+        buildMap(uiState.visibleItems.size) {
+            uiState.visibleItems.forEachIndexed { index, item ->
+                put("${item.type}:${item.id}", index)
+            }
+        }
     }
-    val visibleItemIndexByKey = remember(visibleItemKeys) {
-        visibleItemKeys.withIndex().associate { (index, key) -> key to index }
+    val firstVisiblePosterKey = remember(uiState.visibleItems) {
+        uiState.visibleItems.firstOrNull()?.let { "${it.type}:${it.id}" }
     }
-    val posterFocusRequesters = remember(visibleItemKeys) {
-        visibleItemKeys.associateWith { FocusRequester() }
+    val activeRestoreKey = remember(pendingPrimaryFocus, lastFocusedPosterKey, visibleItemIndexByKey) {
+        if (pendingPrimaryFocus) {
+            lastFocusedPosterKey?.takeIf { it in visibleItemIndexByKey }
+        } else {
+            null
+        }
     }
-    val firstVisiblePosterKey = visibleItemKeys.firstOrNull()
-    val posterCardStyle = PosterCardDefaults.Style.copy(
-        cornerRadius = uiState.posterCardCornerRadiusDp.dp
-    )
+    val posterCardStyle = remember(uiState.posterCardCornerRadiusDp) {
+        PosterCardDefaults.Style.copy(
+            cornerRadius = uiState.posterCardCornerRadiusDp.dp
+        )
+    }
+    val density = LocalDensity.current
+    val requestWidthPx = remember(posterCardStyle.width, density) {
+        with(density) { posterCardStyle.width.roundToPx().coerceAtLeast(1) }
+    }
+    val requestHeightPx = remember(posterCardStyle.height, density) {
+        with(density) { posterCardStyle.height.roundToPx().coerceAtLeast(1) }
+    }
+    val firstVisibleIndex by remember { derivedStateOf { gridState.firstVisibleItemIndex } }
 
     val routeCloudPlayback: (CloudLibraryPlaybackInfo) -> Unit = { info ->
         scope.launch {
@@ -191,17 +217,16 @@ fun LibraryScreen(
         if (!uiState.isLoading && pendingPrimaryFocus) {
             val restoreKey = lastFocusedPosterKey
             val restoreIndex = restoreKey?.let { visibleItemIndexByKey[it] }
-            val restoreRequester = restoreKey?.let { posterFocusRequesters[it] }
 
             var focused = false
-            if (restoreIndex != null && restoreRequester != null) {
+            if (restoreIndex != null && restoreKey != null) {
                 if (gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0) {
                     runCatching { gridState.scrollToItem(restoreIndex) }
                 }
-                focused = runCatching { restoreRequester.requestFocus() }.isSuccess
+                focused = runCatching { restorePosterFocusRequester.requestFocus() }.isSuccess
                 if (!focused) {
                     delay(16)
-                    focused = runCatching { restoreRequester.requestFocus() }.isSuccess
+                    focused = runCatching { restorePosterFocusRequester.requestFocus() }.isSuccess
                 }
             }
 
@@ -218,15 +243,64 @@ fun LibraryScreen(
 
     LaunchedEffect(uiState.sortSelectionVersion, firstVisiblePosterKey) {
         if (uiState.sortSelectionVersion <= 0L) return@LaunchedEffect
-        val targetKey = firstVisiblePosterKey ?: return@LaunchedEffect
+        firstVisiblePosterKey ?: return@LaunchedEffect
         runCatching { gridState.scrollToItem(0) }
         var focused = false
         repeat(6) {
-            focused = posterFocusRequesters[targetKey]
-                ?.let { requester -> runCatching { requester.requestFocus() }.isSuccess }
-                ?: false
+            focused = runCatching { firstPosterFocusRequester.requestFocus() }.isSuccess
             if (focused) return@LaunchedEffect
             delay(24)
+        }
+    }
+
+    val filterScrollKey = remember(
+        uiState.selectedListKey,
+        uiState.selectedTypeTab?.key,
+        uiState.selectedGenre,
+        uiState.selectedYear,
+        uiState.selectedWatchedFilter
+    ) {
+        listOf(
+            uiState.selectedListKey,
+            uiState.selectedTypeTab?.key,
+            uiState.selectedGenre,
+            uiState.selectedYear,
+            uiState.selectedWatchedFilter.key
+        )
+    }
+    var previousFilterScrollKey by remember { mutableStateOf(filterScrollKey) }
+    LaunchedEffect(filterScrollKey) {
+        if (filterScrollKey != previousFilterScrollKey) {
+            previousFilterScrollKey = filterScrollKey
+            if (!pendingPrimaryFocus) {
+                runCatching { gridState.scrollToItem(0) }
+            }
+        }
+    }
+
+    LaunchedEffect(viewMode, uiState.visibleItems, firstVisibleIndex, requestWidthPx, requestHeightPx) {
+        if (viewMode != LibraryViewMode.Saved || uiState.visibleItems.isEmpty()) return@LaunchedEffect
+        delay(60)
+        val items = uiState.visibleItems
+        val startIndex = (firstVisibleIndex - 4).coerceAtLeast(0)
+        val endIndex = (firstVisibleIndex + 24).coerceAtMost(items.lastIndex)
+        if (startIndex > endIndex) return@LaunchedEffect
+        val imageLoader = activityContext.imageLoader
+        val cache = imageLoader.memoryCache
+        withContext(Dispatchers.IO) {
+            for (idx in startIndex..endIndex) {
+                val posterUrl = items[idx].poster?.takeIf { it.isNotBlank() } ?: continue
+                val cacheKey = "${posterUrl}_${requestWidthPx}x${requestHeightPx}_v0"
+                if (cache?.get(MemoryCache.Key(cacheKey)) != null) continue
+                imageLoader.enqueue(
+                    ImageRequest.Builder(activityContext)
+                        .data(posterUrl)
+                        .size(width = requestWidthPx, height = requestHeightPx)
+                        .precision(Precision.EXACT)
+                        .memoryCacheKey(cacheKey)
+                        .build()
+                )
+            }
         }
     }
 
@@ -433,17 +507,27 @@ fun LibraryScreen(
                 }
             }
 
-            items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
+            itemsIndexed(
+                items = uiState.visibleItems,
+                key = { _, item -> "${item.type}:${item.id}" },
+                contentType = { _, _ -> "library_poster" }
+            ) { index, item ->
                 val focusKey = "${item.type}:${item.id}"
                 val isSeries = item.type.equals("series", ignoreCase = true) || item.type.equals("tv", ignoreCase = true)
                 val previewForLongPress = remember(item) {
                     item.toMetaPreview().copy(posterShape = PosterShape.POSTER)
                 }
+                val itemFocusRequester = when {
+                    activeRestoreKey == focusKey -> restorePosterFocusRequester
+                    index == 0 -> firstPosterFocusRequester
+                    else -> null
+                }
                 GridContentCard(
                     item = previewForLongPress,
                     posterCardStyle = posterCardStyle,
+                    imageCrossfade = false,
                     isWatched = if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds,
-                    focusRequester = posterFocusRequesters[focusKey],
+                    focusRequester = itemFocusRequester,
                     showLabel = true,
                     onFocused = {
                         lastFocusedPosterKey = focusKey

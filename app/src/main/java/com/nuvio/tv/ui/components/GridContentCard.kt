@@ -68,7 +68,7 @@ fun GridContentCard(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showLabel: Boolean = true,
     showLogo: Boolean = false,
-    imageCrossfade: Boolean = true,
+    imageCrossfade: Boolean = false,
     isWatched: Boolean = false,
     focusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
@@ -190,11 +190,12 @@ fun GridContentCard(
                 val bgCardColor = NuvioTheme.colors.BackgroundCard
                 val bgPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
                 val revalidationKey = com.nuvio.tv.core.image.rememberImageRevalidationKey(item.poster)
-                val imageModel = remember(item.poster, requestWidthPx, requestHeightPx, revalidationKey) {
+                val imageModel = remember(item.poster, requestWidthPx, requestHeightPx, revalidationKey, imageCrossfade) {
                     val builder = ImageRequest.Builder(context)
                         .data(item.poster)
                         .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
+                        .precision(coil3.size.Precision.EXACT)
                         .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}_v$revalidationKey")
                     if (revalidationKey > 0) {
                         builder.placeholderMemoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}_v${revalidationKey - 1}")
@@ -231,10 +232,12 @@ fun GridContentCard(
                                 onDrawBehind { drawRect(gradient) }
                             }
                     )
-                    val logoRequest = remember(item.logo) {
+                    val logoRequest = remember(item.logo, requestWidthPx, requestHeightPx) {
                         ImageRequest.Builder(context)
                             .data(item.logo)
-                            .crossfade(true)
+                            .size(width = requestWidthPx, height = requestHeightPx)
+                            .precision(coil3.size.Precision.INEXACT)
+                            .crossfade(false)
                             .build()
                     }
                     AsyncImage(

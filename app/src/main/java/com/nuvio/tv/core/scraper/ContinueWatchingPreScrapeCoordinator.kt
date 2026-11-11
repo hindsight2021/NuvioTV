@@ -240,8 +240,13 @@ class ContinueWatchingPreScrapeCoordinator(
             var directStreamName = candidate.name ?: candidate.title ?: "Stream"
             var candidateFilename = candidate.behaviorHints?.filename
             var candidateVideoSize = candidate.behaviorHints?.videoSize
+            val isDebridCandidate = candidate.isDirectDebrid() || candidate.isCachedLocalDebridTorrent()
+            val resolveMeta = candidate.clientResolve
+            val candidateInfoHash = candidate.getEffectiveInfoHash() ?: resolveMeta?.infoHash
+            val candidateFileIdx = candidate.getEffectiveFileIdx() ?: resolveMeta?.fileIdx
+            val candidateSources = candidate.sources ?: resolveMeta?.sources
 
-            if (candidate.isDirectDebrid() || candidate.isCachedLocalDebridTorrent()) {
+            if (isDebridCandidate) {
                 val debridResult = directDebridResolver.resolveToPlayableStream(candidate, season, episode)
                 if (debridResult is DirectDebridPlayableResult.Success) {
                     directPlayableUrl = debridResult.stream.getStreamUrl()
@@ -261,9 +266,18 @@ class ContinueWatchingPreScrapeCoordinator(
                     filename = candidateFilename,
                     videoHash = null,
                     videoSize = candidateVideoSize,
+                    infoHash = candidateInfoHash,
+                    fileIdx = candidateFileIdx,
+                    sources = candidateSources,
                     bingeGroup = candidate.behaviorHints?.bingeGroup ?: preferredBingeGroup,
                     contentLanguage = null,
-                    year = null
+                    year = null,
+                    isDebridLink = isDebridCandidate ||
+                        com.nuvio.tv.data.local.CachedStreamLink.isLikelyDebridCdnUrl(directPlayableUrl),
+                    clientResolveService = resolveMeta?.service,
+                    clientResolveMagnet = resolveMeta?.magnetUri,
+                    clientResolveType = resolveMeta?.type,
+                    clientResolveTorrentName = resolveMeta?.torrentName
                 )
                 Log.i(TAG, "Successfully pre-scraped and cached direct link for $contentKey ($directStreamName)")
             }
