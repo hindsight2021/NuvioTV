@@ -48,6 +48,21 @@ val devProperties = Properties().apply {
     }
 }
 
+val tmdbApiKey = providers.environmentVariable("TMDB_API_KEY").orNull?.trim()?.takeIf { it.isNotBlank() }
+    ?: resolveProperty(devProperties, localProperties, "TMDB_API_KEY")
+
+// Check the resolved task graph so aggregate and abbreviated release commands
+// cannot package an APK without authentication. JVM tests remain credential-free.
+gradle.taskGraph.whenReady {
+    val releasePackaging = Regex("^(assemble|bundle|package|install)(Full|Playstore)Release(Bundle)?$")
+    if (allTasks.any { it.project.path == project.path && releasePackaging.matches(it.name) }) {
+        check(tmdbApiKey.matches(Regex("[0-9a-fA-F]{32}"))) {
+            "Release packaging requires a valid-format TMDB_API_KEY (v3). " +
+                "Set TMDB_API_KEY in the environment, local.dev.properties, or local.properties."
+        }
+    }
+}
+
 val enableDoviNative = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "DOVI_NATIVE_ENABLED")
 )
@@ -104,8 +119,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1157
-        versionName = "0.9.4-plus.99"
+        versionCode = 1158
+        versionName = "0.9.4-plus.100"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "https://api.introdb.app/")}\"")
@@ -118,7 +133,7 @@ android {
         buildConfigField("String", "TRAKT_REDIRECT_URI", "\"${localProperties.getProperty("TRAKT_REDIRECT_URI", "urn:ietf:wg:oauth:2.0:oob")}\"")
         buildConfigField("String", "SIMKL_CLIENT_ID", buildConfigString(resolveProperty(devProperties, localProperties, "SIMKL_CLIENT_ID", "dc20e0db975583b15096267cee79cd23b1f56d4bd301ce3c51e4a96a49c834a6")))
         buildConfigField("String", "SIMKL_APP_NAME", buildConfigString(resolveProperty(devProperties, localProperties, "SIMKL_APP_NAME", "nuvio")))
-        buildConfigField("String", "TMDB_API_KEY", "\"${localProperties.getProperty("TMDB_API_KEY", "")}\"")
+        buildConfigField("String", "TMDB_API_KEY", buildConfigString(tmdbApiKey))
         buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://nuvio.tv/tv-login")}\"")
         buildConfigField("String", "DEVICE_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("DEVICE_LOGIN_WEB_BASE_URL", "https://nuvio.tv/link")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
