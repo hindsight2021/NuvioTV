@@ -1010,9 +1010,13 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
+        val canonicalMeta = meta.withResolvedMovieId(itemId, _effectiveContentId.value)
+        if (canonicalMeta.id != meta.id) {
+            Log.d(TAG, "Preserved resolved movie identity: ${meta.id} -> ${canonicalMeta.id}")
+        }
         // Fire all independent async jobs immediately — they run in parallel.
-        loadMoreLikeThisAsync(meta)
-        val enriched = enrichMeta(meta)
+        loadMoreLikeThisAsync(canonicalMeta)
+        val enriched = enrichMeta(canonicalMeta)
 
         syncEffectiveContentId(enriched)
         val cachedNextToWatch = metaDetailsSessionState.getNextToWatch(
