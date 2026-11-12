@@ -131,6 +131,7 @@ internal fun PlaybackSettingsSections(
     onShowContinueWatchingPreScrapeCountDialog: () -> Unit = {},
     onSetContinueWatchingPreScrapeEnabled: (Boolean) -> Unit = {},
     onSetContinueWatchingPreScrapeCount: (Int) -> Unit = {},
+    onSetSpeculativePreWarmEnabled: (Boolean) -> Unit = {},
     onSetPostPlayRecommendationsEnabled: (Boolean) -> Unit,
     onSetPostPlayMovieThresholdPercent: (Int) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
@@ -574,6 +575,7 @@ internal fun PlaybackSettingsSections(
                 onSetEnableEndCreditsNextEpisodePrompt = onSetEnableEndCreditsNextEpisodePrompt,
                 onSetContinueWatchingPreScrapeEnabled = onSetContinueWatchingPreScrapeEnabled,
                 onShowContinueWatchingPreScrapeCountDialog = onShowContinueWatchingPreScrapeCountDialog,
+                onSetSpeculativePreWarmEnabled = onSetSpeculativePreWarmEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )
 

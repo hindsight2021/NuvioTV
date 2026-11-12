@@ -927,6 +927,8 @@
     <string name="autoplay_continue_watching_prescrape_count_sub">Pre-scrape up to %1$d items</string>
     <string name="autoplay_continue_watching_prescrape_count_dialog_title">Continue Watching Pre-scrape Limit</string>
     <string name="prescrape_count_items">%1$d items</string>
+    <string name="autoplay_speculative_prewarm">Speculative Next-Episode Pre-Warming</string>
+    <string name="autoplay_speculative_prewarm_sub">Quietly resolves and disk-buffers the opening segment of the next episode or Autopilot pick in the final 90s for zero-loading transitions</string>
     <string name="autoplay_mode_manual">Manual (choose stream)</string>
     <string name="autoplay_mode_first">Auto-play first source</string>
     <string name="autoplay_mode_regex">Auto-play regex match</string>

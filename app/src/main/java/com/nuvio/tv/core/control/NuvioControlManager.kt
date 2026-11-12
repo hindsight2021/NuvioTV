@@ -6,6 +6,9 @@ import com.nuvio.tv.core.ai.ThematicChannelGenerator
 import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.core.server.NuvioControlServer
 import com.nuvio.tv.data.simkl.calendar.SimklCalendarRepository
+import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.domain.repository.CatalogRepository
+import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -38,7 +41,10 @@ class NuvioControlManager @Inject constructor(
     private val remoteControlSettingsDataStore: RemoteControlSettingsDataStore,
     private val thematicChannelGenerator: ThematicChannelGenerator,
     private val watchProgressRepository: WatchProgressRepository,
-    private val simklCalendarRepository: SimklCalendarRepository
+    private val simklCalendarRepository: SimklCalendarRepository,
+    private val addonRepository: AddonRepository,
+    private val catalogRepository: CatalogRepository,
+    private val streamRepository: StreamRepository
 ) {
 
     companion object {
@@ -137,6 +143,9 @@ class NuvioControlManager @Inject constructor(
             thematicChannelGenerator = thematicChannelGenerator,
             watchProgressRepository = watchProgressRepository,
             simklCalendarRepository = simklCalendarRepository,
+            addonRepository = addonRepository,
+            catalogRepository = catalogRepository,
+            streamRepository = streamRepository,
             port = port
         )
 

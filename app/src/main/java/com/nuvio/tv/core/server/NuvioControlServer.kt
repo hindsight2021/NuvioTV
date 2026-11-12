@@ -13,15 +13,26 @@ import com.nuvio.tv.core.control.PlayerPlaybackBridge
 import com.nuvio.tv.core.control.QueueItemSnapshot
 import com.nuvio.tv.core.control.QueueSnapshot
 import com.nuvio.tv.core.control.RemoteControlSettingsDataStore
+import com.nuvio.tv.core.livetv.AiBroadcastNetwork
+import com.nuvio.tv.core.livetv.LiveTvManager
+import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
 import com.nuvio.tv.data.simkl.calendar.CalendarItemType
 import com.nuvio.tv.data.simkl.calendar.SimklCalendarRepository
+import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.domain.repository.CatalogRepository
+import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import fi.iki.elonen.NanoHTTPD
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayInputStream
 import java.time.LocalDate
 
@@ -39,6 +50,9 @@ class NuvioControlServer(
     private val thematicChannelGenerator: ThematicChannelGenerator,
     private val watchProgressRepository: WatchProgressRepository,
     private val simklCalendarRepository: SimklCalendarRepository,
+    private val addonRepository: AddonRepository? = null,
+    private val catalogRepository: CatalogRepository? = null,
+    private val streamRepository: StreamRepository? = null,
     port: Int = 8910
 ) : NanoHTTPD(port) {
 
@@ -50,6 +64,7 @@ class NuvioControlServer(
         private const val HEADER_AUTHORIZATION = "authorization"
         private const val HEADER_API_KEY = "x-nuvio-key"
         private const val PARAM_TOKEN = "token"
+        private const val PARAM_KEY = "key"
         private const val PARAM_PIN = "pin"
     }
 
@@ -57,9 +72,15 @@ class NuvioControlServer(
         val uri = session.uri ?: "/"
         val method = session.method
 
-        // Web remote interface
-        if (uri == "/" || uri == "/index.html") {
-            return serveWebRemote()
+        // Zero-install PWA static assets (unauthenticated; API calls require pairing token)
+        when (uri) {
+            "/", "/index.html" -> return serveText(NuvioWebRemoteHtml.HTML, "text/html; charset=utf-8")
+            "/app.js" -> return serveText(NuvioWebRemoteScript.JS, "application/javascript; charset=utf-8")
+            "/manifest.webmanifest", "/manifest.json" -> return serveText(
+                NuvioWebRemoteHtml.MANIFEST_JSON,
+                "application/manifest+json; charset=utf-8"
+            )
+            "/icon.svg" -> return serveText(NuvioWebRemoteHtml.ICON_SVG, "image/svg+xml; charset=utf-8")
         }
 
         // Pairing endpoints (unauthenticated)
@@ -88,6 +109,10 @@ class NuvioControlServer(
     private fun route(session: IHTTPSession, uri: String, method: Method): Response {
         return when {
             uri == "$API_PREFIX/status" && method == Method.GET -> handleStatus()
+            uri == "$API_PREFIX/telemetry" && method == Method.GET -> handleTelemetry()
+            uri == "$API_PREFIX/streams/current" && method == Method.GET -> handleCurrentStreams()
+            uri == "$API_PREFIX/streams/browse" && method == Method.GET -> handleBrowseStreams(session)
+            uri == "$API_PREFIX/search" && method == Method.GET -> handleCatalogSearch(session)
             uri == "$API_PREFIX/continue-watching" && method == Method.GET -> handleContinueWatching()
             uri == "$API_PREFIX/calendar/tv" && method == Method.GET -> handleTvCalendar(session)
 
@@ -103,12 +128,14 @@ class NuvioControlServer(
             uri == "$API_PREFIX/playback/subtitle_track" && method == Method.POST -> handleSubtitleTrack(session)
             uri == "$API_PREFIX/playback/subtitles/disable" && method == Method.POST -> dispatch(AppCommand.DisableSubtitles)
             uri == "$API_PREFIX/playback/skip_intro" && method == Method.POST -> dispatch(AppCommand.SkipIntro)
+            uri == "$API_PREFIX/playback/hotswap" && method == Method.POST -> handleHotSwap(session)
 
             uri == "$API_PREFIX/navigation/open" && method == Method.POST -> handleOpenScreen(session)
             uri == "$API_PREFIX/navigation/search" && method == Method.POST -> handleSearch(session)
             uri == "$API_PREFIX/navigation/dpad" && method == Method.POST -> handleDpad(session)
 
             uri == "$API_PREFIX/play" && method == Method.POST -> handlePlayMedia(session)
+            uri == "$API_PREFIX/play/stream" && method == Method.POST -> handlePlayStream(session)
             uri.startsWith("$API_PREFIX/play/requests/") && (method == Method.GET || method == Method.DELETE) -> {
                 val id = uri.removePrefix("$API_PREFIX/play/requests/")
                 if (method == Method.DELETE) appCommandBus.cancelPlaybackRequest(id)
@@ -121,6 +148,9 @@ class NuvioControlServer(
             uri == "$API_PREFIX/channels/curated" && method == Method.POST -> handleCuratedPlay(session)
             uri == "$API_PREFIX/channels/thematic" && method == Method.POST -> handleThematic(session)
 
+            uri == "$API_PREFIX/livetv/channels" && method == Method.GET -> handleLiveTvChannels()
+            uri == "$API_PREFIX/livetv/tune" && method == Method.POST -> handleLiveTvTune(session)
+
             uri == "$API_PREFIX/ai/command" && method == Method.POST -> handleAiCommand(session)
 
             uri == "$API_PREFIX/queue" && method == Method.GET -> handleQueue()
@@ -128,6 +158,8 @@ class NuvioControlServer(
             uri == "$API_PREFIX/queue" && method == Method.POST -> handleQueueAdd(session, isPlayNext = false)
             uri == "$API_PREFIX/queue/play-next" && method == Method.POST -> handleQueueAdd(session, isPlayNext = true)
             uri == "$API_PREFIX/queue/advance" && method == Method.POST -> dispatch(AppCommand.AdvanceQueue)
+            uri == "$API_PREFIX/queue/reorder" && method == Method.POST -> handleQueueReorder(session)
+            uri == "$API_PREFIX/queue/remove" && method == Method.POST -> handleQueueRemove(session)
 
             else -> jsonError(Response.Status.NOT_FOUND, "Endpoint not found: $uri")
         }
@@ -143,8 +175,9 @@ class NuvioControlServer(
             ?.substring(BEARER_PREFIX.length)?.trim()
         val apiKey = session.headers[HEADER_API_KEY]?.trim()
         val paramToken = session.parameters[PARAM_TOKEN]?.firstOrNull()?.trim()
+        val paramKey = session.parameters[PARAM_KEY]?.firstOrNull()?.trim()
 
-        return (bearer == expected) || (apiKey == expected) || (paramToken == expected)
+        return (bearer == expected) || (apiKey == expected) || (paramToken == expected) || (paramKey == expected)
     }
 
     private fun handleStatus(): Response {
@@ -501,265 +534,203 @@ class NuvioControlServer(
         )
     }
 
-    private fun serveWebRemote(): Response {
-        return newFixedLengthResponse(
-            Response.Status.OK,
-            "text/html; charset=utf-8",
-            ByteArrayInputStream(WEB_REMOTE_HTML.toByteArray(Charsets.UTF_8)),
-            WEB_REMOTE_HTML.toByteArray(Charsets.UTF_8).size.toLong()
-        )
+    private fun handleTelemetry(): Response {
+        val telemetry = runBlocking { playerPlaybackBridge.sampleTelemetry() }
+        return jsonResponse(gson.toJson(telemetry))
     }
 
-    private val WEB_REMOTE_HTML: String = """
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            <title>Nuvio TV Remote</title>
-            <style>
-                * { box-sizing: border-box; }
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                    background: #0f1115;
-                    color: #eaeaea;
-                    margin: 0;
-                    padding: 20px;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                }
-                .container { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
-                .header { text-align: center; }
-                .header h1 { font-size: 22px; margin: 0 0 4px; color: #fff; font-weight: 700; }
-                .header p { font-size: 13px; color: #8a8f98; margin: 0; }
-                .card {
-                    background: #181b21;
-                    border: 1px solid #272c35;
-                    border-radius: 14px;
-                    padding: 16px;
-                }
-                .status-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; color: #fff; }
-                .status-sub { font-size: 13px; color: #9da3af; margin: 0; }
-                .grid-dpad {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 10px;
-                    width: 240px;
-                    margin: 0 auto;
-                }
-                .grid-playback {
-                    display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 8px;
-                }
-                .grid-nav {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 8px;
-                }
-                button {
-                    background: #232730;
-                    color: #fff;
-                    border: 1px solid #333945;
-                    border-radius: 12px;
-                    padding: 14px 10px;
-                    font-size: 14px;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: background 0.15s, transform 0.05s;
-                    user-select: none;
-                }
-                button:active { background: #373f50; transform: scale(0.97); }
-                .btn-accent { background: #e50914; border-color: #f40612; }
-                .btn-accent:active { background: #b80710; }
-                .input-group { display: flex; gap: 8px; }
-                input[type="text"] {
-                    flex: 1;
-                    padding: 12px 14px;
-                    border-radius: 10px;
-                    border: 1px solid #333945;
-                    background: #121419;
-                    color: #fff;
-                    font-size: 14px;
-                    outline: none;
-                }
-                input[type="text"]:focus { border-color: #6366f1; }
-                .pin-box {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                    text-align: center;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>Nuvio TV Remote</h1>
-                    <p id="connStatus">Connecting...</p>
-                </div>
+    private fun handleCurrentStreams(): Response {
+        val streams = playerPlaybackBridge.getCurrentStreams()
+        return jsonResponse(gson.toJson(mapOf("streams" to streams)))
+    }
 
-                <div class="card" id="pairCard" style="display:none;">
-                    <div class="pin-box">
-                        <div style="font-weight: 600;">Pair with TV</div>
-                        <p style="font-size: 12px; color: #8a8f98; margin:0;">Enter the 4-digit PIN displayed on your TV</p>
-                        <div class="input-group">
-                            <input type="text" id="pinInput" placeholder="4-digit PIN" maxlength="4" style="text-align:center; font-size:18px; letter-spacing:4px;" />
-                            <button onclick="pairWithPin()" class="btn-accent">Pair</button>
-                        </div>
-                    </div>
-                </div>
+    private fun handleHotSwap(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val url = body.get("streamUrl")?.asString?.takeIf { it.isNotBlank() }
+            ?: return jsonError(Response.Status.BAD_REQUEST, "streamUrl required")
+        val title = body.get("title")?.asString ?: "Stream"
+        val headersObj = body.getAsJsonObject("headers")
+        val headers = headersObj?.entrySet()
+            ?.mapNotNull { (k, v) -> v.takeIf { it.isJsonPrimitive }?.asString?.let { k to it } }
+            ?.toMap()
+            ?: emptyMap()
+        return dispatch(AppCommand.HotSwapStream(streamUrl = url, title = title, headers = headers))
+    }
 
-                <div class="card" id="nowPlayingCard">
-                    <div class="status-title" id="trackTitle">Idle</div>
-                    <p class="status-sub" id="trackSubtitle">Ready to play</p>
-                </div>
+    private fun handlePlayStream(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val url = body.get("streamUrl")?.asString?.takeIf { it.isNotBlank() }
+            ?: return jsonError(Response.Status.BAD_REQUEST, "streamUrl required")
+        val title = body.get("title")?.asString ?: "Stream"
+        val headersObj = body.getAsJsonObject("headers")
+        val headers = headersObj?.entrySet()
+            ?.mapNotNull { (k, v) -> v.takeIf { it.isJsonPrimitive }?.asString?.let { k to it } }
+            ?.toMap()
+            ?: emptyMap()
+        return dispatch(AppCommand.PlayStream(streamUrl = url, title = title, headers = headers))
+    }
 
-                <div class="card">
-                    <div class="grid-playback">
-                        <button onclick="cmd('/playback/previous')">⏮</button>
-                        <button onclick="cmd('/playback/play_pause')" class="btn-accent" id="btnPlayPause">⏯</button>
-                        <button onclick="cmd('/playback/stop')">⏹</button>
-                        <button onclick="cmd('/playback/next')">⏭</button>
-                    </div>
-                </div>
+    private fun handleCatalogSearch(session: IHTTPSession): Response {
+        val query = session.parameters["q"]?.firstOrNull()?.trim().orEmpty()
+        if (query.isBlank()) return jsonError(Response.Status.BAD_REQUEST, "q required")
+        val addonRepo = addonRepository ?: return jsonError(Response.Status.SERVICE_UNAVAILABLE, "Search repository unavailable")
+        val catalogRepo = catalogRepository ?: return jsonError(Response.Status.SERVICE_UNAVAILABLE, "Catalog repository unavailable")
 
-                <div class="card" style="display:flex; justify-content:center;">
-                    <div class="grid-dpad">
-                        <div></div>
-                        <button onclick="dpad('up')">▲</button>
-                        <div></div>
-                        <button onclick="dpad('left')">◀</button>
-                        <button onclick="dpad('select')" class="btn-accent" style="font-weight:700;">OK</button>
-                        <button onclick="dpad('right')">▶</button>
-                        <div></div>
-                        <button onclick="dpad('down')">▼</button>
-                        <div></div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="grid-nav">
-                        <button onclick="dpad('back')">↩ Back</button>
-                        <button onclick="openScreen('home')">Home</button>
-                        <button onclick="openScreen('search')">Search</button>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div style="font-size:12px; font-weight:600; margin-bottom:8px; color:#8a8f98;">AI TV OPERATOR</div>
-                    <div class="input-group">
-                        <input type="text" id="aiInput" placeholder="e.g. 'Play Below Deck S4E7'..." />
-                        <button onclick="sendAi()" class="btn-accent">Ask</button>
-                    </div>
-                </div>
-            </div>
-
-            <script>
-                let token = localStorage.getItem('nuvio_token') || '';
-                const urlParams = new URLSearchParams(window.location.search);
-                const pinFromUrl = urlParams.get('pin');
-
-                async function init() {
-                    if (pinFromUrl && !token) {
-                        document.getElementById('pinInput').value = pinFromUrl;
-                        await pairWithPin();
-                        return;
-                    }
-                    if (!token) {
-                        document.getElementById('pairCard').style.display = 'block';
-                        document.getElementById('connStatus').innerText = 'Pairing required';
-                    } else {
-                        startPolling();
-                    }
-                }
-
-                async function pairWithPin() {
-                    const pin = document.getElementById('pinInput').value.trim();
-                    if (!pin) return;
-                    try {
-                        const res = await fetch('/api/v1/pair', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ pin: pin })
-                        });
-                        const data = await res.json();
-                        if (data.token) {
-                            token = data.token;
-                            localStorage.setItem('nuvio_token', token);
-                            document.getElementById('pairCard').style.display = 'none';
-                            startPolling();
-                        } else {
-                            alert('Pairing failed: ' + (data.error || 'Invalid PIN'));
+        val items = runBlocking {
+            val addons = withTimeoutOrNull(2_000) { addonRepo.getInstalledAddons().first() }.orEmpty()
+            val searchCatalogs = addons
+                .filter { it.enabled }
+                .flatMap { addon ->
+                    addon.catalogs
+                        .filter { cat ->
+                            cat.extra.any { it.name.equals("search", ignoreCase = true) } ||
+                                cat.extraSupported.any { it.equals("search", ignoreCase = true) }
                         }
-                    } catch (e) {
-                        alert('Pairing error: ' + e.message);
-                    }
+                        .map { cat -> addon to cat }
                 }
+                .take(8)
 
-                async function api(path, method = 'POST', body = null) {
-                    if (!token) return;
-                    const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
-                    const opts = { method, headers };
-                    if (body) opts.body = JSON.stringify(body);
-                    const res = await fetch('/api/v1' + path, opts);
-                    if (res.status === 401) {
-                        localStorage.removeItem('nuvio_token');
-                        token = '';
-                        document.getElementById('pairCard').style.display = 'block';
-                        document.getElementById('connStatus').innerText = 'Pairing expired';
-                    }
-                    return res.json();
-                }
-
-                function cmd(path) { api(path); }
-                function dpad(k) { api('/navigation/dpad', 'POST', { key: k }); }
-                function openScreen(s) { api('/navigation/open', 'POST', { screen: s }); }
-                function sendAi() {
-                    const val = document.getElementById('aiInput').value.trim();
-                    if (val) {
-                        api('/ai/command', 'POST', { prompt: val });
-                        document.getElementById('aiInput').value = '';
-                    }
-                }
-
-                async function refreshStatus() {
-                    if (!token) return;
-                    try {
-                        const res = await fetch('/api/v1/status', {
-                            headers: { 'Authorization': 'Bearer ' + token }
-                        });
-                        if (res.status === 401) {
-                            token = '';
-                            document.getElementById('pairCard').style.display = 'block';
-                            return;
+            coroutineScope {
+                searchCatalogs.map { (addon, cat) ->
+                    async {
+                        withTimeoutOrNull(6_000) {
+                            catalogRepo.getCatalog(
+                                addonBaseUrl = addon.baseUrl,
+                                addonId = addon.id,
+                                addonName = addon.displayName,
+                                catalogId = cat.id,
+                                catalogName = cat.name,
+                                type = cat.apiType,
+                                skip = 0,
+                                skipStep = cat.pageSize ?: 100,
+                                extraArgs = mapOf("search" to query),
+                                supportsSkip = false
+                            ).firstOrNull { it !is NetworkResult.Loading }
                         }
-                        const data = await res.json();
-                        document.getElementById('connStatus').innerText = 'Connected (' + (data.deviceIp || 'Local') + ')';
-                        if (data.playback && data.playback.isActive) {
-                            document.getElementById('trackTitle').innerText = data.playback.title || 'Playing';
-                            const sub = data.playback.contentName ? (data.playback.contentName + (data.playback.season ? ' S' + data.playback.season + 'E' + data.playback.episode : '')) : (data.playback.streamName || '');
-                            document.getElementById('trackSubtitle').innerText = sub || 'In playback';
-                            document.getElementById('btnPlayPause').innerText = data.playback.isPlaying ? '⏸' : '▶';
-                        } else {
-                            document.getElementById('trackTitle').innerText = 'Idle';
-                            document.getElementById('trackSubtitle').innerText = data.activeScreen ? ('Screen: ' + data.activeScreen) : 'Ready to play';
-                            document.getElementById('btnPlayPause').innerText = '⏯';
-                        }
-                    } catch (e) {
-                        document.getElementById('connStatus').innerText = 'Reconnecting...';
                     }
+                }.awaitAll()
+            }.flatMap { result ->
+                val row = (result as? NetworkResult.Success)?.data ?: return@flatMap emptyList()
+                row.items.map { meta ->
+                    mapOf(
+                        "id" to meta.id,
+                        "name" to meta.name,
+                        "type" to meta.apiType,
+                        "poster" to meta.poster,
+                        "releaseInfo" to meta.releaseInfo,
+                        "catalogName" to row.catalogName
+                    )
                 }
+            }.distinctBy { "${it["type"]}:${it["id"]}" }.take(60)
+        }
+        return jsonResponse(gson.toJson(mapOf("query" to query, "items" to items)))
+    }
 
-                function startPolling() {
-                    refreshStatus();
-                    setInterval(refreshStatus, 2000);
+    private fun handleBrowseStreams(session: IHTTPSession): Response {
+        val id = session.parameters["id"]?.firstOrNull()?.trim().orEmpty()
+        if (id.isBlank()) return jsonError(Response.Status.BAD_REQUEST, "id required")
+        val type = session.parameters["type"]?.firstOrNull()?.trim().orEmpty().ifBlank { "movie" }
+        val season = session.parameters["season"]?.firstOrNull()?.toIntOrNull()
+        val episode = session.parameters["episode"]?.firstOrNull()?.toIntOrNull()
+        val title = session.parameters["title"]?.firstOrNull()?.trim()
+        val repo = streamRepository ?: return jsonError(Response.Status.SERVICE_UNAVAILABLE, "Stream repository unavailable")
+
+        val videoId = if (type.equals("series", ignoreCase = true) && season != null && episode != null && !id.contains(':')) {
+            "$id:$season:$episode"
+        } else {
+            id
+        }
+
+        val streams = runBlocking {
+            val res = withTimeoutOrNull(8_500) {
+                repo.getStreamsFromAllAddons(
+                    type = type,
+                    videoId = videoId,
+                    season = season,
+                    episode = episode,
+                    forceRefresh = false,
+                    title = title
+                ).firstOrNull { it is NetworkResult.Success || it is NetworkResult.Error }
+            }
+            val addons = (res as? NetworkResult.Success)?.data.orEmpty()
+            addons.flatMap { group ->
+                group.streams.mapNotNull { st ->
+                    val url = st.getStreamUrl() ?: return@mapNotNull null
+                    val label = listOfNotNull(st.name?.takeIf { it.isNotBlank() }, st.title?.takeIf { it.isNotBlank() })
+                        .joinToString(" · ")
+                        .ifBlank { group.addonName }
+                    val headers = st.behaviorHints?.proxyHeaders?.request.orEmpty()
+                    mapOf(
+                        "url" to url,
+                        "label" to label,
+                        "title" to (st.title ?: st.name ?: label),
+                        "description" to st.description,
+                        "addonName" to group.addonName,
+                        "quality" to st.quality,
+                        "headers" to headers
+                    )
                 }
+            }.take(60)
+        }
+        return jsonResponse(gson.toJson(mapOf("id" to id, "type" to type, "streams" to streams)))
+    }
 
-                init();
-            </script>
-        </body>
-        </html>
-    """.trimIndent()
+    private fun handleQueueReorder(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val fromIndex = body.get("fromIndex")?.asInt
+            ?: return jsonError(Response.Status.BAD_REQUEST, "fromIndex required")
+        val toIndex = body.get("toIndex")?.asInt
+            ?: return jsonError(Response.Status.BAD_REQUEST, "toIndex required")
+        return dispatch(AppCommand.ReorderQueue(fromIndex = fromIndex, toIndex = toIndex))
+    }
+
+    private fun handleQueueRemove(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val index = body.get("index")?.asInt
+            ?: return jsonError(Response.Status.BAD_REQUEST, "index required")
+        return dispatch(AppCommand.RemoveQueueItem(index = index))
+    }
+
+    private fun handleLiveTvChannels(): Response {
+        LiveTvManager.refreshAiChannels(context)
+        val nowMs = System.currentTimeMillis()
+        val channels = LiveTvManager.channels.value.map { ch ->
+            val nowProgTitle = ch.aiConfigId?.let { cfgId ->
+                AiBroadcastNetwork.findChannelById(context, cfgId)?.let { cfg ->
+                    AiBroadcastNetwork.buildScheduleForChannel(cfg, nowMs, slotCount = 1)
+                        .firstOrNull { it.isOnAirNow }
+                        ?.program?.title
+                }
+            } ?: ch.currentProgram.title
+            mapOf(
+                "id" to ch.id,
+                "number" to ch.number,
+                "name" to ch.name,
+                "callSign" to (ch.callSign ?: ""),
+                "category" to ch.category.name,
+                "isAiNetwork" to ch.isAiNetwork,
+                "djHostName" to ch.djHostName,
+                "nowPlaying" to (nowProgTitle.takeIf { it.isNotBlank() } ?: ch.tagline)
+            )
+        }
+        return jsonResponse(gson.toJson(mapOf("channels" to channels)))
+    }
+
+    private fun handleLiveTvTune(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val channelId = body.get("channelId")?.asString?.takeIf { it.isNotBlank() }
+            ?: return jsonError(Response.Status.BAD_REQUEST, "channelId required")
+        val startFromBeginning = body.get("startFromBeginning")?.asBoolean ?: false
+        return dispatch(AppCommand.TuneLiveChannel(channelId = channelId, startFromBeginning = startFromBeginning))
+    }
+
+    private fun serveText(content: String, contentType: String): Response {
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            contentType,
+            ByteArrayInputStream(bytes),
+            bytes.size.toLong()
+        )
+    }
 }

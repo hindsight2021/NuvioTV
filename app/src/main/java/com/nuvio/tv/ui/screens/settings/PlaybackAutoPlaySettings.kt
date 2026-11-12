@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Recommend
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.History
@@ -104,6 +105,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetEnableEndCreditsNextEpisodePrompt: (Boolean) -> Unit = {},
     onSetContinueWatchingPreScrapeEnabled: (Boolean) -> Unit = {},
     onShowContinueWatchingPreScrapeCountDialog: () -> Unit = {},
+    onSetSpeculativePreWarmEnabled: (Boolean) -> Unit = {},
     onItemFocused: () -> Unit = {}
 ) {
     val effectiveAutoPlaySource = if (
@@ -159,6 +161,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
+
+    item(key = "autoplay_speculative_prewarm") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Speed,
+            title = stringResource(R.string.autoplay_speculative_prewarm),
+            subtitle = stringResource(R.string.autoplay_speculative_prewarm_sub),
+            isChecked = playerSettings.speculativePreWarmEnabled,
+            onCheckedChange = onSetSpeculativePreWarmEnabled,
+            onFocused = onItemFocused
+        )
     }
 
     item(key = "autoplay_mode") {

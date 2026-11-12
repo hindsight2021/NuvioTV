@@ -394,6 +394,13 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
             autopilotEnabledSetting = settings.autopilotEnabled
             autopilotModeSetting = settings.autopilotMode
+            speculativePreWarmEnabledSetting = settings.speculativePreWarmEnabled
+            if (!settings.speculativePreWarmEnabled) {
+                preWarmJob?.cancel()
+                preWarmJob = null
+                preWarmedTargetKey = null
+                com.nuvio.tv.core.player.NextEpisodePreWarmer.resetStatus()
+            }
             _uiState.update {
                 it.copy(
                     streamAutoPlayMode = settings.streamAutoPlayMode,

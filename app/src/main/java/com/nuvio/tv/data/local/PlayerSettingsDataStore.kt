@@ -287,6 +287,7 @@ data class PlayerSettings(
     val streamReuseLastLinkCacheHours: Int = 1,
     val continueWatchingPreScrapeEnabled: Boolean = true,
     val continueWatchingPreScrapeCount: Int = DEFAULT_CONTINUE_WATCHING_PRESCRAPE_COUNT,
+    val speculativePreWarmEnabled: Boolean = true,
     val externalPlayerForwardSubtitles: Boolean = false,
     val externalPlayerSendSkipSegments: Boolean = false,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
@@ -563,6 +564,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
     private val continueWatchingPreScrapeEnabledKey = booleanPreferencesKey("continue_watching_prescrape_enabled")
     private val continueWatchingPreScrapeCountKey = intPreferencesKey("continue_watching_prescrape_count")
+    private val speculativePreWarmEnabledKey = booleanPreferencesKey("speculative_prewarm_enabled")
     private val externalPlayerForwardSubtitlesKey = booleanPreferencesKey("external_player_forward_subtitles")
     private val externalPlayerSendSkipSegmentsKey = booleanPreferencesKey("external_player_send_skip_segments")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
@@ -986,6 +988,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
                 continueWatchingPreScrapeEnabled = prefs[continueWatchingPreScrapeEnabledKey] ?: true,
                 continueWatchingPreScrapeCount = (prefs[continueWatchingPreScrapeCountKey] ?: PlayerSettings.DEFAULT_CONTINUE_WATCHING_PRESCRAPE_COUNT).coerceIn(1, 10),
+                speculativePreWarmEnabled = prefs[speculativePreWarmEnabledKey] ?: true,
                 externalPlayerForwardSubtitles = prefs[externalPlayerForwardSubtitlesKey] ?: false,
                 externalPlayerSendSkipSegments = prefs[externalPlayerSendSkipSegmentsKey] ?: false,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
@@ -1439,6 +1442,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setContinueWatchingPreScrapeCount(count: Int) {
         store().edit { prefs ->
             prefs[continueWatchingPreScrapeCountKey] = count.coerceIn(1, 10)
+        }
+    }
+
+    suspend fun setSpeculativePreWarmEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[speculativePreWarmEnabledKey] = enabled
         }
     }
 

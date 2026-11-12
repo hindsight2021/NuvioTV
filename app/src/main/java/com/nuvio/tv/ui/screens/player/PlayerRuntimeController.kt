@@ -384,6 +384,9 @@ class PlayerRuntimeController(
     internal var preResolveNextEpisodeJob: Job? = null
     internal var preResolvedNextStream: Stream? = null
     internal var preResolvedNextVideoId: String? = null
+    internal var speculativePreWarmEnabledSetting: Boolean = true
+    internal var preWarmJob: Job? = null
+    internal var preWarmedTargetKey: String? = null
     internal var debridResolveJob: Job? = null
     internal var stillWatchingPromptJob: Job? = null
     internal var startupLoadingReportJob: Job? = null

@@ -2,7 +2,19 @@
 
 package com.nuvio.tv.ui.screens.livetv
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.nuvio.tv.core.livetv.AiBroadcastChannelConfig
+import com.nuvio.tv.core.livetv.AiBroadcastNetwork
+import com.nuvio.tv.core.livetv.AiBroadcastPreferences
+import com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator
+import com.nuvio.tv.core.playlist.PlaylistItem
+import com.nuvio.tv.core.playlist.PlaylistManager
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -70,11 +82,29 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 @Composable
 fun LiveTvScreen(
     onNavigateBack: () -> Unit = {},
-    onPlayChannelStream: ((LiveTvChannel) -> Unit)? = null
+    onPlayChannelStream: ((LiveTvChannel) -> Unit)? = null,
+    onTuneAiChannel: ((LiveTvChannel, Boolean) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val allChannels by LiveTvManager.channels.collectAsState()
     var selectedCategory by remember { mutableStateOf(LiveTvCategory.ALL) }
+    val broadcastPrefs = remember { AiBroadcastPreferences(context) }
+    var aiNetworkEnabled by remember { mutableStateOf(broadcastPrefs.isEnabled) }
+    var djBumpersEnabled by remember { mutableStateOf(broadcastPrefs.djBumpersEnabled) }
+    var showCreateOrEditDialog by remember { mutableStateOf(false) }
+    var editingAiConfig by remember { mutableStateOf<AiBroadcastChannelConfig?>(null) }
+    var isRegeneratingLineup by remember { mutableStateOf(false) }
+    var scheduleVersion by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        LiveTvManager.refreshAiChannels(context)
+    }
+
+    val visibleCategories = remember(aiNetworkEnabled) {
+        if (aiNetworkEnabled) LiveTvCategory.entries
+        else LiveTvCategory.entries.filter { it != LiveTvCategory.AI_NETWORK }
+    }
 
     val filteredChannels = remember(allChannels, selectedCategory) {
         if (selectedCategory == LiveTvCategory.ALL) {
@@ -130,7 +160,9 @@ fun LiveTvScreen(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
-                modifier = Modifier.padding(bottom = NuvioTheme.spacing.md)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = NuvioTheme.spacing.xl, bottom = NuvioTheme.spacing.md)
             ) {
                 Icon(
                     imageVector = Icons.Default.LiveTv,
@@ -156,6 +188,76 @@ fun LiveTvScreen(
                         color = Color(0xFF4DA6FF)
                     )
                 }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Button(
+                    onClick = {
+                        AudioFeedbackManager.playClick(context)
+                        val next = !aiNetworkEnabled
+                        aiNetworkEnabled = next
+                        broadcastPrefs.isEnabled = next
+                        LiveTvManager.refreshAiChannels(context)
+                        if (!next && selectedCategory == LiveTvCategory.AI_NETWORK) {
+                            selectedCategory = LiveTvCategory.ALL
+                        }
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (aiNetworkEnabled) Color(0xFF7C3AED) else NuvioTheme.colors.SurfaceVariant,
+                        focusedContainerColor = Color.White
+                    ),
+                    shape = ButtonDefaults.shape(RoundedCornerShape(20.dp)),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(
+                        text = if (aiNetworkEnabled) "AI TV: ON" else "AI TV: OFF",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = if (aiNetworkEnabled) Color.White else NuvioTheme.colors.TextSecondary
+                    )
+                }
+
+                if (aiNetworkEnabled) {
+                    Button(
+                        onClick = {
+                            AudioFeedbackManager.playClick(context)
+                            val next = !djBumpersEnabled
+                            djBumpersEnabled = next
+                            broadcastPrefs.djBumpersEnabled = next
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (djBumpersEnabled) NuvioTheme.colors.Primary.copy(alpha = 0.85f) else NuvioTheme.colors.SurfaceVariant,
+                            focusedContainerColor = Color.White
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(20.dp)),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = if (djBumpersEnabled) "DJ Voice: ON" else "DJ Voice: OFF",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            AudioFeedbackManager.playClick(context)
+                            editingAiConfig = null
+                            showCreateOrEditDialog = true
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.SurfaceVariant,
+                            focusedContainerColor = Color.White
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(20.dp)),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = "+ AI Channel",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+                }
             }
 
             // Category Filter Pills
@@ -163,7 +265,7 @@ fun LiveTvScreen(
                 horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
                 contentPadding = PaddingValues(bottom = NuvioTheme.spacing.md)
             ) {
-                items(LiveTvCategory.entries) { category ->
+                items(visibleCategories) { category ->
                     val isSelected = category == selectedCategory
                     Card(
                         onClick = {
@@ -222,7 +324,19 @@ fun LiveTvScreen(
                         Card(
                             onClick = {
                                 AudioFeedbackManager.playClick(context)
-                                if (!channel.streamUrl.isNullOrBlank() && onPlayChannelStream != null) {
+                                if (channel.isAiNetwork || AiBroadcastNetwork.isAiBroadcastUrl(channel.streamUrl)) {
+                                    if (onTuneAiChannel != null) {
+                                        onTuneAiChannel(channel, false)
+                                    } else {
+                                        scope.launch {
+                                            AiBroadcastTuneCoordinator.tuneAiChannel(
+                                                context = context,
+                                                channelId = channel.id,
+                                                startFromBeginning = false
+                                            )
+                                        }
+                                    }
+                                } else if (!channel.streamUrl.isNullOrBlank() && onPlayChannelStream != null) {
                                     onPlayChannelStream(channel)
                                 } else {
                                     LiveTvManager.tuneToChannel(context, channel)
@@ -407,73 +521,157 @@ fun LiveTvScreen(
 
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
 
-                            // Action Button: Tune to Bell Fibe
-                            // Action Button: Watch Live or Tune to Bell Fibe
-                            Button(
-                                onClick = {
-                                    AudioFeedbackManager.playClick(context)
-                                    if (!channel.streamUrl.isNullOrBlank() && onPlayChannelStream != null) {
-                                        onPlayChannelStream(channel)
-                                    } else {
-                                        LiveTvManager.tuneToChannel(context, channel)
-                                    }
-                                },
-                                colors = ButtonDefaults.colors(
-                                    containerColor = NuvioTheme.colors.Primary,
-                                    focusedContainerColor = Color.White
-                                ),
-                                shape = ButtonDefaults.shape(RoundedCornerShape(12.dp)),
-                                modifier = Modifier.height(48.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = Color.Black
-                                    )
-                                    Text(
-                                        text = if (!channel.streamUrl.isNullOrBlank()) "Watch Live in Nuvio" else "Tune Channel ${channel.number} on Bell Fibe",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.Black
-                                    )
-                                }
+                            val aiConfig = remember(channel.aiConfigId, allChannels, scheduleVersion) {
+                                channel.aiConfigId?.let { AiBroadcastNetwork.findChannelById(context, it) }
                             }
-
-                            // Next Program Preview Card
-                            channel.nextProgram?.let { nextProg ->
-                                Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.5f))
-                                        .padding(NuvioTheme.spacing.md)
+                            if (channel.isAiNetwork && aiConfig != null) {
+                                val aiSlots = remember(aiConfig, scheduleVersion) {
+                                    AiBroadcastNetwork.buildScheduleForChannel(aiConfig, slotCount = 5)
+                                }
+                                AiBroadcastEpgTimelinePanel(
+                                    config = aiConfig,
+                                    slots = aiSlots,
+                                    isRegenerating = isRegeneratingLineup,
+                                    onTuneLive = {
+                                        AudioFeedbackManager.playClick(context)
+                                        if (onTuneAiChannel != null) {
+                                            onTuneAiChannel(channel, false)
+                                        } else {
+                                            scope.launch {
+                                                AiBroadcastTuneCoordinator.tuneAiChannel(
+                                                    context = context,
+                                                    channelId = channel.id,
+                                                    startFromBeginning = false
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onWatchBeginning = {
+                                        AudioFeedbackManager.playClick(context)
+                                        if (onTuneAiChannel != null) {
+                                            onTuneAiChannel(channel, true)
+                                        } else {
+                                            scope.launch {
+                                                AiBroadcastTuneCoordinator.tuneAiChannel(
+                                                    context = context,
+                                                    channelId = channel.id,
+                                                    startFromBeginning = true
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onQueueBlock = {
+                                        AudioFeedbackManager.playClick(context)
+                                        val blockItems = aiSlots.map { slot ->
+                                            val p = slot.program
+                                            PlaylistItem(
+                                                contentId = p.contentId,
+                                                videoId = null,
+                                                title = p.title,
+                                                seriesTitle = if (p.mediaType == "series") p.title else null,
+                                                season = p.season,
+                                                episode = p.episode,
+                                                thumbnail = p.backdropUrl,
+                                                mediaType = p.mediaType
+                                            )
+                                        }
+                                        PlaylistManager.startThematicChannel(blockItems)
+                                        Toast.makeText(
+                                            context,
+                                            "Queued ${blockItems.size} programs from ${aiConfig.name}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    onRegenerateLineup = {
+                                        if (isRegeneratingLineup) return@AiBroadcastEpgTimelinePanel
+                                        AudioFeedbackManager.playClick(context)
+                                        isRegeneratingLineup = true
+                                        scope.launch {
+                                            val res = AiBroadcastNetwork.regenerateChannelLineupWithAi(context, aiConfig)
+                                            isRegeneratingLineup = false
+                                            res.onSuccess {
+                                                LiveTvManager.refreshAiChannels(context)
+                                                scheduleVersion++
+                                                Toast.makeText(context, "Refreshed ${aiConfig.name} lineup!", Toast.LENGTH_SHORT).show()
+                                            }.onFailure { err ->
+                                                Toast.makeText(context, "Refresh failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    },
+                                    onCustomize = {
+                                        AudioFeedbackManager.playClick(context)
+                                        editingAiConfig = aiConfig
+                                        showCreateOrEditDialog = true
+                                    }
+                                )
+                            } else {
+                                // Action Button: Watch Live or Tune to Bell Fibe
+                                Button(
+                                    onClick = {
+                                        AudioFeedbackManager.playClick(context)
+                                        if (!channel.streamUrl.isNullOrBlank() && onPlayChannelStream != null) {
+                                            onPlayChannelStream(channel)
+                                        } else {
+                                            LiveTvManager.tuneToChannel(context, channel)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = NuvioTheme.colors.Primary,
+                                        focusedContainerColor = Color.White
+                                    ),
+                                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp)),
+                                    modifier = Modifier.height(48.dp)
                                 ) {
-                                    Column {
-                                        Text(
-                                            text = "UP NEXT",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = NuvioTheme.colors.TextTertiary
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color.Black
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = nextProg.title,
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                            color = NuvioTheme.colors.TextPrimary
+                                            text = if (!channel.streamUrl.isNullOrBlank()) "Watch Live in Nuvio" else "Tune Channel ${channel.number} on Bell Fibe",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.Black
                                         )
-                                        nextProg.description?.let { d ->
+                                    }
+                                }
+
+                                // Next Program Preview Card
+                                channel.nextProgram?.let { nextProg ->
+                                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(NuvioTheme.colors.SurfaceVariant.copy(alpha = 0.5f))
+                                            .padding(NuvioTheme.spacing.md)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "UP NEXT",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = NuvioTheme.colors.TextTertiary
+                                            )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
-                                                text = d,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = NuvioTheme.colors.TextSecondary,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
+                                                text = nextProg.title,
+                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                color = NuvioTheme.colors.TextPrimary
                                             )
+                                            nextProg.description?.let { d ->
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = d,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = NuvioTheme.colors.TextSecondary,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -482,6 +680,27 @@ fun LiveTvScreen(
                     }
                 }
             }
+        }
+
+        if (showCreateOrEditDialog) {
+            AiBroadcastCreateOrEditDialog(
+                existingConfig = editingAiConfig,
+                onSaved = { saved ->
+                    showCreateOrEditDialog = false
+                    editingAiConfig = null
+                    scheduleVersion++
+                    focusedChannel = allChannels.firstOrNull { it.id == saved.id } ?: focusedChannel
+                },
+                onDeleted = {
+                    showCreateOrEditDialog = false
+                    editingAiConfig = null
+                    scheduleVersion++
+                },
+                onDismiss = {
+                    showCreateOrEditDialog = false
+                    editingAiConfig = null
+                }
+            )
         }
     }
 }

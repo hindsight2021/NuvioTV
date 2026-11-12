@@ -1761,6 +1761,15 @@ fun PlayerScreen(
                 .zIndex(2.6f)
         )
 
+        val onAirAiStation by com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator.onAirStation.collectAsState()
+        com.nuvio.tv.ui.screens.livetv.AiOnAirStationBug(
+            station = onAirAiStation,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 24.dp, end = 28.dp)
+                .zIndex(2.2f)
+        )
+
         // Audio track dialog
         AudioSelectionOverlay(
             visible = uiState.showAudioOverlay,

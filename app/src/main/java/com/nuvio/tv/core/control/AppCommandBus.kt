@@ -2,8 +2,12 @@ package com.nuvio.tv.core.control
 
 import android.content.Context
 import com.nuvio.tv.core.ai.ThematicChannelGenerator
+import com.nuvio.tv.core.livetv.AiBroadcastNetwork
+import com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator
+import com.nuvio.tv.core.livetv.LiveTvManager
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
+import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ambient.coordinator.AmbientCoordinator
 import com.nuvio.tv.ambient.coordinator.AmbientIdleController
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -92,7 +96,23 @@ class AppCommandBus @Inject constructor(
 
             is AppCommand.PlayStream -> {
                 dropScreensaver()
-                CommandResult.Unavailable("Direct stream injection requires active player session")
+                if (playerPlaybackBridge.playbackSnapshot.value?.isActive == true) {
+                    playerPlaybackBridge.hotSwapStream(command.streamUrl, command.title, command.headers)
+                } else {
+                    navigationCommander.navigateTo(
+                        Screen.Player.createRoute(
+                            streamUrl = command.streamUrl,
+                            title = command.title,
+                            headers = command.headers
+                        )
+                    )
+                    CommandResult.Success("Launching stream: ${command.title}")
+                }
+            }
+
+            is AppCommand.HotSwapStream -> {
+                dropScreensaver()
+                playerPlaybackBridge.hotSwapStream(command.streamUrl, command.title, command.headers)
             }
 
             // --- Queue commands ---
@@ -115,6 +135,60 @@ class AppCommandBus @Inject constructor(
             AppCommand.AdvanceQueue -> {
                 val next = PlaylistManager.next()
                 CommandResult.Success("Advanced queue", next)
+            }
+
+            is AppCommand.ReorderQueue -> {
+                val queue = PlaylistManager.queue.value
+                if (command.fromIndex in queue.indices && command.toIndex in queue.indices) {
+                    PlaylistManager.move(command.fromIndex, command.toIndex)
+                    CommandResult.Success("Reordered queue")
+                } else {
+                    CommandResult.Unavailable("Invalid queue indices: ${command.fromIndex} -> ${command.toIndex}")
+                }
+            }
+
+            is AppCommand.RemoveQueueItem -> {
+                val target = PlaylistManager.queue.value.getOrNull(command.index)
+                if (target != null) {
+                    PlaylistManager.removeAt(command.index)
+                    CommandResult.Success("Removed ${target.title}")
+                } else {
+                    CommandResult.Unavailable("Invalid queue index: ${command.index}")
+                }
+            }
+
+            is AppCommand.TuneLiveChannel -> {
+                dropScreensaver()
+                val aiConfig = AiBroadcastNetwork.findChannelById(context, command.channelId)
+                if (aiConfig != null) {
+                    AiBroadcastTuneCoordinator.tuneAiChannel(
+                        context = context,
+                        channelId = aiConfig.id,
+                        startFromBeginning = command.startFromBeginning,
+                        justPlayCoordinator = justPlayCoordinator
+                    )
+                } else {
+                    val channel = LiveTvManager.getChannelById(command.channelId)
+                        ?: return CommandResult.Unavailable("Channel not found: ${command.channelId}")
+                    val url = channel.streamUrl
+                    if (!url.isNullOrBlank()) {
+                        navigationCommander.navigateTo(
+                            Screen.Player.createRoute(
+                                streamUrl = url,
+                                title = channel.name,
+                                contentName = channel.currentProgram.title,
+                                contentType = "live",
+                                poster = channel.currentProgram.posterUrl,
+                                backdrop = channel.currentProgram.backdropUrl,
+                                videoId = channel.id
+                            )
+                        )
+                        CommandResult.Success("Tuned ${channel.name}")
+                    } else {
+                        LiveTvManager.tuneToChannel(context, channel)
+                        CommandResult.Success("Launched ${channel.name}")
+                    }
+                }
             }
 
             // --- Thematic channel commands ---

@@ -2046,7 +2046,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
     }
 }
 
-internal fun PlayerRuntimeController.buildStreamInfoData(): StreamInfoData {
+fun PlayerRuntimeController.buildStreamInfoData(): StreamInfoData {
     val state = _uiState.value
     val selectedAudio = state.audioTracks.firstOrNull { it.isSelected }
     val selectedSubtitle = state.subtitleTracks.firstOrNull { it.isSelected }
