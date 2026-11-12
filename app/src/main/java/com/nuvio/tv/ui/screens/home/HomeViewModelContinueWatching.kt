@@ -606,8 +606,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     // badges appear correctly even when the cache was written before the
                     // new season aired (fixes stale isNewSeasonRelease/isReleaseAlert/hasAired).
                     val (freshHasAired, freshIsReleaseAlert, freshIsNewSeasonRelease) = recalculateCachedReleaseBadge(cached)
-                    val cachedInLibrary = isSeriesInLibrary(cached.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
-                    val cachedHasActiveProgress = inProgressOnly.any { areContentIdsSiblings(it.progress.contentId, cached.contentId, cwLastShowIdSiblings) } || cachedInLibrary
+                    val cachedHasActiveProgress = snapshot.items.any { areContentIdsSiblings(it.contentId, cached.contentId, cwLastShowIdSiblings) }
                     if (isContinueWatchingNextUpDismissed(cached.contentId, cached.season, cached.episode,
                             freshIsReleaseAlert, dismissedNextUp, cachedHasActiveProgress)) return@mapNotNull null
                     // Respect "show unaired" setting (use recalculated hasAired)
@@ -1004,9 +1003,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         val watchedCount = computeWatchedEpisodeCount(seed.contentId, seed, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
                         val inLibrary = isSeriesInLibrary(seed.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
                         val seedSiblingIds = (cwLastShowIdSiblings[seed.contentId].orEmpty() + seed.contentId)
-                        val hasProgress = snapshot.items.any {
-                            it.contentId in seedSiblingIds && shouldTreatAsInProgressForContinueWatching(it)
-                        } || inLibrary
+                        val hasProgress = snapshot.items.any { it.contentId in seedSiblingIds }
                         val item = buildNextUpItem(
                             progress = remappedSeed,
                             showUnairedNextUp = showUnairedNextUp,
@@ -1097,9 +1094,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 val watchedCount = computeWatchedEpisodeCount(seed.contentId, seed, snapshot.watchedItems, snapshot.items, cwLastShowIdSiblings)
                                 val inLibrary = isSeriesInLibrary(seed.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
                                 val seedSiblingIds = (cwLastShowIdSiblings[seed.contentId].orEmpty() + seed.contentId)
-                                val hasProgress = snapshot.items.any {
-                                    it.contentId in seedSiblingIds && shouldTreatAsInProgressForContinueWatching(it)
-                                } || inLibrary
+                                val hasProgress = snapshot.items.any { it.contentId in seedSiblingIds }
                                 val item = buildNextUpItem(
                                     progress = remappedSeed,
                                     showUnairedNextUp = showUnairedNextUp,
@@ -1324,8 +1319,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             // Respect "show unaired" setting for all items including cached.
                             (it.info.hasAired || showUnairedNextUp) &&
                             run {
-                                val inLibrary = isSeriesInLibrary(it.info.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
-                                val hasActiveProgress = inProgressOnly.any { inProg -> areContentIdsSiblings(inProg.progress.contentId, it.info.contentId, cwLastShowIdSiblings) } || inLibrary
+                                val hasActiveProgress = snapshot.items.any { item -> areContentIdsSiblings(item.contentId, it.info.contentId, cwLastShowIdSiblings) }
                                 !isContinueWatchingNextUpDismissed(it.info.contentId, it.info.season, it.info.episode,
                                     it.info.isReleaseAlert, dismissedNextUp, hasActiveProgress)
                             } &&
@@ -1340,8 +1334,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     val currentSeed = currentSeedByContentId[cid]
                     val episodeAlreadyWatched = currentSeed != null &&
                         (currentSeed.first > cached.info.season || (currentSeed.first == cached.info.season && currentSeed.second >= cached.info.episode))
-                    val cachedInLibrary = isSeriesInLibrary(cached.info.contentId, effectiveSnapshot.libraryItemIds, cwLastShowIdSiblings)
-                    val cachedHasActiveProgress = inProgressOnly.any { inProg -> areContentIdsSiblings(inProg.progress.contentId, cached.info.contentId, cwLastShowIdSiblings) } || cachedInLibrary
+                    val cachedHasActiveProgress = snapshot.items.any { item -> areContentIdsSiblings(item.contentId, cached.info.contentId, cwLastShowIdSiblings) }
                     !episodeAlreadyWatched &&
                         cid !in freshContentIds &&
                         freshContentIds.none { freshId -> areContentIdsSiblings(cid, freshId, cwLastShowIdSiblings) } &&
@@ -2026,9 +2019,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                 val watchedCount = computeWatchedEpisodeCount(remappedProgress.contentId, remappedProgress, watchedItems, allProgress, cwLastShowIdSiblings)
                 val inLibrary = isSeriesInLibrary(remappedProgress.contentId, libraryItemIds, cwLastShowIdSiblings)
                 val remapSiblingIds = (cwLastShowIdSiblings[remappedProgress.contentId].orEmpty() + remappedProgress.contentId)
-                val hasProgress = allProgress.any {
-                    it.contentId in remapSiblingIds && shouldTreatAsInProgressForContinueWatching(it)
-                } || inLibrary
+                val hasProgress = allProgress.any { it.contentId in remapSiblingIds }
                 val nextUp = buildNextUpItem(
                     progress = remappedProgress,
                     showUnairedNextUp = showUnairedNextUp,
