@@ -128,7 +128,9 @@ sealed class DirectDebridResolveResult {
     data class Success(
         val url: String,
         val filename: String?,
-        val videoSize: Long?
+        val videoSize: Long?,
+        val providerId: String? = null,
+        val providerName: String? = null
     ) : DirectDebridResolveResult()
 
     data object MissingApiKey : DirectDebridResolveResult()

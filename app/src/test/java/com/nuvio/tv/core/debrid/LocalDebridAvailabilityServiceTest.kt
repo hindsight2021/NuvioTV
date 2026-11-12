@@ -7,6 +7,7 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.domain.model.StreamDebridCacheState
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -66,14 +67,100 @@ class LocalDebridAvailabilityServiceTest {
         assertEquals(DebridProviders.TORBOX_ID, status?.providerId)
     }
 
+    @Test
+    fun `annotateCachedAvailability falls back to premiumize when torbox uncached`() = runTest {
+        val localDebridService = mockk<LocalDebridService>()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.TORBOX_ID }, any())
+        } returns emptyMap()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.PREMIUMIZE_ID }, any())
+        } returns mapOf(
+            "abc123" to LocalDebridCachedItem(name = "fallback.mkv", size = 456L)
+        )
+        val service = service(localDebridService, premiumizeApiKey = "pm_token")
+
+        val result = service.annotateCachedAvailability(listOf(group(listOf(stream(infoHash = "ABC123")))))
+        val status = result.single().streams.single().debridCacheStatus
+
+        assertEquals(StreamDebridCacheState.CACHED, status?.state)
+        assertEquals(DebridProviders.PREMIUMIZE_ID, status?.providerId)
+        assertEquals(DebridProviders.Premiumize.displayName, status?.providerName)
+        assertEquals("fallback.mkv", status?.cachedName)
+        assertEquals(456L, status?.cachedSize)
+    }
+
+    @Test
+    fun `annotateCachedAvailability falls back to premiumize when torbox check errors`() = runTest {
+        val localDebridService = mockk<LocalDebridService>()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.TORBOX_ID }, any())
+        } returns null
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.PREMIUMIZE_ID }, any())
+        } returns mapOf(
+            "abc123" to LocalDebridCachedItem(name = "fallback.mkv", size = 456L)
+        )
+        val service = service(localDebridService, premiumizeApiKey = "pm_token")
+
+        val result = service.annotateCachedAvailability(listOf(group(listOf(stream(infoHash = "ABC123")))))
+        val status = result.single().streams.single().debridCacheStatus
+
+        assertEquals(StreamDebridCacheState.CACHED, status?.state)
+        assertEquals(DebridProviders.PREMIUMIZE_ID, status?.providerId)
+        assertEquals(DebridProviders.Premiumize.displayName, status?.providerName)
+    }
+
+    @Test
+    fun `annotateCachedAvailability marks not cached when uncached on both providers`() = runTest {
+        val localDebridService = mockk<LocalDebridService>()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.TORBOX_ID }, any())
+        } returns emptyMap()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.PREMIUMIZE_ID }, any())
+        } returns emptyMap()
+        val service = service(localDebridService, premiumizeApiKey = "pm_token")
+
+        val result = service.annotateCachedAvailability(listOf(group(listOf(stream(infoHash = "ABC123")))))
+        val status = result.single().streams.single().debridCacheStatus
+
+        assertEquals(StreamDebridCacheState.NOT_CACHED, status?.state)
+    }
+
+    @Test
+    fun `annotateCachedAvailability only checks torbox when fallback is none`() = runTest {
+        val localDebridService = mockk<LocalDebridService>()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.TORBOX_ID }, any())
+        } returns emptyMap()
+        val service = service(
+            localDebridService = localDebridService,
+            premiumizeApiKey = "pm_token",
+            fallbackResolverProviderId = DebridProviders.FALLBACK_NONE
+        )
+
+        val result = service.annotateCachedAvailability(listOf(group(listOf(stream(infoHash = "ABC123")))))
+        val status = result.single().streams.single().debridCacheStatus
+
+        assertEquals(StreamDebridCacheState.NOT_CACHED, status?.state)
+        coVerify(exactly = 0) {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.PREMIUMIZE_ID }, any())
+        }
+    }
+
     private fun service(
-        localDebridService: LocalDebridService = mockk(relaxed = true)
+        localDebridService: LocalDebridService = mockk(relaxed = true),
+        premiumizeApiKey: String = "",
+        fallbackResolverProviderId: String = ""
     ): LocalDebridAvailabilityService {
         val dataStore = mockk<DebridSettingsDataStore>()
         every { dataStore.settings } returns flowOf(
             DebridSettings(
                 enabled = true,
-                torboxApiKey = "tb_token"
+                torboxApiKey = "tb_token",
+                premiumizeApiKey = premiumizeApiKey,
+                fallbackResolverProviderId = fallbackResolverProviderId
             )
         )
         return LocalDebridAvailabilityService(dataStore, localDebridService)

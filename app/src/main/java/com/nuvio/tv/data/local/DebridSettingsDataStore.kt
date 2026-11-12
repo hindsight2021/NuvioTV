@@ -48,6 +48,7 @@ class DebridSettingsDataStore @Inject constructor(
     private val premiumizeApiKeyKey = stringPreferencesKey("premiumize_api_key")
     private val realDebridApiKeyKey = stringPreferencesKey("real_debrid_api_key")
     private val preferredResolverProviderIdKey = stringPreferencesKey("preferred_resolver_provider_id")
+    private val fallbackResolverProviderIdKey = stringPreferencesKey("fallback_resolver_provider_id")
     private val instantPlaybackPreparationLimitKey = intPreferencesKey("instant_playback_preparation_limit")
     private val streamMaxResultsKey = intPreferencesKey("stream_max_results")
     private val streamSortModeKey = stringPreferencesKey("stream_sort_mode")
@@ -75,17 +76,28 @@ class DebridSettingsDataStore @Inject constructor(
                     codecFilter = enumValueOrDefault(prefs[streamCodecFilterKey], DebridStreamCodecFilter.ANY)
                 )
             val streamSortMode = legacyModeForSortCriteria(streamPreferences.sortCriteria)
+            val torboxKey = prefs[torboxApiKeyKey] ?: ""
+            val premiumizeKey = prefs[premiumizeApiKeyKey] ?: ""
+            val realDebridKey = prefs[realDebridApiKeyKey] ?: ""
+            val preferredId = preferredResolverProviderId(
+                stored = prefs[preferredResolverProviderIdKey],
+                torboxApiKey = torboxKey,
+                premiumizeApiKey = premiumizeKey,
+                realDebridApiKey = realDebridKey
+            )
             DebridSettings(
                 enabled = prefs[enabledKey] ?: false,
                 cloudLibraryEnabled = prefs[cloudLibraryEnabledKey] ?: true,
-                torboxApiKey = prefs[torboxApiKeyKey] ?: "",
-                premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
-                realDebridApiKey = prefs[realDebridApiKeyKey] ?: "",
-                preferredResolverProviderId = preferredResolverProviderId(
-                    stored = prefs[preferredResolverProviderIdKey],
-                    torboxApiKey = prefs[torboxApiKeyKey] ?: "",
-                    premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
-                    realDebridApiKey = prefs[realDebridApiKeyKey] ?: ""
+                torboxApiKey = torboxKey,
+                premiumizeApiKey = premiumizeKey,
+                realDebridApiKey = realDebridKey,
+                preferredResolverProviderId = preferredId,
+                fallbackResolverProviderId = fallbackResolverProviderId(
+                    stored = prefs[fallbackResolverProviderIdKey],
+                    primaryId = preferredId,
+                    torboxApiKey = torboxKey,
+                    premiumizeApiKey = premiumizeKey,
+                    realDebridApiKey = realDebridKey
                 ),
                 instantPlaybackPreparationLimit = normalizeDebridInstantPlaybackPreparationLimit(
                     prefs[instantPlaybackPreparationLimitKey] ?: 0
@@ -127,7 +139,65 @@ class DebridSettingsDataStore @Inject constructor(
 
     suspend fun setPreferredResolverProviderId(providerId: String) {
         val normalized = DebridProviders.byId(providerId)?.id.orEmpty()
-        store().edit { it[preferredResolverProviderIdKey] = normalized }
+        if (normalized.isBlank()) return
+        store().edit { prefs ->
+            val torboxKey = prefs[torboxApiKeyKey] ?: ""
+            val premiumizeKey = prefs[premiumizeApiKeyKey] ?: ""
+            val realDebridKey = prefs[realDebridApiKeyKey] ?: ""
+            val previousPrimary = preferredResolverProviderId(
+                stored = prefs[preferredResolverProviderIdKey],
+                torboxApiKey = torboxKey,
+                premiumizeApiKey = premiumizeKey,
+                realDebridApiKey = realDebridKey
+            )
+            val currentFallback = prefs[fallbackResolverProviderIdKey]?.trim().orEmpty()
+            prefs[preferredResolverProviderIdKey] = normalized
+            if (!currentFallback.equals(DebridProviders.FALLBACK_NONE, ignoreCase = true)) {
+                val normalizedFallback = DebridProviders.byId(currentFallback)?.id
+                val nextFallbackStored = if (
+                    normalizedFallback == normalized &&
+                    previousPrimary.isNotBlank() &&
+                    previousPrimary != normalized
+                ) {
+                    previousPrimary
+                } else {
+                    currentFallback
+                }
+                prefs[fallbackResolverProviderIdKey] = fallbackResolverProviderId(
+                    stored = nextFallbackStored,
+                    primaryId = normalized,
+                    torboxApiKey = torboxKey,
+                    premiumizeApiKey = premiumizeKey,
+                    realDebridApiKey = realDebridKey
+                )
+            }
+        }
+    }
+
+    suspend fun setFallbackResolverProviderId(providerId: String) {
+        val trimmed = providerId.trim()
+        store().edit { prefs ->
+            val torboxKey = prefs[torboxApiKeyKey] ?: ""
+            val premiumizeKey = prefs[premiumizeApiKeyKey] ?: ""
+            val realDebridKey = prefs[realDebridApiKeyKey] ?: ""
+            val primaryId = preferredResolverProviderId(
+                stored = prefs[preferredResolverProviderIdKey],
+                torboxApiKey = torboxKey,
+                premiumizeApiKey = premiumizeKey,
+                realDebridApiKey = realDebridKey
+            )
+            prefs[fallbackResolverProviderIdKey] = if (trimmed.equals(DebridProviders.FALLBACK_NONE, ignoreCase = true)) {
+                DebridProviders.FALLBACK_NONE
+            } else {
+                fallbackResolverProviderId(
+                    stored = DebridProviders.byId(trimmed)?.id,
+                    primaryId = primaryId,
+                    torboxApiKey = torboxKey,
+                    premiumizeApiKey = premiumizeKey,
+                    realDebridApiKey = realDebridKey
+                )
+            }
+        }
     }
 
     suspend fun setProviderApiKey(providerId: String, apiKey: String) {
@@ -138,13 +208,23 @@ class DebridSettingsDataStore @Inject constructor(
             if (normalized.isBlank() && !hasAnyVisibleApiKeyAfter(prefs, provider.id)) {
                 prefs[enabledKey] = false
             }
+            val torboxKey = prefs[torboxApiKeyKey] ?: ""
+            val premiumizeKey = prefs[premiumizeApiKeyKey] ?: ""
+            val realDebridKey = prefs[realDebridApiKeyKey] ?: ""
             val preferred = preferredResolverProviderId(
                 stored = prefs[preferredResolverProviderIdKey],
-                torboxApiKey = prefs[torboxApiKeyKey] ?: "",
-                premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
-                realDebridApiKey = prefs[realDebridApiKeyKey] ?: ""
+                torboxApiKey = torboxKey,
+                premiumizeApiKey = premiumizeKey,
+                realDebridApiKey = realDebridKey
             )
             prefs[preferredResolverProviderIdKey] = preferred
+            prefs[fallbackResolverProviderIdKey] = fallbackResolverProviderId(
+                stored = prefs[fallbackResolverProviderIdKey],
+                primaryId = preferred,
+                torboxApiKey = torboxKey,
+                premiumizeApiKey = premiumizeKey,
+                realDebridApiKey = realDebridKey
+            )
         }
     }
 
@@ -299,23 +379,54 @@ class DebridSettingsDataStore @Inject constructor(
         }
     }
 
+    private fun connectedResolverProviderIds(
+        torboxApiKey: String,
+        premiumizeApiKey: String,
+        realDebridApiKey: String
+    ): List<String> = listOf(
+        DebridProviders.TORBOX_ID to torboxApiKey,
+        DebridProviders.PREMIUMIZE_ID to premiumizeApiKey,
+        DebridProviders.REAL_DEBRID_ID to realDebridApiKey
+    ).mapNotNull { (id, key) ->
+        DebridProviders.byId(id)
+            ?.takeIf { provider -> provider.visibleInUi && key.isNotBlank() }
+            ?.id
+    }
+
     private fun preferredResolverProviderId(
         stored: String?,
         torboxApiKey: String,
         premiumizeApiKey: String,
         realDebridApiKey: String
     ): String {
-        val connected = listOf(
-            DebridProviders.TORBOX_ID to torboxApiKey,
-            DebridProviders.PREMIUMIZE_ID to premiumizeApiKey,
-            DebridProviders.REAL_DEBRID_ID to realDebridApiKey
-        ).mapNotNull { (id, key) ->
-            DebridProviders.byId(id)
-                ?.takeIf { provider -> provider.visibleInUi && key.isNotBlank() }
-                ?.id
-        }
+        val connected = connectedResolverProviderIds(
+            torboxApiKey = torboxApiKey,
+            premiumizeApiKey = premiumizeApiKey,
+            realDebridApiKey = realDebridApiKey
+        )
         val normalizedStored = DebridProviders.byId(stored)?.id
         return connected.firstOrNull { it == normalizedStored } ?: connected.firstOrNull().orEmpty()
+    }
+
+    private fun fallbackResolverProviderId(
+        stored: String?,
+        primaryId: String,
+        torboxApiKey: String,
+        premiumizeApiKey: String,
+        realDebridApiKey: String
+    ): String {
+        val others = connectedResolverProviderIds(
+            torboxApiKey = torboxApiKey,
+            premiumizeApiKey = premiumizeApiKey,
+            realDebridApiKey = realDebridApiKey
+        ).filterNot { it == primaryId }
+        if (others.isEmpty()) return ""
+        val trimmed = stored?.trim().orEmpty()
+        if (trimmed.equals(DebridProviders.FALLBACK_NONE, ignoreCase = true)) {
+            return DebridProviders.FALLBACK_NONE
+        }
+        val normalizedStored = DebridProviders.byId(trimmed)?.id
+        return others.firstOrNull { it == normalizedStored } ?: others.first()
     }
 
     private fun parseStreamPreferences(value: String?): DebridStreamPreferences? {

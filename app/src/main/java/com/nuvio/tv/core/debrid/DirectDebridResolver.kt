@@ -5,6 +5,7 @@ import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamClientResolve
 import com.nuvio.tv.domain.model.StreamDebridCacheState
+import com.nuvio.tv.domain.model.StreamDebridCacheStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -127,11 +128,11 @@ class DirectDebridResolver @Inject constructor(
         val settings = dataStore.settings.first()
         if (!settings.canResolvePlayableLinks) return false
         if (stream.needsLocalDebridResolve()) {
-            return localTorrentResolveCredential(settings) != null
+            return localTorrentResolveCredentials(settings).isNotEmpty()
         }
         if (!stream.isDirectDebrid() || stream.getStreamUrl() != null) return false
         val providerId = DebridProviders.byId(stream.clientResolve?.service)?.id ?: return false
-        return providerId == settings.activeResolverProviderId &&
+        return providerId in settings.orderedResolverProviderIds &&
             settings.apiKeyFor(providerId).isNotBlank()
     }
 
@@ -157,23 +158,41 @@ class DirectDebridResolver @Inject constructor(
         if (stream.needsLocalDebridResolve()) {
             return resolveLocalTorrentStream(stream, season, episode)
         }
-        return when (DebridProviders.byId(stream.clientResolve?.service)?.id) {
-            DebridProviders.TORBOX_ID -> torboxResolver.resolve(stream, season, episode)
-            DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(stream, season, episode)
-            DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
-            else -> DirectDebridResolveResult.Error
+        val settings = dataStore.settings.first()
+        val primaryServiceId = DebridProviders.byId(stream.clientResolve?.service)?.id
+            ?: return DirectDebridResolveResult.Error
+
+        val primaryResult = resolveWithProvider(primaryServiceId, stream, season, episode)
+        if (primaryResult is DirectDebridResolveResult.Success) {
+            return primaryResult.copy(
+                providerId = primaryResult.providerId ?: primaryServiceId,
+                providerName = primaryResult.providerName
+                    ?: DebridProviders.byId(primaryServiceId)?.displayName
+            )
         }
+
+        val fallbackAccounts = localTorrentResolveCredentials(settings)
+            .filter { it.provider.id != primaryServiceId }
+        for (account in fallbackAccounts) {
+            val fallbackResult = resolveLocalTorrentWithAccount(stream, season, episode, account)
+            if (fallbackResult is DirectDebridResolveResult.Success) {
+                return fallbackResult
+            }
+        }
+        return primaryResult
     }
 
     private suspend fun Stream.directDebridResolveCacheKey(season: Int?, episode: Int?): String? {
+        val settings = dataStore.settings.first()
+        val credentialChain = settings.orderedResolverCredentials
+            .joinToString(",") { credential ->
+                "${credential.provider.id}:${credential.apiKey.trim().stableFingerprint()}"
+            }
         if (needsLocalDebridResolve()) {
-            val settings = dataStore.settings.first()
-            val account = localTorrentResolveCredential(settings) ?: return null
-            val apiKey = account.apiKey.trim().takeIf { it.isNotBlank() } ?: return null
+            if (localTorrentResolveCredentials(settings).isEmpty() || credentialChain.isBlank()) return null
             val identity = getEffectiveInfoHash() ?: torrentMagnetUri() ?: behaviorHints?.filename ?: return null
             return listOf(
-                account.provider.id,
-                apiKey.stableFingerprint(),
+                credentialChain,
                 identity.trim().lowercase(),
                 getEffectiveFileIdx()?.toString().orEmpty(),
                 behaviorHints?.filename.orEmpty().trim().lowercase(),
@@ -183,9 +202,8 @@ class DirectDebridResolver @Inject constructor(
         }
         val resolve = clientResolve ?: return null
         val providerId = DebridProviders.byId(resolve.service)?.id ?: return null
-        val settings = dataStore.settings.first()
-        if (!settings.canResolvePlayableLinks || providerId != settings.activeResolverProviderId) return null
-        val apiKey = settings.apiKeyFor(providerId).trim().takeIf { it.isNotBlank() } ?: return null
+        if (!settings.canResolvePlayableLinks || providerId !in settings.orderedResolverProviderIds) return null
+        if (settings.apiKeyFor(providerId).isBlank() || credentialChain.isBlank()) return null
         val identity = resolve.infoHash
             ?: resolve.magnetUri
             ?: resolve.torrentName
@@ -193,8 +211,8 @@ class DirectDebridResolver @Inject constructor(
             ?: return null
 
         return listOf(
+            credentialChain,
             providerId,
-            apiKey.stableFingerprint(),
             identity.trim().lowercase(),
             resolve.fileIdx?.toString().orEmpty(),
             (resolve.filename ?: behaviorHints?.filename).orEmpty().trim().lowercase(),
@@ -209,14 +227,50 @@ class DirectDebridResolver @Inject constructor(
         episode: Int?
     ): DirectDebridResolveResult {
         val settings = dataStore.settings.first()
-        val account = localTorrentResolveCredential(settings) ?: return DirectDebridResolveResult.MissingApiKey
-        val hash = stream.getEffectiveInfoHash()?.trim()?.lowercase()
-        if (stream.debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED) {
-            return DirectDebridResolveResult.NotCached
+        val accounts = localTorrentResolveCredentials(settings)
+        if (accounts.isEmpty()) return DirectDebridResolveResult.MissingApiKey
+
+        val cacheStatus = stream.debridCacheStatus
+        val orderedAccounts = if (cacheStatus?.state == StreamDebridCacheState.CACHED) {
+            val preferred = accounts.filter { it.provider.id == cacheStatus.providerId }
+            val rest = accounts.filterNot { it.provider.id == cacheStatus.providerId }
+            preferred + rest
+        } else {
+            accounts
         }
+
+        var lastResult: DirectDebridResolveResult = DirectDebridResolveResult.Error
+        for (account in orderedAccounts) {
+            if (
+                cacheStatus?.state == StreamDebridCacheState.NOT_CACHED &&
+                cacheStatus.providerId == account.provider.id
+            ) {
+                lastResult = DirectDebridResolveResult.NotCached
+                continue
+            }
+            val result = resolveLocalTorrentWithAccount(stream, season, episode, account)
+            if (result is DirectDebridResolveResult.Success) {
+                return result
+            }
+            lastResult = result
+        }
+        return lastResult
+    }
+
+    private suspend fun resolveLocalTorrentWithAccount(
+        stream: Stream,
+        season: Int?,
+        episode: Int?,
+        account: DebridServiceCredential
+    ): DirectDebridResolveResult {
+        val hash = (stream.getEffectiveInfoHash() ?: stream.clientResolve?.infoHash)
+            ?.trim()
+            ?.lowercase()
+        val cachedForAccount = stream.debridCacheStatus?.state == StreamDebridCacheState.CACHED &&
+            stream.debridCacheStatus.providerId == account.provider.id
         if (
             !hash.isNullOrBlank() &&
-            stream.debridCacheStatus?.state != StreamDebridCacheState.CACHED &&
+            !cachedForAccount &&
             account.provider.supports(DebridProviderCapability.LocalTorrentCacheCheck)
         ) {
             when (localDebridService.isCached(account, hash)) {
@@ -226,42 +280,59 @@ class DirectDebridResolver @Inject constructor(
         }
 
         val magnet = DebridMagnetBuilder.fromStream(stream)
+            ?: stream.clientResolve?.magnetUri?.takeIf { it.isNotBlank() }
             ?: return DirectDebridResolveResult.Stale
         val resolveStream = stream.copy(
             clientResolve = StreamClientResolve(
                 type = "torrent",
-                infoHash = stream.getEffectiveInfoHash(),
-                fileIdx = stream.getEffectiveFileIdx(),
+                infoHash = stream.getEffectiveInfoHash() ?: stream.clientResolve?.infoHash,
+                fileIdx = stream.getEffectiveFileIdx() ?: stream.clientResolve?.fileIdx,
                 magnetUri = magnet,
-                sources = stream.sources,
-                torrentName = null,
-                filename = stream.behaviorHints?.filename,
-                mediaType = null,
-                mediaId = null,
-                mediaOnlyId = null,
+                sources = stream.sources ?: stream.clientResolve?.sources,
+                torrentName = stream.clientResolve?.torrentName,
+                filename = stream.behaviorHints?.filename ?: stream.clientResolve?.filename,
+                mediaType = stream.clientResolve?.mediaType,
+                mediaId = stream.clientResolve?.mediaId,
+                mediaOnlyId = stream.clientResolve?.mediaOnlyId,
                 title = stream.title ?: stream.name,
-                season = season,
-                episode = episode,
+                season = season ?: stream.clientResolve?.season,
+                episode = episode ?: stream.clientResolve?.episode,
                 service = account.provider.id,
                 serviceIndex = null,
                 serviceExtension = null,
-                isCached = stream.debridCacheStatus?.state == StreamDebridCacheState.CACHED,
+                isCached = cachedForAccount,
                 stream = null
             )
         )
 
-        return when (account.provider.id) {
-            DebridProviders.TORBOX_ID -> torboxResolver.resolve(resolveStream, season, episode)
-            DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
-            else -> DirectDebridResolveResult.Error
+        val result = resolveWithProvider(account.provider.id, resolveStream, season, episode)
+        return if (result is DirectDebridResolveResult.Success) {
+            result.copy(
+                providerId = account.provider.id,
+                providerName = account.provider.displayName
+            )
+        } else {
+            result
         }
     }
 
-    private fun localTorrentResolveCredential(
+    private suspend fun resolveWithProvider(
+        providerId: String,
+        stream: Stream,
+        season: Int?,
+        episode: Int?
+    ): DirectDebridResolveResult = when (providerId) {
+        DebridProviders.TORBOX_ID -> torboxResolver.resolve(stream, season, episode)
+        DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(stream, season, episode)
+        DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
+        else -> DirectDebridResolveResult.Error
+    }
+
+    private fun localTorrentResolveCredentials(
         settings: com.nuvio.tv.domain.model.DebridSettings
-    ): DebridServiceCredential? =
-        settings.activeResolverCredential
-            ?.takeIf { credential -> credential.provider.supports(DebridProviderCapability.LocalTorrentResolve) }
+    ): List<DebridServiceCredential> =
+        settings.orderedResolverCredentials
+            .filter { credential -> credential.provider.supports(DebridProviderCapability.LocalTorrentResolve) }
 }
 
 private const val DIRECT_DEBRID_RESOLVE_CACHE_TTL_MS = 15L * 60L * 1000L
@@ -284,12 +355,34 @@ private fun String.stableFingerprint(): String {
     return hash.toULong().toString(16)
 }
 
-private fun Stream.withResolvedDebridUrl(result: DirectDebridResolveResult.Success): Stream =
-    copy(
+private fun Stream.withResolvedDebridUrl(result: DirectDebridResolveResult.Success): Stream {
+    val resolvedProviderId = result.providerId
+    val resolvedProviderName = result.providerName
+        ?: resolvedProviderId?.let { DebridProviders.byId(it)?.displayName }
+    val updatedCacheStatus = if (resolvedProviderId != null) {
+        StreamDebridCacheStatus(
+            providerId = resolvedProviderId,
+            providerName = resolvedProviderName ?: resolvedProviderId,
+            state = StreamDebridCacheState.CACHED,
+            cachedName = debridCacheStatus?.cachedName ?: result.filename,
+            cachedSize = debridCacheStatus?.cachedSize ?: result.videoSize
+        )
+    } else {
+        debridCacheStatus
+    }
+    val updatedClientResolve = if (resolvedProviderId != null) {
+        clientResolve?.copy(service = resolvedProviderId)
+    } else {
+        clientResolve
+    }
+    return copy(
         url = result.url,
         externalUrl = null,
-        behaviorHints = behaviorHints.mergeResolvedDebridHints(result)
+        behaviorHints = behaviorHints.mergeResolvedDebridHints(result),
+        debridCacheStatus = updatedCacheStatus,
+        clientResolve = updatedClientResolve
     )
+}
 
 private fun StreamBehaviorHints?.mergeResolvedDebridHints(
     result: DirectDebridResolveResult.Success

@@ -888,7 +888,7 @@ class HomeViewModel @Inject constructor(
                 .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
                 .filter {
                     !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
-                        recalculateCachedReleaseBadge(it).second, dismissedNextUp)
+                        recalculateCachedReleaseBadge(it).second, dismissedNextUp, hasActiveProgress = false)
                 }
                 .map { cached ->
                     ContinueWatchingItem.NextUp(
