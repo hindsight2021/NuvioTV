@@ -64,7 +64,66 @@ class DebridStreamPresentationTest {
         )
     }
 
-    private fun debridStream(filename: String): Stream = Stream(
+    @Test
+    fun `preserves direct debrid streams for both torbox and premiumize when both are configured`() {
+        val bothSettings = settings.copy(
+            premiumizeApiKey = "pm-key",
+            preferredResolverProviderId = DebridProviders.TORBOX_ID,
+            fallbackResolverProviderId = DebridProviders.PREMIUMIZE_ID
+        )
+        val torboxStream = debridStream("Movie.2023.1080p.WEB-DL.x265-GRP.mkv", service = DebridProviders.TORBOX_ID)
+        val premiumizeStream = debridStream("Movie.2023.2160p.BluRay.HEVC-SGF.mkv", service = DebridProviders.PREMIUMIZE_ID)
+
+        val result = presentation.apply(
+            groups = listOf(
+                AddonStreams(
+                    addonName = "Addon",
+                    addonLogo = null,
+                    streams = listOf(torboxStream, premiumizeStream)
+                )
+            ),
+            settings = bothSettings,
+            includeBadgeMatches = false
+        ).single().streams
+
+        assertEquals(
+            listOf(
+                formatter.format(torboxStream, bothSettings),
+                formatter.format(premiumizeStream, bothSettings)
+            ),
+            result
+        )
+    }
+
+    @Test
+    fun `hides premiumize direct debrid streams when fallback is none while keeping torbox streams`() {
+        val primaryOnlySettings = settings.copy(
+            premiumizeApiKey = "pm-key",
+            preferredResolverProviderId = DebridProviders.TORBOX_ID,
+            fallbackResolverProviderId = DebridProviders.FALLBACK_NONE
+        )
+        val torboxStream = debridStream("Movie.2023.1080p.WEB-DL.x265-GRP.mkv", service = DebridProviders.TORBOX_ID)
+        val premiumizeStream = debridStream("Movie.2023.2160p.BluRay.HEVC-SGF.mkv", service = DebridProviders.PREMIUMIZE_ID)
+
+        val result = presentation.apply(
+            groups = listOf(
+                AddonStreams(
+                    addonName = "Addon",
+                    addonLogo = null,
+                    streams = listOf(torboxStream, premiumizeStream)
+                )
+            ),
+            settings = primaryOnlySettings,
+            includeBadgeMatches = false
+        ).single().streams
+
+        assertEquals(
+            listOf(formatter.format(torboxStream, primaryOnlySettings)),
+            result
+        )
+    }
+
+    private fun debridStream(filename: String, service: String = DebridProviders.TORBOX_ID): Stream = Stream(
         name = "TB cached",
         title = "Movie",
         description = filename,
@@ -90,7 +149,7 @@ class DebridStreamPresentationTest {
             title = "Movie",
             season = null,
             episode = null,
-            service = "torbox",
+            service = service,
             serviceIndex = 0,
             serviceExtension = null,
             isCached = true

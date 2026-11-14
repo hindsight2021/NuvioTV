@@ -11,6 +11,7 @@ data class DebridSettings(
     val premiumizeApiKey: String = "",
     val realDebridApiKey: String = "",
     val preferredResolverProviderId: String = "",
+    val fallbackResolverProviderId: String = "",
     val instantPlaybackPreparationLimit: Int = 0,
     val streamMaxResults: Int = 0,
     val streamSortMode: DebridStreamSortMode = DebridStreamSortMode.DEFAULT,
@@ -33,6 +34,18 @@ data class DebridSettings(
 
     val activeResolverProviderId: String?
         get() = activeResolverCredential?.provider?.id
+
+    val fallbackResolverCredential: com.nuvio.tv.core.debrid.DebridServiceCredential?
+        get() = DebridProviders.fallbackResolverService(this)
+
+    val fallbackResolverProviderIdResolved: String?
+        get() = fallbackResolverCredential?.provider?.id
+
+    val orderedResolverCredentials: List<com.nuvio.tv.core.debrid.DebridServiceCredential>
+        get() = DebridProviders.orderedResolverServices(this)
+
+    val orderedResolverProviderIds: List<String>
+        get() = orderedResolverCredentials.map { it.provider.id }
 
     val hasResolverProvider: Boolean
         get() = activeResolverCredential != null

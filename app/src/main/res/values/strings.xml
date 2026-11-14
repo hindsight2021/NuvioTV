@@ -927,6 +927,8 @@
     <string name="autoplay_continue_watching_prescrape_count_sub">Pre-scrape up to %1$d items</string>
     <string name="autoplay_continue_watching_prescrape_count_dialog_title">Continue Watching Pre-scrape Limit</string>
     <string name="prescrape_count_items">%1$d items</string>
+    <string name="autoplay_speculative_prewarm">Speculative Next-Episode Pre-Warming</string>
+    <string name="autoplay_speculative_prewarm_sub">Quietly resolves and disk-buffers the opening segment of the next episode or Autopilot pick in the final 90s for zero-loading transitions</string>
     <string name="autoplay_mode_manual">Manual (choose stream)</string>
     <string name="autoplay_mode_first">Auto-play first source</string>
     <string name="autoplay_mode_regex">Auto-play regex match</string>
@@ -1221,8 +1223,11 @@
     <string name="debrid_cloud_library_description">Browse and play files already in your connected accounts.</string>
     <string name="debrid_enable_title">Resolve playable links</string>
     <string name="debrid_enable_subtitle">Ask a connected service for playable links when a result needs it. This may add the item to that service.</string>
-    <string name="debrid_resolve_with">Resolve with</string>
-    <string name="debrid_resolve_with_description">Choose which connected account handles playable links.</string>
+    <string name="debrid_resolve_with">Primary resolver</string>
+    <string name="debrid_resolve_with_description">Choose which connected account handles playable links first.</string>
+    <string name="debrid_fallback_resolver">Fallback resolver</string>
+    <string name="debrid_fallback_resolver_description">Choose a secondary connected account if the primary fails or lacks the file.</string>
+    <string name="debrid_fallback_none">None</string>
     <string name="debrid_add_key_first">Connect an account first.</string>
     <string name="debrid_section_account">Accounts</string>
     <string name="debrid_section_instant_playback">Link Preparation</string>

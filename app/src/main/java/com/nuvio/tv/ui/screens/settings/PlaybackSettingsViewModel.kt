@@ -536,6 +536,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setContinueWatchingPreScrapeCount(count)
     }
 
+    suspend fun setSpeculativePreWarmEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setSpeculativePreWarmEnabled(enabled)
+    }
+
     suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
         playerSettingsDataStore.setVodCacheSizeMode(mode)
     }

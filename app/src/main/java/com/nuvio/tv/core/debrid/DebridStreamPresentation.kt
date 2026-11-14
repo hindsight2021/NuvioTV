@@ -88,7 +88,8 @@ class DebridStreamPresentation @Inject constructor(
 
     private fun Stream.isInactiveResolverStream(settings: DebridSettings): Boolean {
         val streamProviderId = DebridProviders.byId(clientResolve?.service)?.id ?: return false
-        val activeProviderId = settings.activeResolverProviderId ?: return false
-        return isDirectDebrid() && streamProviderId != activeProviderId
+        val orderedProviderIds = settings.orderedResolverProviderIds
+        if (orderedProviderIds.isEmpty()) return false
+        return isDirectDebrid() && streamProviderId !in orderedProviderIds
     }
 }

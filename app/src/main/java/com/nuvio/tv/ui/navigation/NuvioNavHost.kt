@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -95,7 +96,7 @@ private fun PlaybackNavHost(
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 EnterTransition.None
             } else {
-                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.medium))
+                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.quick))
             }
         },
         exitTransition = {
@@ -107,7 +108,7 @@ private fun PlaybackNavHost(
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 ExitTransition.None
             } else {
-                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.medium))
+                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.quick))
             }
         },
         popEnterTransition = {
@@ -119,7 +120,7 @@ private fun PlaybackNavHost(
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 EnterTransition.None
             } else {
-                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.medium))
+                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.quick))
             }
         },
         popExitTransition = {
@@ -131,7 +132,7 @@ private fun PlaybackNavHost(
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 ExitTransition.None
             } else {
-                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.medium))
+                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.quick))
             }
         }
     ) {
@@ -1394,10 +1395,22 @@ private fun PlaybackNavHost(
         }
 
         composable(Screen.LiveTv.route) {
+            val liveTvContext = androidx.compose.ui.platform.LocalContext.current
+            val liveTvScope = androidx.compose.runtime.rememberCoroutineScope()
             com.nuvio.tv.ui.screens.livetv.LiveTvScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onPlayChannelStream = { channel ->
                     val streamUrl = channel.streamUrl ?: return@LiveTvScreen
+                    if (channel.isAiNetwork || com.nuvio.tv.core.livetv.AiBroadcastNetwork.isAiBroadcastUrl(streamUrl)) {
+                        liveTvScope.launch {
+                            com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator.tuneAiChannel(
+                                context = liveTvContext,
+                                channelId = channel.id,
+                                startFromBeginning = false
+                            )
+                        }
+                        return@LiveTvScreen
+                    }
                     navController.navigate(
                         Screen.Player.createRoute(
                             streamUrl = streamUrl,
@@ -1409,6 +1422,15 @@ private fun PlaybackNavHost(
                             videoId = channel.id
                         )
                     )
+                },
+                onTuneAiChannel = { channel, startFromBeginning ->
+                    liveTvScope.launch {
+                        com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator.tuneAiChannel(
+                            context = liveTvContext,
+                            channelId = channel.id,
+                            startFromBeginning = startFromBeginning
+                        )
+                    }
                 }
             )
         }

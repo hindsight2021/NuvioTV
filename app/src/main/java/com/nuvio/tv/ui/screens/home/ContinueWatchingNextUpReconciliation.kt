@@ -181,7 +181,8 @@ internal fun reconcileConclusiveNextUpItems(
                 item.info.season,
                 item.info.episode,
                 item.info.isReleaseAlert,
-                dismissedNextUpKeys
+                dismissedNextUpKeys,
+                hasActiveProgress = false
             )
     }
     val combined = retainedItems + acceptedResolvedItems
@@ -221,7 +222,8 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
                     item.info.season,
                     item.info.episode,
                     item.info.isReleaseAlert,
-                    dismissedNextUpKeys
+                    dismissedNextUpKeys,
+                    hasActiveProgress = false
                 )
         }
     val reconciledContentIds = conclusivelyProcessedContentIds

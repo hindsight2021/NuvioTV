@@ -1596,8 +1596,27 @@ internal fun PlayerRuntimeController.initializePlayer(
                             return
                         }
 
+                        val isUnrecoverableHttp = StartupErrorFailoverPolicy.isNonRetryableHttpError(
+                            error = error,
+                            detailedError = detailedError
+                        )
+                        if (isUnrecoverableHttp) {
+                            recordFailedCurrentSource()
+                            if (!hasRenderedFirstFrame && attemptStartupNextSourceFailover(detailedError)) {
+                                return
+                            }
+                            if (hasRenderedFirstFrame && advanceToNextLiveSource(detailedError)) {
+                                return
+                            }
+                        }
+
                         // ── Main Engine Failover ──
-                        if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
+                        if (maybeAutoSwitchInternalPlayerOnStartupError(
+                                detailedError = detailedError,
+                                allowEngineFailover = allowEngineFailover,
+                                error = error
+                            )
+                        ) {
                             return
                         }
 

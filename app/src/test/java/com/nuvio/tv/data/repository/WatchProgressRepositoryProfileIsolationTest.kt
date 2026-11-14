@@ -132,6 +132,35 @@ class WatchProgressRepositoryProfileIsolationTest {
         assertEquals(emptySet<String>(), harness.repository.observeWatchedMovieIds().first())
     }
 
+    @Test
+    fun `deleteAllProgressForSeries captures episode keys across siblings before deleting local progress`() = runTest {
+        val harness = harness(activeProfileId = 1)
+        val ep1 = progress("tt0096697", position = 1000L, duration = 1000L).copy(season = 38, episode = 4)
+        val ep2 = progress("tt0096697", position = 1000L, duration = 1000L).copy(season = 38, episode = 3)
+        coEvery { harness.progressPreferences.getAllRawEntries(1) } returns mapOf(
+            "tt0096697_s38e4" to ep1,
+            "tt0096697_s38e3" to ep2,
+            "other_s1e1" to progress("other", 100L, 100L)
+        )
+
+        harness.repository.deleteAllProgressForSeries("tt0096697")
+
+        coVerify(exactly = 1) {
+            harness.mutationStore.queueProgressDeletes(
+                match { keys ->
+                    keys.contains("tt0096697") &&
+                        keys.contains("tt0096697_s38e4") &&
+                        keys.contains("tt0096697_s38e3") &&
+                        !keys.contains("other_s1e1")
+                },
+                1
+            )
+        }
+        coVerify(exactly = 1) {
+            harness.progressPreferences.removeProgress("tt0096697", null, null, 1)
+        }
+    }
+
     private fun harness(activeProfileId: Int): Harness {
         val activeProfile = MutableStateFlow(activeProfileId)
         val profileManager = mockk<ProfileManager>()

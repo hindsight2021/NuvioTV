@@ -114,6 +114,25 @@ sealed interface AppCommand {
     /** Advance to the next item in the queue. */
     data object AdvanceQueue : AppCommand
 
+    /** Reorder an item in the playback queue from [fromIndex] to [toIndex]. */
+    data class ReorderQueue(val fromIndex: Int, val toIndex: Int) : AppCommand
+
+    /** Remove an item from the playback queue at [index]. */
+    data class RemoveQueueItem(val index: Int) : AppCommand
+
+    /** Hot-swap the currently playing stream while preserving playback timestamp. */
+    data class HotSwapStream(
+        val streamUrl: String,
+        val title: String,
+        val headers: Map<String, String>? = null
+    ) : AppCommand
+
+    /** Tune a Live TV or AI Broadcast Network channel. */
+    data class TuneLiveChannel(
+        val channelId: String,
+        val startFromBeginning: Boolean = false
+    ) : AppCommand
+
     // ---------------------------------------------------------------------
     // Thematic
     // ---------------------------------------------------------------------

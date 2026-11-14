@@ -1,7 +1,15 @@
 package com.nuvio.tv.core.control
 
+import com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator
+import com.nuvio.tv.core.player.NextEpisodePreWarmer
+import com.nuvio.tv.domain.model.ProxyHeaders
+import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.ui.screens.player.PlayerEvent
+import com.nuvio.tv.ui.screens.player.PlayerMediaSourceFactory
 import com.nuvio.tv.ui.screens.player.PlayerRuntimeController
+import com.nuvio.tv.ui.screens.player.buildStreamInfoData
+import com.nuvio.tv.ui.screens.player.hotSwapToStream
 import com.nuvio.tv.ui.screens.player.onEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +109,12 @@ class PlayerPlaybackBridge @Inject constructor(
                     )
                 }.collect { snapshot ->
                     _playbackSnapshot.value = snapshot
+                    if (snapshot.isPlaying && !snapshot.isBuffering) {
+                        val pendingSeek = AiBroadcastTuneCoordinator.consumePendingSeekIfMatches(snapshot.contentId)
+                        if (pendingSeek != null && pendingSeek > 0L) {
+                            controller.onEvent(PlayerEvent.OnSeekTo(pendingSeek))
+                        }
+                    }
                 }
             }
         }
@@ -153,6 +167,7 @@ class PlayerPlaybackBridge @Inject constructor(
                 }
 
                 AppCommand.Stop -> {
+                    AiBroadcastTuneCoordinator.clearOnAir()
                     controller.stopAndRelease()
                     navigationCommander.popBack()
                     CommandResult.Success()
@@ -205,6 +220,111 @@ class PlayerPlaybackBridge @Inject constructor(
 
                 else -> CommandResult.Unavailable("Unsupported playback command: $command")
             }
+        }
+    }
+
+    /**
+     * On-demand AV telemetry sampling invoked ONLY when requested by the Phone PWA (/api/v1/telemetry).
+     * Never spawns a continuous polling loop or allocates extra buffers.
+     */
+    suspend fun sampleTelemetry(): PlaybackTelemetrySnapshot {
+        val preWarm = NextEpisodePreWarmer.status.value
+        val preWarmSnap = PreWarmTelemetrySnapshot(
+            state = preWarm.state.name,
+            targetLabel = preWarm.targetLabel,
+            cachedBytes = preWarm.cachedBytes,
+            targetBytes = preWarm.targetBytes
+        )
+        val controller = synchronized(lock) { controllerRef?.get() }
+            ?: return PlaybackTelemetrySnapshot(
+                active = false,
+                speculativePreWarm = preWarmSnap
+            )
+
+        return withContext(Dispatchers.Main) {
+            val info = runCatching { controller.buildStreamInfoData() }.getOrNull()
+            val player = controller._exoPlayer
+            val bufferedAhead = player?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0L) }
+                ?: (controller.playbackTimeline.value.bufferedPosition - controller.playbackTimeline.value.currentPosition).coerceAtLeast(0L)
+            val dropped = runCatching { player?.videoDecoderCounters?.droppedBufferCount }.getOrNull() ?: 0
+            val throughputMbps = (controller.playbackAnalyticsDiagnostics.currentBandwidthEstimateBps() ?: 0L) / 1_000_000.0
+            val (cacheUsedMb, cacheMaxMb) = PlayerMediaSourceFactory.getVodCacheStats()
+            val channelsInt = controller.uiState.value.audioTracks.firstOrNull { it.isSelected }?.channelCount ?: 0
+
+            PlaybackTelemetrySnapshot(
+                active = true,
+                engine = info?.playerEngine ?: controller.currentInternalPlayerEngine.name,
+                videoCodec = info?.videoCodec,
+                width = info?.videoWidth ?: 0,
+                height = info?.videoHeight ?: 0,
+                frameRateFps = info?.videoFrameRate ?: 0f,
+                droppedFrames = dropped,
+                videoBitrateBps = info?.videoBitrate ?: 0,
+                audioCodec = info?.audioCodec,
+                audioChannels = channelsInt,
+                bufferedDurationMs = bufferedAhead,
+                totalBufferAheadMs = bufferedAhead,
+                networkThroughputMbps = throughputMbps,
+                vodCacheUsedMb = cacheUsedMb,
+                vodCacheMaxMb = cacheMaxMb,
+                speculativePreWarm = preWarmSnap
+            )
+        }
+    }
+
+    /** Returns alternate stream candidates cached in the active player controller for 1-tap hot-swap. */
+    fun getCurrentStreams(): List<StreamCandidateSnapshot> {
+        val controller = synchronized(lock) { controllerRef?.get() } ?: return emptyList()
+        val uiState = controller.uiState.value
+        val currentUrl = uiState.currentStreamUrl
+        return uiState.sourceAllStreams
+            .filter { !it.url.isNullOrBlank() }
+            .map { stream ->
+                val url = stream.url.orEmpty()
+                StreamCandidateSnapshot(
+                    url = url,
+                    title = stream.title ?: stream.name ?: "Stream",
+                    label = listOfNotNull(stream.name, stream.title).distinct().joinToString(" · ").ifBlank { url },
+                    addonName = stream.addonName,
+                    description = stream.description,
+                    headers = stream.behaviorHints?.proxyHeaders?.request.orEmpty(),
+                    isCurrent = currentUrl != null && url == currentUrl
+                )
+            }
+    }
+
+    /** Hot-swaps the active stream while preserving exact playback timestamp. */
+    suspend fun hotSwapStream(
+        streamUrl: String,
+        title: String,
+        headers: Map<String, String>? = null
+    ): CommandResult {
+        val controller = synchronized(lock) { controllerRef?.get() }
+            ?: return CommandResult.Unavailable("No active player session to hot-swap")
+
+        return withContext(Dispatchers.Main) {
+            val stream = Stream(
+                name = title,
+                title = title,
+                description = "Hot-swapped via Phone Remote",
+                url = streamUrl,
+                ytId = null,
+                infoHash = null,
+                fileIdx = null,
+                externalUrl = null,
+                behaviorHints = if (!headers.isNullOrEmpty()) {
+                    StreamBehaviorHints(
+                        notWebReady = null,
+                        bingeGroup = null,
+                        countryWhitelist = null,
+                        proxyHeaders = ProxyHeaders(request = headers, response = null)
+                    )
+                } else null,
+                addonName = "Phone Remote",
+                addonLogo = null
+            )
+            controller.hotSwapToStream(stream)
+            CommandResult.Success("Hot-swapped to $title")
         }
     }
 }

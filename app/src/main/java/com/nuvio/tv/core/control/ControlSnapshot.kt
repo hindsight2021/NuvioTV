@@ -166,3 +166,66 @@ data class QueueItemSnapshot(
     @SerializedName("mediaType")
     val mediaType: String = "series"
 )
+
+data class PreWarmTelemetrySnapshot(
+    @SerializedName("state")
+    val state: String = "IDLE",
+    @SerializedName("targetLabel")
+    val targetLabel: String? = null,
+    @SerializedName("cachedBytes")
+    val cachedBytes: Long = 0L,
+    @SerializedName("targetBytes")
+    val targetBytes: Long = 0L
+)
+
+data class PlaybackTelemetrySnapshot(
+    @SerializedName("active")
+    val active: Boolean = false,
+    @SerializedName("engine")
+    val engine: String? = null,
+    @SerializedName("videoCodec")
+    val videoCodec: String? = null,
+    @SerializedName("width")
+    val width: Int = 0,
+    @SerializedName("height")
+    val height: Int = 0,
+    @SerializedName("frameRateFps")
+    val frameRateFps: Float = 0f,
+    @SerializedName("droppedFrames")
+    val droppedFrames: Int = 0,
+    @SerializedName("videoBitrateBps")
+    val videoBitrateBps: Int = 0,
+    @SerializedName("audioCodec")
+    val audioCodec: String? = null,
+    @SerializedName("audioChannels")
+    val audioChannels: Int = 0,
+    @SerializedName("bufferedDurationMs")
+    val bufferedDurationMs: Long = 0L,
+    @SerializedName("totalBufferAheadMs")
+    val totalBufferAheadMs: Long = 0L,
+    @SerializedName("networkThroughputMbps")
+    val networkThroughputMbps: Double = 0.0,
+    @SerializedName("vodCacheUsedMb")
+    val vodCacheUsedMb: Int = 0,
+    @SerializedName("vodCacheMaxMb")
+    val vodCacheMaxMb: Int = 0,
+    @SerializedName("speculativePreWarm")
+    val speculativePreWarm: PreWarmTelemetrySnapshot = PreWarmTelemetrySnapshot()
+)
+
+data class StreamCandidateSnapshot(
+    @SerializedName("url")
+    val url: String,
+    @SerializedName("title")
+    val title: String,
+    @SerializedName("label")
+    val label: String? = null,
+    @SerializedName("addonName")
+    val addonName: String? = null,
+    @SerializedName("description")
+    val description: String? = null,
+    @SerializedName("headers")
+    val headers: Map<String, String> = emptyMap(),
+    @SerializedName("isCurrent")
+    val isCurrent: Boolean = false
+)

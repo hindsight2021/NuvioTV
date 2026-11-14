@@ -156,6 +156,9 @@ class AndroidTvChannelSyncService @Inject constructor(
         val filteredInProgress = inProgress
             .filter { cutoffMs == null || it.lastWatched >= cutoffMs }
 
+        // Deduplicate: in-progress wins over next-up for same contentId
+        val inProgressContentIds = filteredInProgress.mapTo(mutableSetOf()) { it.contentId }
+
         // Filter next-up items: exclude unaired (launcher should only show playable content),
         // respect days cap and dismissed keys
         val filteredNextUp = nextUp
@@ -163,11 +166,10 @@ class AndroidTvChannelSyncService @Inject constructor(
             .filter { cutoffMs == null || it.lastWatched >= cutoffMs }
             .filter {
                 !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
-                    it.isReleaseAlert, settings.dismissedNextUp)
+                    it.isReleaseAlert, settings.dismissedNextUp,
+                    hasActiveProgress = it.contentId in inProgressContentIds)
             }
 
-        // Deduplicate: in-progress wins over next-up for same contentId
-        val inProgressContentIds = filteredInProgress.mapTo(mutableSetOf()) { it.contentId }
         val deduplicatedNextUp = filteredNextUp.filter { it.contentId !in inProgressContentIds }
 
         // Sort: in-progress by lastWatched, next-up by sortTimestamp (which is

@@ -81,6 +81,8 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
     private var bandwidthTransferDurationMs: Int? = null
     private var bandwidthBytesTransferred: Long? = null
 
+    fun currentBandwidthEstimateBps(): Long? = bandwidthEstimateBps
+
     private var loadStartedCount: Int = 0
     private var loadCompletedCount: Int = 0
     private var loadCanceledCount: Int = 0

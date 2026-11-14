@@ -13,6 +13,7 @@ import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.model.StreamClientResolve
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
@@ -145,7 +146,10 @@ class ContinueWatchingPreScrapeCoordinatorTest {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         }
         coVerify(exactly = 0) {
-            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            streamLinkCacheDataStore.save(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any()
+            )
         }
     }
 
@@ -192,7 +196,10 @@ class ContinueWatchingPreScrapeCoordinatorTest {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         }
         coVerify(exactly = 0) {
-            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            streamLinkCacheDataStore.save(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any()
+            )
         }
     }
 
@@ -220,9 +227,17 @@ class ContinueWatchingPreScrapeCoordinatorTest {
                 filename = any(),
                 videoHash = any(),
                 videoSize = any(),
+                infoHash = any(),
+                fileIdx = any(),
+                sources = any(),
                 bingeGroup = any(),
                 contentLanguage = any(),
-                year = any()
+                year = any(),
+                isDebridLink = any(),
+                clientResolveService = any(),
+                clientResolveMagnet = any(),
+                clientResolveType = any(),
+                clientResolveTorrentName = any()
             )
         } returns Unit
 
@@ -249,9 +264,17 @@ class ContinueWatchingPreScrapeCoordinatorTest {
                 filename = any(),
                 videoHash = any(),
                 videoSize = any(),
+                infoHash = any(),
+                fileIdx = any(),
+                sources = any(),
                 bingeGroup = any(),
                 contentLanguage = any(),
-                year = any()
+                year = any(),
+                isDebridLink = any(),
+                clientResolveService = any(),
+                clientResolveMagnet = any(),
+                clientResolveType = any(),
+                clientResolveTorrentName = any()
             )
         }
 
@@ -295,7 +318,10 @@ class ContinueWatchingPreScrapeCoordinatorTest {
 
         // Verify no stream links were saved because scrape was cancelled
         coVerify(exactly = 0) {
-            streamLinkCacheDataStore.save(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            streamLinkCacheDataStore.save(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any()
+            )
         }
 
         // Playback stops
@@ -305,6 +331,122 @@ class ContinueWatchingPreScrapeCoordinatorTest {
         advanceUntilIdle()
 
         coVerify(atLeast = 1) {
+            streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `when warmItem resolves direct debrid stream, it persists debrid refresh metadata`() = runTest(testDispatcher) {
+        every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
+        coEvery { streamLinkCacheDataStore.getValid(any(), maxAgeMs = any(), allowExpiredDebridRefresh = false) } returns null
+
+        val resolveMeta = StreamClientResolve(
+            type = "debrid",
+            infoHash = "DEAD1234",
+            fileIdx = 1,
+            magnetUri = "magnet:?xt=urn:btih:DEAD1234",
+            sources = listOf("tracker:udp://example"),
+            torrentName = "Show.S01E01",
+            filename = "ep.mkv",
+            mediaType = "series",
+            mediaId = "tt1234567:1:1",
+            mediaOnlyId = "tt1234567",
+            title = "Test Show",
+            season = 1,
+            episode = 1,
+            service = "torbox",
+            serviceIndex = 0,
+            serviceExtension = null,
+            isCached = true
+        )
+        val rawDebridStream = Stream(
+            name = "TorBox 4K",
+            title = "Show.S01E01",
+            description = null,
+            url = null,
+            ytId = null,
+            infoHash = "DEAD1234",
+            fileIdx = 1,
+            externalUrl = null,
+            behaviorHints = null,
+            addonName = "AIOStreams",
+            addonLogo = null,
+            clientResolve = resolveMeta
+        )
+        val resolvedStream = rawDebridStream.copy(
+            url = "https://tb-cdn.io/stream/DEAD1234/1.mkv"
+        )
+
+        coEvery {
+            streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
+        } returns flowOf(
+            NetworkResult.Success(
+                listOf(AddonStreams(addonName = "AIOStreams", addonLogo = null, streams = listOf(rawDebridStream)))
+            )
+        )
+        coEvery {
+            directDebridResolver.resolveToPlayableStream(rawDebridStream, 1, 1)
+        } returns DirectDebridPlayableResult.Success(resolvedStream)
+
+        val savedIsDebrid = slot<Boolean>()
+        val savedInfoHash = slot<String>()
+        val savedFileIdx = slot<Int>()
+        val savedService = slot<String>()
+        val savedTorrentName = slot<String>()
+        coEvery {
+            streamLinkCacheDataStore.save(
+                contentKey = any(),
+                url = any(),
+                streamName = any(),
+                headers = any(),
+                filename = any(),
+                videoHash = any(),
+                videoSize = any(),
+                infoHash = capture(savedInfoHash),
+                fileIdx = capture(savedFileIdx),
+                sources = any(),
+                bingeGroup = any(),
+                contentLanguage = any(),
+                year = any(),
+                isDebridLink = capture(savedIsDebrid),
+                clientResolveService = capture(savedService),
+                clientResolveMagnet = any(),
+                clientResolveType = any(),
+                clientResolveTorrentName = capture(savedTorrentName)
+            )
+        } returns Unit
+
+        coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
+        advanceTimeBy(3000L)
+        advanceUntilIdle()
+
+        assertTrue(savedIsDebrid.captured)
+        assertEquals("DEAD1234", savedInfoHash.captured)
+        assertEquals(1, savedFileIdx.captured)
+        assertEquals("torbox", savedService.captured)
+        assertEquals("Show.S01E01", savedTorrentName.captured)
+    }
+
+    @Test
+    fun `when cached debrid link is expired, getValid returns null and triggers rescrape`() = runTest(testDispatcher) {
+        every { playerSettingsDataStore.playerSettings } returns flowOf(defaultPlayerSettings())
+        coEvery { streamLinkCacheDataStore.getValid("series|tt1234567:1:1", maxAgeMs = any(), allowExpiredDebridRefresh = false) } returns null
+        coEvery {
+            streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
+        } returns flowOf(
+            NetworkResult.Success(
+                listOf(AddonStreams(addonName = "Torrentio", addonLogo = null, streams = listOf(testStream)))
+            )
+        )
+
+        coordinator.onContinueWatchingItemsUpdated(listOf(testItem))
+        advanceTimeBy(3000L)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            streamLinkCacheDataStore.getValid("series|tt1234567:1:1", maxAgeMs = any(), allowExpiredDebridRefresh = false)
+        }
+        coVerify(exactly = 1) {
             streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any())
         }
     }

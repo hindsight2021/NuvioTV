@@ -108,7 +108,8 @@ class MetaDetailsViewModel @Inject constructor(
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     private val streamRepository: StreamRepository,
     private val addonRepository: com.nuvio.tv.domain.repository.AddonRepository,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val smartRandomEpisodeSelector: com.nuvio.tv.core.playlist.SmartRandomEpisodeSelector? = null
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
     private val itemType: String = savedStateHandle["itemType"] ?: ""
@@ -1010,9 +1011,13 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
+        val canonicalMeta = meta.withResolvedMovieId(itemId, _effectiveContentId.value)
+        if (canonicalMeta.id != meta.id) {
+            Log.d(TAG, "Preserved resolved movie identity: ${meta.id} -> ${canonicalMeta.id}")
+        }
         // Fire all independent async jobs immediately — they run in parallel.
-        loadMoreLikeThisAsync(meta)
-        val enriched = enrichMeta(meta)
+        loadMoreLikeThisAsync(canonicalMeta)
+        val enriched = enrichMeta(canonicalMeta)
 
         syncEffectiveContentId(enriched)
         val cachedNextToWatch = metaDetailsSessionState.getNextToWatch(
@@ -3282,6 +3287,46 @@ class MetaDetailsViewModel @Inject constructor(
         existing.forEach { trailer -> merged.putIfAbsent(keyOf(trailer), trailer) }
         incoming.forEach { trailer -> merged.putIfAbsent(keyOf(trailer), trailer) }
         return merged.values.toList()
+    }
+
+    fun playSmartRandomEpisode(
+        candidates: List<Video>,
+        fallback: Video,
+        isRandomEpisode: Boolean,
+        onSelected: (Video) -> Unit
+    ) {
+        val meta = _uiState.value.meta
+        val targetContentId = _effectiveContentId.value.ifBlank { meta?.id ?: itemId }
+        val seriesTitle = meta?.name.orEmpty()
+        val progressMap = _uiState.value.episodeProgressMap
+        val watchedSet = _uiState.value.watchedEpisodes
+
+        viewModelScope.launch {
+            val pool = candidates.ifEmpty { listOf(fallback) }
+            val selection = smartRandomEpisodeSelector?.selectRandomAndQueue(
+                contentId = targetContentId,
+                episodes = pool,
+                knownEpisodeProgress = progressMap,
+                knownWatchedEpisodes = watchedSet,
+                recordPick = true
+            )
+            val chosen = selection?.chosen ?: pool.randomOrNull() ?: fallback
+            val queueEpisodes = selection?.orderedQueue ?: pool
+            val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                contentId = targetContentId,
+                seriesTitle = seriesTitle,
+                episodes = queueEpisodes,
+                startEpisode = chosen,
+                shuffle = true,
+                preserveOrder = selection != null,
+                isRandomEpisode = isRandomEpisode
+            )
+            val targetEp = pool.firstOrNull {
+                (first?.videoId != null && it.id == first.videoId) ||
+                    (it.season == first?.season && it.episode == first?.episode)
+            } ?: chosen
+            onSelected(targetEp)
+        }
     }
 
     override fun onCleared() {

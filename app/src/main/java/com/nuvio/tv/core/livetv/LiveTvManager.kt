@@ -19,6 +19,9 @@ object LiveTvManager {
     private val _customChannels = MutableStateFlow<List<LiveTvChannel>>(emptyList())
     val customChannels: StateFlow<List<LiveTvChannel>> = _customChannels.asStateFlow()
 
+    private val _aiChannels = MutableStateFlow<List<LiveTvChannel>>(emptyList())
+    val aiChannels: StateFlow<List<LiveTvChannel>> = _aiChannels.asStateFlow()
+
     private val _channels = MutableStateFlow<List<LiveTvChannel>>(emptyList())
     val channels: StateFlow<List<LiveTvChannel>> = _channels.asStateFlow()
 
@@ -384,7 +387,12 @@ object LiveTvManager {
             )
         )
 
-        _channels.value = list + _customChannels.value
+        _channels.value = _aiChannels.value + list + _customChannels.value
+    }
+
+    fun refreshAiChannels(context: Context) {
+        _aiChannels.value = AiBroadcastNetwork.toLiveTvChannels(context)
+        refreshChannels()
     }
 
     fun tuneToChannel(context: Context, channel: LiveTvChannel) {
@@ -485,6 +493,7 @@ object LiveTvManager {
     }
 
     fun loadCustomM3uFromPrefs(context: Context) {
+        refreshAiChannels(context)
         try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val m3u = prefs.getString(KEY_CUSTOM_M3U, null)

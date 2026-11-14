@@ -1829,7 +1829,7 @@ private fun LegacySidebarScaffold(
             } else {
                 NuvioTheme.spacing.none
             },
-            animationSpec = tween(NuvioMotion.tokens.durations.medium),
+            animationSpec = tween(NuvioMotion.tokens.durations.quick),
             label = "contentStartPadding"
         )
         Box(

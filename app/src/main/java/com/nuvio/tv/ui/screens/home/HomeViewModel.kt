@@ -92,7 +92,8 @@ class HomeViewModel @Inject constructor(
     internal val aiManager: com.nuvio.tv.core.ai.AiManager? = null,
     internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
     internal val simklTrendingRepository: com.nuvio.tv.data.simkl.trending.SimklTrendingRepository? = null,
-    internal val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null
+    internal val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null,
+    internal val smartRandomEpisodeSelector: com.nuvio.tv.core.playlist.SmartRandomEpisodeSelector? = null
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -888,7 +889,7 @@ class HomeViewModel @Inject constructor(
                 .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
                 .filter {
                     !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
-                        recalculateCachedReleaseBadge(it).second, dismissedNextUp)
+                        recalculateCachedReleaseBadge(it).second, dismissedNextUp, hasActiveProgress = false)
                 }
                 .map { cached ->
                     ContinueWatchingItem.NextUp(
