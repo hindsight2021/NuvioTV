@@ -248,6 +248,44 @@ class PlaylistManagerTest {
         assertNull(PlaylistManager.peekNext())
     }
 
+    @Test
+    fun `startChannel with preserveOrder keeps smart shuffle queue sequence`() {
+        val ordered = listOf(
+            video(id = "ep-3", season = 1, episode = 3),
+            video(id = "ep-1", season = 1, episode = 1),
+            video(id = "ep-2", season = 1, episode = 2)
+        )
+        PlaylistManager.startChannel(
+            contentId = contentId,
+            seriesTitle = seriesTitle,
+            episodes = ordered,
+            startEpisode = ordered.first(),
+            shuffle = true,
+            preserveOrder = true,
+            isRandomEpisode = true
+        )
+
+        assertEquals(listOf("ep-3", "ep-1", "ep-2"), PlaylistManager.queue.value.map { it.videoId })
+        assertTrue(PlaylistManager.isRandomEpisode)
+        assertEquals(ChannelMode.RANDOM_SHUFFLE, PlaylistManager.channelMode.value)
+    }
+
+    @Test
+    fun `next wrap around in RANDOM_SHUFFLE avoids repeating last played episode`() {
+        PlaylistManager.startChannel(
+            contentId = contentId,
+            seriesTitle = seriesTitle,
+            episodes = listOf(video("ep-1", 1, 1), video("ep-2", 1, 2)),
+            startEpisode = video("ep-1", 1, 1),
+            shuffle = true,
+            preserveOrder = true
+        )
+        val second = PlaylistManager.next()
+        assertEquals("ep-2", second?.videoId)
+        val wrapped = PlaylistManager.next()
+        assertEquals("ep-1", wrapped?.videoId)
+    }
+
     private fun playlistItem(id: String, season: Int = 1, episode: Int = 1): PlaylistItem = PlaylistItem(
         contentId = contentId,
         videoId = id,

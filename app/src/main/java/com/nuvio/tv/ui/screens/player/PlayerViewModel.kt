@@ -101,6 +101,7 @@ class PlayerViewModel @Inject constructor(
     private val playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge,
     private val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator,
     private val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine,
+    private val randomEpisodeHistoryStore: com.nuvio.tv.data.local.RandomEpisodeHistoryStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -154,7 +155,8 @@ class PlayerViewModel @Inject constructor(
         savedStateHandle = savedStateHandle,
         scope = viewModelScope,
         continueWatchingPreScrapeCoordinator = continueWatchingPreScrapeCoordinator,
-        autopilotDecisionEngine = autopilotDecisionEngine
+        autopilotDecisionEngine = autopilotDecisionEngine,
+        randomEpisodeHistoryStore = randomEpisodeHistoryStore
     )
 
     private val postPlayRecommendationController = PostPlayRecommendationController(

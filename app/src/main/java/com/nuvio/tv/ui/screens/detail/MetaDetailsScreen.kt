@@ -914,6 +914,22 @@ fun MetaDetailsScreen(
                     onEpisodeClick = { v -> playEpisode(v, false) },
                     onEpisodeManualPlayClick = { v -> playEpisodeManually(v, false) },
                     onPlayRandomEpisode = { v -> playEpisode(v, true) },
+                    onRequestPlayRandomEpisode = { candidates, fallback ->
+                        viewModel.playSmartRandomEpisode(
+                            candidates = candidates,
+                            fallback = fallback,
+                            isRandomEpisode = true,
+                            onSelected = { picked -> playEpisode(picked, true) }
+                        )
+                    },
+                    onRequestStartShuffleChannel = { candidates, fallback ->
+                        viewModel.playSmartRandomEpisode(
+                            candidates = candidates,
+                            fallback = fallback,
+                            isRandomEpisode = false,
+                            onSelected = { picked -> playEpisode(picked, false) }
+                        )
+                    },
                     onPlayClick = { vId -> playTitle(vId, false) },
                     onPlayManuallyClick = { vId -> playTitleManually(vId, false) },
                     onPreScrapeStreams = { vId, type, title ->
@@ -1245,6 +1261,8 @@ private fun MetaDetailsContent(
     onEpisodeClick: (Video) -> Unit,
     onEpisodeManualPlayClick: (Video) -> Unit,
     onPlayRandomEpisode: (Video) -> Unit = {},
+    onRequestPlayRandomEpisode: ((List<Video>, Video) -> Unit)? = null,
+    onRequestStartShuffleChannel: ((List<Video>, Video) -> Unit)? = null,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = {},
     onPlayClick: (String) -> Unit,
     onPlayManuallyClick: (String) -> Unit,
@@ -2475,6 +2493,16 @@ private fun MetaDetailsContent(
                             },
                             onEpisodeClick = episodeClick,
                             onPlayRandomEpisode = episodeRandomClick,
+                            onRequestPlayRandomEpisode = onRequestPlayRandomEpisode?.let { request ->
+                                { candidates, fallback ->
+                                    request(candidates, fallback)
+                                }
+                            },
+                            onRequestStartShuffleChannel = onRequestStartShuffleChannel?.let { request ->
+                                { candidates, fallback ->
+                                    request(candidates, fallback)
+                                }
+                            },
                             canPlayEpisode = canPlayEpisode,
                             onEpisodeManualPlayClick = episodeManualClick,
                             onEpisodeStartFromBeginningClick = { video ->

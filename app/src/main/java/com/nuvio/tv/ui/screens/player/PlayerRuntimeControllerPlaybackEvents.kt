@@ -1000,7 +1000,34 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingMediaReference
     }
 }
 
+private fun PlayerRuntimeController.recordRandomOrShuffleEpisodePlayIfNeeded() {
+    val store = randomEpisodeHistoryStore ?: return
+    val cid = contentId?.takeIf { it.isNotBlank() } ?: return
+    val season = currentSeason ?: return
+    val episode = currentEpisode ?: return
+    val isShuffleChannel = com.nuvio.tv.core.playlist.PlaylistManager.isChannelActiveFor(cid, currentVideoId) &&
+        com.nuvio.tv.core.playlist.PlaylistManager.channelMode.value == com.nuvio.tv.core.playlist.ChannelMode.RANDOM_SHUFFLE
+    if (!isRandomEpisodePlayback && !isShuffleChannel) return
+    if (isShortPlaceholderStream()) return
+
+    val pickKey = Triple(cid, season, episode)
+    if (lastRecordedRandomPickKey == pickKey) return
+    lastRecordedRandomPickKey = pickKey
+
+    scope.launch(kotlinx.coroutines.NonCancellable) {
+        runCatching {
+            store.recordPick(
+                contentId = cid,
+                season = season,
+                episode = episode,
+                profileId = profileId
+            )
+        }
+    }
+}
+
 internal fun PlayerRuntimeController.emitScrobbleStart() {
+    recordRandomOrShuffleEpisodePlayIfNeeded()
     logScrobbleDiagnostic("start_evaluated")
     if (!shouldTrackOrScrobble(isRandomEpisodePlayback)) {
         logScrobbleDiagnostic("start_skipped", "reason=random_episode")

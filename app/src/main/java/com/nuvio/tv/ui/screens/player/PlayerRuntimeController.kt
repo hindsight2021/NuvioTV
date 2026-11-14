@@ -106,7 +106,8 @@ class PlayerRuntimeController(
     internal val cinemaLightingController: com.nuvio.tv.core.ha.CinemaLightingController = com.nuvio.tv.core.ha.CinemaLightingController(),
     internal val fourDCinemaAnalyzer: com.nuvio.tv.core.ha.FourDCinemaAnalyzer = com.nuvio.tv.core.ha.FourDCinemaAnalyzer(cinemaLightingController),
     internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
-    internal val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine? = null
+    internal val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine? = null,
+    internal val randomEpisodeHistoryStore: com.nuvio.tv.data.local.RandomEpisodeHistoryStore? = null
 ) {
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
@@ -208,6 +209,7 @@ class PlayerRuntimeController(
     internal var currentVideoBitrate: Int? = null
     internal var currentStreamUrl: String
     internal var currentStreamResponseHeaders: Map<String, String> = emptyMap()
+    internal var lastRecordedRandomPickKey: Triple<String, Int, Int>? = null
     internal var currentStreamMimeType: String?
     internal var currentHeaders: Map<String, String>
     internal var streamSubtitles: List<Subtitle> = emptyList()
