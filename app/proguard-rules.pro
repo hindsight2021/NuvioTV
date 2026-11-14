@@ -18,6 +18,7 @@
 # Keep TypeToken generic signatures (used in AddonConfigServer/RepositoryConfigServer)
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
+-keep class com.nuvio.tv.data.local.RandomEpisodeHistoryStore** { *; }
 
 # ── Retrofit ───────────────────────────────────────────────────────────────────
 # Keep generic signatures for Retrofit service methods
