@@ -925,7 +925,12 @@ class HomeViewModel @Inject constructor(
                 }
 
             val (mainItems, upcomingOnly) = if (isSeparateNextUpRow) {
-                inProgressItems to nextUpItems
+                val dedupedInProgress = deduplicateContinueWatchingItems(inProgressItems, cwLastShowIdSiblings)
+                val dedupedNextUp = deduplicateContinueWatchingItems(
+                    dedupedInProgress + nextUpItems,
+                    cwLastShowIdSiblings
+                ).filterIsInstance<ContinueWatchingItem.NextUp>()
+                dedupedInProgress to dedupedNextUp
             } else {
                 val items = mergeContinueWatchingItems(
                     inProgressItems = inProgressItems,
