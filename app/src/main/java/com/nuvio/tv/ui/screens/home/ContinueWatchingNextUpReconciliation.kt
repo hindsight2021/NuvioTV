@@ -3,12 +3,16 @@ package com.nuvio.tv.ui.screens.home
 import com.nuvio.tv.data.local.CachedNextUpItem
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
 import com.nuvio.tv.domain.model.isContinueWatchingNextUpDismissed
+import com.nuvio.tv.ui.util.parseEpisodeReleaseDate
+import java.time.temporal.ChronoUnit
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 private val GENERIC_EPISODE_REGEX = Regex("""(?i)^(episode|ep\.?)\s*\d+\.?$""")
 private val GENERIC_SXXEYY_REGEX = Regex("""(?i)^s\d+e\d+$""")
+private val RELEASE_INFO_YEAR_REGEX = Regex("""\b((?:19|20)\d{2})\b""")
 
 /**
  * Returns true when [title] is a generic episode placeholder such as "Episode 7", "Episode 07",
@@ -22,10 +26,79 @@ internal fun isGenericEpisodeTitle(title: String?): Boolean {
     return false
 }
 
+private fun ContinueWatchingItem.releaseInfoText(): String? = when (this) {
+    is ContinueWatchingItem.InProgress -> releaseInfo
+    is ContinueWatchingItem.NextUp -> info.releaseInfo
+}
+
+private fun ContinueWatchingItem.releasedText(): String? = when (this) {
+    is ContinueWatchingItem.InProgress -> null
+    is ContinueWatchingItem.NextUp -> info.released
+}
+
 private fun extractItemImdbId(item: ContinueWatchingItem): String? {
-    extractImdbIdFromVideoId(item.videoId())?.let { return it }
     val contentId = item.contentId()
-    return if (contentId.startsWith("tt")) contentId else null
+    if (contentId.startsWith("tt")) return contentId
+    return extractImdbIdFromVideoId(item.videoId())
+}
+
+private fun extractAllItemImdbIds(item: ContinueWatchingItem): Set<String> = buildSet {
+    val contentId = item.contentId()
+    if (contentId.startsWith("tt")) add(contentId)
+    extractImdbIdFromVideoId(item.videoId())?.let(::add)
+}
+
+private fun extractStartYear(releaseInfo: String?): Int? {
+    if (releaseInfo.isNullOrBlank()) return null
+    return RELEASE_INFO_YEAR_REGEX.find(releaseInfo)?.groupValues?.get(1)?.toIntOrNull()
+}
+
+private fun normalizeReleaseInfoForComparison(releaseInfo: String?): String? {
+    val trimmed = releaseInfo?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return trimmed.replace('\u2013', '-').replace('\u2014', '-')
+}
+
+private fun areSameEpisodeAirDate(a: ContinueWatchingItem, b: ContinueWatchingItem): Boolean {
+    val aDate = parseEpisodeReleaseDate(a.releasedText()) ?: return false
+    val bDate = parseEpisodeReleaseDate(b.releasedText()) ?: return false
+    return abs(ChronoUnit.DAYS.between(aDate, bDate)) <= 1L
+}
+
+private fun isSameShowDespiteDifferentImdbIds(
+    a: ContinueWatchingItem,
+    b: ContinueWatchingItem
+): Boolean {
+    val aReleaseInfo = a.releaseInfoText()
+    val bReleaseInfo = b.releaseInfoText()
+    val aYear = extractStartYear(aReleaseInfo)
+    val bYear = extractStartYear(bReleaseInfo)
+
+    // Differing known start years indicate distinct shows (remakes or separate regional editions).
+    if (aYear != null && bYear != null && aYear != bYear) return false
+
+    val sameEpisode = a.season() != null &&
+        a.season() == b.season() &&
+        a.episode() != null &&
+        a.episode() == b.episode()
+
+    if (aYear != null && bYear != null && aYear == bYear) {
+        val normA = normalizeReleaseInfoForComparison(aReleaseInfo)
+        val normB = normalizeReleaseInfoForComparison(bReleaseInfo)
+        if (sameEpisode || normA == normB) {
+            return true
+        }
+    }
+
+    if (sameEpisode && areSameEpisodeAirDate(a, b)) return true
+
+    if ((a is ContinueWatchingItem.InProgress || b is ContinueWatchingItem.InProgress) &&
+        sameEpisode &&
+        (aYear == null || bYear == null)
+    ) {
+        return true
+    }
+
+    return false
 }
 
 /**
@@ -52,23 +125,25 @@ internal fun areContinueWatchingDuplicates(
     val bCanonical = resolveCanonicalClusterKey(bId, siblingsMap)
     if (aCanonical != aId && aCanonical == bCanonical) return true
 
-    // Rule 3: IMDb ID match
-    val aImdb = extractItemImdbId(a)
-    val bImdb = extractItemImdbId(b)
-    if (aImdb != null && bImdb != null && aImdb == bImdb) return true
+    // Rule 3: IMDb ID match (including episode/show IMDb IDs embedded in videoId)
+    val aImdbIds = extractAllItemImdbIds(a)
+    val bImdbIds = extractAllItemImdbIds(b)
+    if (aImdbIds.any { it in bImdbIds }) return true
 
     // Rule 4: normalized series title match
     val aIsSeries = a.isSeries() || a is ContinueWatchingItem.NextUp || a.season() != null || a.episode() != null
     val bIsSeries = b.isSeries() || b is ContinueWatchingItem.NextUp || b.season() != null || b.episode() != null
     if (aIsSeries && bIsSeries) {
+        val aTitle = normalizeShowTitleForGrouping(a.title())
+        val bTitle = normalizeShowTitleForGrouping(b.title())
+        if (aTitle.length < 2 || aTitle != bTitle) return false
+
         val aImdb = extractItemImdbId(a)
         val bImdb = extractItemImdbId(b)
         if (aImdb != null && bImdb != null && aImdb != bImdb) {
-            return false
+            return isSameShowDespiteDifferentImdbIds(a, b)
         }
-        val aTitle = normalizeShowTitleForGrouping(a.title())
-        val bTitle = normalizeShowTitleForGrouping(b.title())
-        if (aTitle.length >= 2 && aTitle == bTitle) return true
+        return true
     }
 
     return false
@@ -181,7 +256,8 @@ internal fun reconcileConclusiveNextUpItems(
                 item.info.season,
                 item.info.episode,
                 item.info.isReleaseAlert,
-                dismissedNextUpKeys
+                dismissedNextUpKeys,
+                hasActiveProgress = false
             )
     }
     val combined = retainedItems + acceptedResolvedItems
@@ -221,7 +297,8 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
                     item.info.season,
                     item.info.episode,
                     item.info.isReleaseAlert,
-                    dismissedNextUpKeys
+                    dismissedNextUpKeys,
+                    hasActiveProgress = false
                 )
         }
     val reconciledContentIds = conclusivelyProcessedContentIds

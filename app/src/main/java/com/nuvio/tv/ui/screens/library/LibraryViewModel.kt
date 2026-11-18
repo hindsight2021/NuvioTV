@@ -35,8 +35,10 @@ import android.content.Context
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -177,9 +179,11 @@ class LibraryViewModel @Inject constructor(
 
     private var messageClearJob: Job? = null
     private var cloudRefreshJob: Job? = null
+    private val recomputeSignal = MutableStateFlow(0L)
 
     init {
         posterOptions.bind(viewModelScope)
+        observeDerivedLists()
         observeLayoutPreferences()
         observeLibraryData()
         observeCloudLibrarySettings()
@@ -188,17 +192,69 @@ class LibraryViewModel @Inject constructor(
                 .collect { ids ->
                     _watchedMovieIds.value = ids
                     _uiState.update { current ->
-                        current.copy(watchedMovieIds = ids).withVisibleItems()
+                        current.copy(watchedMovieIds = ids)
                     }
+                    requestRecompute()
                 }
         }
         viewModelScope.launch {
             watchedSeriesStateHolder.fullyWatchedSeriesIds
                 .collect { ids ->
                     _uiState.update { current ->
-                        current.copy(watchedSeriesIds = ids).withVisibleItems()
+                        current.copy(watchedSeriesIds = ids)
                     }
+                    requestRecompute()
                 }
+        }
+    }
+
+    private fun requestRecompute() {
+        recomputeSignal.value = recomputeSignal.value + 1L
+    }
+
+    private fun observeDerivedLists() {
+        viewModelScope.launch {
+            recomputeSignal.collectLatest {
+                val snapshot = _uiState.value
+                val computed = withContext(Dispatchers.Default) {
+                    snapshot.withVisibleItems().withVisibleCloudItems()
+                }
+                var invalidatedFilter = false
+                _uiState.update { current ->
+                    val validGenre = current.selectedGenre?.takeIf { g ->
+                        computed.availableGenres.any { it.key.equals(g, ignoreCase = true) }
+                    }
+                    val validYear = current.selectedYear?.takeIf { y ->
+                        computed.availableYears.any { it.key == y }
+                    }
+                    val validCloudProvider = current.selectedCloudProviderId?.takeIf { id ->
+                        computed.availableCloudProviders.any { it.key == id }
+                    }
+                    val validCloudType = current.selectedCloudType?.takeIf { type ->
+                        computed.availableCloudTypes.any { it.key == type.name }
+                    }
+                    invalidatedFilter = validGenre != current.selectedGenre ||
+                        validYear != current.selectedYear ||
+                        validCloudProvider != current.selectedCloudProviderId ||
+                        validCloudType != current.selectedCloudType
+                    current.copy(
+                        visibleItems = computed.visibleItems,
+                        availableTypeTabs = computed.availableTypeTabs,
+                        availableGenres = computed.availableGenres,
+                        availableYears = computed.availableYears,
+                        selectedGenre = validGenre,
+                        selectedYear = validYear,
+                        visibleCloudItems = computed.visibleCloudItems,
+                        availableCloudProviders = computed.availableCloudProviders,
+                        availableCloudTypes = computed.availableCloudTypes,
+                        selectedCloudProviderId = validCloudProvider,
+                        selectedCloudType = validCloudType
+                    )
+                }
+                if (invalidatedFilter) {
+                    requestRecompute()
+                }
+            }
         }
     }
 
@@ -229,9 +285,9 @@ class LibraryViewModel @Inject constructor(
 
     fun onSelectTypeTab(tab: LibraryTypeTab) {
         _uiState.update { current ->
-            val updated = current.copy(selectedTypeTab = tab)
-            updated.withVisibleItems()
+            current.copy(selectedTypeTab = tab)
         }
+        requestRecompute()
         viewModelScope.launch {
             libraryPreferences.setLastSelectedType(tab.key)
         }
@@ -239,9 +295,9 @@ class LibraryViewModel @Inject constructor(
 
     fun onSelectListTab(listKey: String) {
         _uiState.update { current ->
-            val updated = current.copy(selectedListKey = listKey)
-            updated.withVisibleItems()
+            current.copy(selectedListKey = listKey)
         }
+        requestRecompute()
         viewModelScope.launch {
             libraryPreferences.setLastSelectedList(listKey)
         }
@@ -249,23 +305,23 @@ class LibraryViewModel @Inject constructor(
 
     fun onSelectGenre(key: String?) {
         _uiState.update { current ->
-            val updated = current.copy(selectedGenre = key)
-            updated.withVisibleItems()
+            current.copy(selectedGenre = key)
         }
+        requestRecompute()
     }
 
     fun onSelectYear(key: String?) {
         _uiState.update { current ->
-            val updated = current.copy(selectedYear = key)
-            updated.withVisibleItems()
+            current.copy(selectedYear = key)
         }
+        requestRecompute()
     }
 
     fun onSelectWatchedFilter(filter: LibraryWatchedFilter) {
         _uiState.update { current ->
-            val updated = current.copy(selectedWatchedFilter = filter)
-            updated.withVisibleItems()
+            current.copy(selectedWatchedFilter = filter)
         }
+        requestRecompute()
     }
 
     fun onSelectSortOption(option: LibrarySortOption) {
@@ -275,12 +331,12 @@ class LibraryViewModel @Inject constructor(
             } else {
                 current.sortSelectionVersion
             }
-            val updated = current.copy(
+            current.copy(
                 selectedSortOption = option,
                 sortSelectionVersion = nextVersion
             )
-            updated.withVisibleItems()
         }
+        requestRecompute()
         viewModelScope.launch { libraryPreferences.setSortOption(option.key) }
     }
 
@@ -306,34 +362,39 @@ class LibraryViewModel @Inject constructor(
                 cloudLibraryRepository.refresh()
             }.onSuccess { refreshed ->
                 _uiState.update { state ->
-                    state.copy(cloudLibrary = refreshed).withVisibleCloudItems()
+                    state.copy(cloudLibrary = refreshed)
                 }
+                requestRecompute()
             }.onFailure { error ->
                 if (error is CancellationException) return@launch
                 setError(error.message ?: context.getString(R.string.cloud_library_play_failed))
                 _uiState.update { state ->
-                    state.copy(cloudLibrary = state.cloudLibrary.copy(isLoaded = true, isRefreshing = false)).withVisibleCloudItems()
+                    state.copy(cloudLibrary = state.cloudLibrary.copy(isLoaded = true, isRefreshing = false))
                 }
+                requestRecompute()
             }
         }
     }
 
     fun onSelectCloudProvider(providerId: String?) {
         _uiState.update { current ->
-            current.copy(selectedCloudProviderId = providerId).withVisibleCloudItems()
+            current.copy(selectedCloudProviderId = providerId)
         }
+        requestRecompute()
     }
 
     fun onCloudSearchQueryChange(query: String) {
         _uiState.update { current ->
-            current.copy(cloudSearchQuery = query).withVisibleCloudItems()
+            current.copy(cloudSearchQuery = query)
         }
+        requestRecompute()
     }
 
     fun onSelectCloudType(type: CloudLibraryItemType?) {
         _uiState.update { current ->
-            current.copy(selectedCloudType = type).withVisibleCloudItems()
+            current.copy(selectedCloudType = type)
         }
+        requestRecompute()
     }
 
     fun onCloudItemHasNoPlayableFiles() {
@@ -662,7 +723,7 @@ class LibraryViewModel @Inject constructor(
 
                     val isNuvioAccount = sourceMode == LibrarySourceMode.LOCAL && authState is AuthState.FullAccount
 
-                    val updated = current.copy(
+                    current.copy(
                         sourceMode = sourceMode,
                         allItems = items,
                         listTabs = listTabs,
@@ -676,8 +737,8 @@ class LibraryViewModel @Inject constructor(
                         isSyncing = isSyncing,
                         isLoading = isSyncing && items.isEmpty()
                     )
-                    updated.withVisibleItems().withVisibleCloudItems()
                 }
+                requestRecompute()
             }
         }
     }

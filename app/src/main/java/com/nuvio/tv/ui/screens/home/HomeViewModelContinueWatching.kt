@@ -606,8 +606,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     // badges appear correctly even when the cache was written before the
                     // new season aired (fixes stale isNewSeasonRelease/isReleaseAlert/hasAired).
                     val (freshHasAired, freshIsReleaseAlert, freshIsNewSeasonRelease) = recalculateCachedReleaseBadge(cached)
+                    val cachedHasActiveProgress = snapshot.items.any { areContentIdsSiblings(it.contentId, cached.contentId, cwLastShowIdSiblings) }
                     if (isContinueWatchingNextUpDismissed(cached.contentId, cached.season, cached.episode,
-                            freshIsReleaseAlert, dismissedNextUp)) return@mapNotNull null
+                            freshIsReleaseAlert, dismissedNextUp, cachedHasActiveProgress)) return@mapNotNull null
                     // Respect "show unaired" setting (use recalculated hasAired)
                     if (!freshHasAired && !showUnairedNextUp) return@mapNotNull null
                     // Drop if the series no longer has any watched-episode seeds
@@ -1317,8 +1318,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             (it.info.contentId !in rejectedByFreshPipeline || isResolvedOlder || isDiscoveredOlder) &&
                             // Respect "show unaired" setting for all items including cached.
                             (it.info.hasAired || showUnairedNextUp) &&
-                            !isContinueWatchingNextUpDismissed(it.info.contentId, it.info.season, it.info.episode,
-                                it.info.isReleaseAlert, dismissedNextUp) &&
+                            run {
+                                val hasActiveProgress = snapshot.items.any { item -> areContentIdsSiblings(item.contentId, it.info.contentId, cwLastShowIdSiblings) }
+                                !isContinueWatchingNextUpDismissed(it.info.contentId, it.info.season, it.info.episode,
+                                    it.info.isReleaseAlert, dismissedNextUp, hasActiveProgress)
+                            } &&
                             !watchProgressRepository.isDroppedShow(it.info.contentId)
                         pass
                     }
@@ -1330,6 +1334,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     val currentSeed = currentSeedByContentId[cid]
                     val episodeAlreadyWatched = currentSeed != null &&
                         (currentSeed.first > cached.info.season || (currentSeed.first == cached.info.season && currentSeed.second >= cached.info.episode))
+                    val cachedHasActiveProgress = snapshot.items.any { item -> areContentIdsSiblings(item.contentId, cached.info.contentId, cwLastShowIdSiblings) }
                     !episodeAlreadyWatched &&
                         cid !in freshContentIds &&
                         freshContentIds.none { freshId -> areContentIdsSiblings(cid, freshId, cwLastShowIdSiblings) } &&
@@ -1340,7 +1345,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         ) &&
                         (cid !in rejectedByFreshPipeline || isResolvedOlder) &&
                         !isContinueWatchingNextUpDismissed(cached.info.contentId, cached.info.season, cached.info.episode,
-                            cached.info.isReleaseAlert, dismissedNextUp)
+                            cached.info.isReleaseAlert, dismissedNextUp, cachedHasActiveProgress)
                 }
                 val finalNextUpItems = allNextUpItems + retainedFromCache
                 val normalItems = applyContinueWatchingEnrichmentOverlay(

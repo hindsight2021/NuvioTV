@@ -78,6 +78,7 @@ object PlaylistManager {
         episodes: List<Video>,
         startEpisode: Video? = null,
         shuffle: Boolean = false,
+        preserveOrder: Boolean = false,
         isRandomEpisode: Boolean = false
     ): PlaylistItem? {
         val validEpisodes = episodes.filter { it.season != null && it.episode != null }
@@ -97,10 +98,10 @@ object PlaylistManager {
         }
 
         val finalQueue = if (shuffle) {
-            val shuffled = items.shuffled().toMutableList()
+            val shuffled = if (preserveOrder) items.toMutableList() else items.shuffled().toMutableList()
             if (startEpisode != null) {
                 // Ensure starting episode is first
-                val startItem = items.firstOrNull {
+                val startItem = shuffled.firstOrNull {
                     (it.videoId != null && it.videoId == startEpisode.id) ||
                     (it.season == startEpisode.season && it.episode == startEpisode.episode)
                 }
@@ -159,7 +160,16 @@ object PlaylistManager {
                 return items[nextIdx]
             }
             if (_channelMode.value == ChannelMode.RANDOM_SHUFFLE && items.isNotEmpty()) {
-                val reshuffled = items.shuffled()
+                val lastPlayed = items.lastOrNull()
+                val reshuffled = items.shuffled().toMutableList()
+                if (reshuffled.size > 1 && lastPlayed != null && reshuffled.first() == lastPlayed) {
+                    val swapIdx = reshuffled.indexOfFirst { it != lastPlayed }
+                    if (swapIdx > 0) {
+                        val tmp = reshuffled[0]
+                        reshuffled[0] = reshuffled[swapIdx]
+                        reshuffled[swapIdx] = tmp
+                    }
+                }
                 _queue.value = reshuffled
                 _currentIndex.value = 0
                 return reshuffled.firstOrNull()

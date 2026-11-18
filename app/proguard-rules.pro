@@ -18,6 +18,7 @@
 # Keep TypeToken generic signatures (used in AddonConfigServer/RepositoryConfigServer)
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
+-keep class com.nuvio.tv.data.local.RandomEpisodeHistoryStore** { *; }
 
 # ── Retrofit ───────────────────────────────────────────────────────────────────
 # Keep generic signatures for Retrofit service methods
@@ -54,6 +55,8 @@
 -keep class fi.iki.elonen.** { *; }
 # Keep server classes and their inner data classes (serialized with Gson)
 -keep class com.nuvio.tv.core.server.** { *; }
+-keep class com.nuvio.tv.core.control.** { *; }
+-keep class com.nuvio.tv.core.music.** { *; }
 
 # ── Torrent streaming (TorrServer) ─────────────────────────────────────────────
 -keep class com.nuvio.tv.core.torrent.** { *; }

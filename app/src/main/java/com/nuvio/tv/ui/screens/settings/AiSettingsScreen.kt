@@ -47,6 +47,8 @@ import com.nuvio.tv.core.ai.AiPreferences
 import com.nuvio.tv.core.ai.AiProvider
 import com.nuvio.tv.core.ai.AiTtsPlayer
 import com.nuvio.tv.core.ai.AiVoicePersona
+import com.nuvio.tv.core.livetv.AiBroadcastPreferences
+import com.nuvio.tv.core.livetv.LiveTvManager
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -56,6 +58,7 @@ fun AiSettingsContent(
 ) {
     val context = LocalContext.current
     val prefs = remember { AiPreferences(context) }
+    val broadcastPrefs = remember { AiBroadcastPreferences(context) }
 
     var activeProvider by remember { mutableStateOf(prefs.activeProvider) }
     var currentKey by remember { mutableStateOf(prefs.getApiKey(activeProvider)) }
@@ -63,6 +66,8 @@ fun AiSettingsContent(
     var isTtsEnabled by remember { mutableStateOf(prefs.isTtsEnabled) }
     var isSearchTtsEnabled by remember { mutableStateOf(prefs.isSearchTtsEnabled) }
     var isAiSearchEnabled by remember { mutableStateOf(prefs.isAiSearchEnabled) }
+    var isAiBroadcastEnabled by remember { mutableStateOf(broadcastPrefs.isEnabled) }
+    var isDjBumpersEnabled by remember { mutableStateOf(broadcastPrefs.djBumpersEnabled) }
     var currentVoicePersona by remember { mutableStateOf(prefs.ttsVoicePersona) }
     var customPersona by remember { mutableStateOf(prefs.customPersona) }
 
@@ -78,6 +83,8 @@ fun AiSettingsContent(
         isTtsEnabled = prefs.isTtsEnabled
         isSearchTtsEnabled = prefs.isSearchTtsEnabled
         isAiSearchEnabled = prefs.isAiSearchEnabled
+        isAiBroadcastEnabled = broadcastPrefs.isEnabled
+        isDjBumpersEnabled = broadcastPrefs.djBumpersEnabled
         currentVoicePersona = prefs.ttsVoicePersona
         customPersona = prefs.customPersona
     }
@@ -188,6 +195,33 @@ fun AiSettingsContent(
                                 val next = !isAiSearchEnabled
                                 isAiSearchEnabled = next
                                 prefs.isAiSearchEnabled = next
+                            }
+                        )
+                    }
+
+                    item(key = "ai_broadcast_enabled") {
+                        SettingsToggleRow(
+                            title = "24/7 AI Broadcast Network",
+                            subtitle = "Enable AI-curated Live TV channels & EPG schedule (zero overhead when off).",
+                            checked = isAiBroadcastEnabled,
+                            onToggle = {
+                                val next = !isAiBroadcastEnabled
+                                isAiBroadcastEnabled = next
+                                broadcastPrefs.isEnabled = next
+                                LiveTvManager.refreshAiChannels(context)
+                            }
+                        )
+                    }
+
+                    item(key = "ai_broadcast_dj_bumpers") {
+                        SettingsToggleRow(
+                            title = "AI Channel DJ Voice Bumpers",
+                            subtitle = "Have each station's AI DJ introduce what is airing when tuning live.",
+                            checked = isDjBumpersEnabled,
+                            onToggle = {
+                                val next = !isDjBumpersEnabled
+                                isDjBumpersEnabled = next
+                                broadcastPrefs.djBumpersEnabled = next
                             }
                         )
                     }

@@ -6,7 +6,8 @@ enum class LiveTvCategory(val displayName: String) {
     ENTERTAINMENT("Entertainment"),
     NEWS("News"),
     MOVIES("Movies & HBO"),
-    FRENCH("Français")
+    FRENCH("Français"),
+    AI_NETWORK("AI Network")
 }
 
 data class LiveProgram(
@@ -48,5 +49,10 @@ data class LiveTvChannel(
     val nextProgram: LiveProgram? = null,
     val streamUrl: String? = null,
     val logoUrl: String? = null,
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val isAiNetwork: Boolean = false,
+    val djHostName: String? = null,
+    val voicePersonaId: String? = null,
+    val tagline: String? = null,
+    val aiConfigId: String? = null
 )

@@ -486,13 +486,20 @@ fun HomeViewModel.playRandomEpisode(
         }
         val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
         if (validEpisodes.isNotEmpty()) {
-            val randomEp = validEpisodes.random()
+            val smartSelection = smartRandomEpisodeSelector?.selectRandomAndQueue(
+                contentId = contentId,
+                episodes = validEpisodes,
+                recordPick = true
+            )
+            val randomEp = smartSelection?.chosen ?: validEpisodes.random()
+            val queueEpisodes = smartSelection?.orderedQueue ?: validEpisodes
             com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
                 contentId = contentId,
                 seriesTitle = title,
-                episodes = validEpisodes,
+                episodes = queueEpisodes,
                 startEpisode = randomEp,
                 shuffle = true,
+                preserveOrder = smartSelection != null,
                 isRandomEpisode = true
             )
             onLaunchEpisode(contentId, contentType, addonBaseUrl, randomEp.season!!, randomEp.episode!!)
@@ -532,13 +539,26 @@ fun HomeViewModel.startChannel(
         }
         val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
         if (validEpisodes.isNotEmpty()) {
-            val startEp = if (shuffle) validEpisodes.random() else validEpisodes.first()
+            val smartSelection = if (shuffle) {
+                smartRandomEpisodeSelector?.selectRandomAndQueue(
+                    contentId = contentId,
+                    episodes = validEpisodes,
+                    recordPick = true
+                )
+            } else null
+            val startEp = if (shuffle) {
+                smartSelection?.chosen ?: validEpisodes.random()
+            } else {
+                validEpisodes.first()
+            }
+            val queueEpisodes = smartSelection?.orderedQueue ?: validEpisodes
             com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
                 contentId = contentId,
                 seriesTitle = title,
-                episodes = validEpisodes,
+                episodes = queueEpisodes,
                 startEpisode = startEp,
-                shuffle = shuffle
+                shuffle = shuffle,
+                preserveOrder = smartSelection != null
             )
             onLaunchEpisode(contentId, contentType, addonBaseUrl, startEp.season!!, startEp.episode!!)
         }

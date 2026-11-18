@@ -106,7 +106,8 @@ class PlayerRuntimeController(
     internal val cinemaLightingController: com.nuvio.tv.core.ha.CinemaLightingController = com.nuvio.tv.core.ha.CinemaLightingController(),
     internal val fourDCinemaAnalyzer: com.nuvio.tv.core.ha.FourDCinemaAnalyzer = com.nuvio.tv.core.ha.FourDCinemaAnalyzer(cinemaLightingController),
     internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
-    internal val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine? = null
+    internal val autopilotDecisionEngine: com.nuvio.tv.core.autopilot.AutopilotDecisionEngine? = null,
+    internal val randomEpisodeHistoryStore: com.nuvio.tv.data.local.RandomEpisodeHistoryStore? = null
 ) {
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
@@ -208,6 +209,7 @@ class PlayerRuntimeController(
     internal var currentVideoBitrate: Int? = null
     internal var currentStreamUrl: String
     internal var currentStreamResponseHeaders: Map<String, String> = emptyMap()
+    internal var lastRecordedRandomPickKey: Triple<String, Int, Int>? = null
     internal var currentStreamMimeType: String?
     internal var currentHeaders: Map<String, String>
     internal var streamSubtitles: List<Subtitle> = emptyList()
@@ -384,6 +386,9 @@ class PlayerRuntimeController(
     internal var preResolveNextEpisodeJob: Job? = null
     internal var preResolvedNextStream: Stream? = null
     internal var preResolvedNextVideoId: String? = null
+    internal var speculativePreWarmEnabledSetting: Boolean = true
+    internal var preWarmJob: Job? = null
+    internal var preWarmedTargetKey: String? = null
     internal var debridResolveJob: Job? = null
     internal var stillWatchingPromptJob: Job? = null
     internal var startupLoadingReportJob: Job? = null
@@ -588,6 +593,10 @@ class PlayerRuntimeController(
     internal var hasRetriedCurrentStreamAfterMediaPeriodHolderCrash: Boolean = false
     internal var timeoutRecoveryAttempts: Int = 0
     internal var errorRetryCount: Int = 0
+    internal var deadSourceFailoverCount: Int = 0
+    internal val failedPlaybackUrls: MutableSet<String> = mutableSetOf()
+    internal val failedPlaybackHashes: MutableSet<String> = mutableSetOf()
+    internal var startupSourceFailoverJob: Job? = null
     internal var consecutiveAutoPlayCount: Int = 0
     internal var errorRetryJob: Job? = null
     internal var stableProgressResetJob: Job? = null
@@ -718,6 +727,8 @@ class PlayerRuntimeController(
         startupLoadingReportJob?.cancel()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()
+        startupSourceFailoverJob?.cancel()
+        startupSourceFailoverJob = null
         sourceChipErrorDismissJob?.cancel()
         sourceStreamsScope?.cancel()
         sourceStreamsScope = null

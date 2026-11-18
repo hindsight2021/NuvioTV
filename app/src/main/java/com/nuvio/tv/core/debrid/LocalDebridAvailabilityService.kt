@@ -15,7 +15,7 @@ class LocalDebridAvailabilityService @Inject constructor(
     private val localDebridService: LocalDebridService
 ) {
     suspend fun markChecking(groups: List<AddonStreams>): List<AddonStreams> {
-        val account = cacheCheckAccount() ?: return groups
+        val account = cacheCheckAccounts().firstOrNull() ?: return groups
         return groups.updateAvailabilityStatus { stream ->
             if (stream.localAvailabilityHash() == null || stream.debridCacheStatus?.state == StreamDebridCacheState.CACHED) {
                 stream
@@ -32,7 +32,8 @@ class LocalDebridAvailabilityService @Inject constructor(
     }
 
     suspend fun annotateCachedAvailability(groups: List<AddonStreams>): List<AddonStreams> {
-        val account = cacheCheckAccount() ?: return groups
+        val accounts = cacheCheckAccounts()
+        val primaryAccount = accounts.firstOrNull() ?: return groups
         val hashes = groups.flatMap { group ->
             group.streams.mapNotNull { stream ->
                 stream.localAvailabilityHash()
@@ -41,26 +42,49 @@ class LocalDebridAvailabilityService @Inject constructor(
         }.distinct()
         if (hashes.isEmpty()) return groups
 
-        val cached = localDebridService.checkCached(account = account, hashes = hashes)
-            ?: return groups.updateAvailabilityStatus { stream ->
+        val cached = mutableMapOf<String, LocalDebridCachedItem>()
+        val winningAccounts = mutableMapOf<String, DebridServiceCredential>()
+        val remaining = hashes.toMutableSet()
+        var anyAccountResponded = false
+
+        for (account in accounts) {
+            if (remaining.isEmpty()) break
+            val result = localDebridService.checkCached(
+                account = account,
+                hashes = remaining.toList()
+            ) ?: continue
+            anyAccountResponded = true
+            for ((hash, item) in result) {
+                if (hash in remaining) {
+                    cached[hash] = item
+                    winningAccounts[hash] = account
+                    remaining.remove(hash)
+                }
+            }
+        }
+
+        if (!anyAccountResponded) {
+            return groups.updateAvailabilityStatus { stream ->
                 val hash = stream.localAvailabilityHash()
-                if (hash == null) {
+                if (hash == null || stream.debridCacheStatus?.state in FINAL_CACHE_STATES) {
                     stream
                 } else {
                     stream.copy(
                         debridCacheStatus = StreamDebridCacheStatus(
-                            providerId = account.provider.id,
-                            providerName = account.provider.displayName,
+                            providerId = primaryAccount.provider.id,
+                            providerName = primaryAccount.provider.displayName,
                             state = StreamDebridCacheState.UNKNOWN
                         )
                     )
                 }
             }
+        }
 
         return groups.updateAvailabilityStatus { stream ->
             val hash = stream.localAvailabilityHash() ?: return@updateAvailabilityStatus stream
             if (stream.debridCacheStatus?.state in FINAL_CACHE_STATES) return@updateAvailabilityStatus stream
             val cachedItem = cached[hash]
+            val account = winningAccounts[hash] ?: primaryAccount
             stream.copy(
                 debridCacheStatus = StreamDebridCacheStatus(
                     providerId = account.provider.id,
@@ -74,15 +98,24 @@ class LocalDebridAvailabilityService @Inject constructor(
     }
 
     suspend fun isCached(hash: String): Boolean? {
-        val account = cacheCheckAccount() ?: return null
-        return localDebridService.isCached(account, hash)
+        val accounts = cacheCheckAccounts()
+        if (accounts.isEmpty()) return null
+        var sawFalse = false
+        for (account in accounts) {
+            when (localDebridService.isCached(account, hash)) {
+                true -> return true
+                false -> sawFalse = true
+                null -> Unit
+            }
+        }
+        return if (sawFalse) false else null
     }
 
-    private suspend fun cacheCheckAccount(): DebridServiceCredential? {
+    private suspend fun cacheCheckAccounts(): List<DebridServiceCredential> {
         val settings = dataStore.settings.first()
-        if (!settings.canResolvePlayableLinks) return null
-        return settings.activeResolverCredential
-            ?.takeIf { credential -> credential.provider.supports(DebridProviderCapability.LocalTorrentCacheCheck) }
+        if (!settings.canResolvePlayableLinks) return emptyList()
+        return settings.orderedResolverCredentials
+            .filter { credential -> credential.provider.supports(DebridProviderCapability.LocalTorrentCacheCheck) }
     }
 }
 

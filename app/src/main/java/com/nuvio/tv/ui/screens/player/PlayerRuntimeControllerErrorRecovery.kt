@@ -7,9 +7,16 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
 import com.nuvio.tv.R
+import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.player.StreamAutoPlaySelector
+import com.nuvio.tv.domain.model.AddonStreams
+import com.nuvio.tv.domain.model.enabledAddons
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val MAX_STARTUP_AUTO_RETRIES = 2
 private const val MAX_AUTO_RETRIES = 2
@@ -314,20 +321,176 @@ internal fun PlayerRuntimeController.attemptAutoRetry(
 }
 
 private const val MAX_DEAD_SOURCE_FAILOVERS = 3
-private var deadSourceFailoverCount = 0
+private const val STARTUP_FAILOVER_SCRAPE_TIMEOUT_MS = 12_000L
 
 /**
  * Resets the retry counter. Call this whenever playback enters a healthy state
  * (first frame rendered, or user-initiated retry).
  */
-internal fun PlayerRuntimeController.resetErrorRetryState() {
+internal fun PlayerRuntimeController.resetErrorRetryState(
+    resetDeadSourceFailoverCount: Boolean = true
+) {
     startupRetryCount = 0
     errorRetryCount = 0
-    deadSourceFailoverCount = 0
+    if (resetDeadSourceFailoverCount) {
+        deadSourceFailoverCount = 0
+    }
     parsingErrorProbeAttempted = false
     pendingAudioPcmFallbackRebuild = false
     errorRetryJob?.cancel()
     errorRetryJob = null
+}
+
+internal fun PlayerRuntimeController.recordFailedCurrentSource() {
+    currentStreamUrl.trim().takeIf { it.isNotBlank() }?.let { url ->
+        failedPlaybackUrls.add(url)
+    }
+    currentInfoHash?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { hash ->
+        failedPlaybackHashes.add(hash)
+    }
+    _uiState.value.currentStreamInfoHash?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { hash ->
+        failedPlaybackHashes.add(hash)
+    }
+    streamCacheKey?.let { key ->
+        scope.launch(NonCancellable) {
+            streamLinkCacheDataStore.remove(key)
+        }
+    }
+}
+
+internal fun PlayerRuntimeController.attemptStartupNextSourceFailover(detailedError: String): Boolean {
+    recordFailedCurrentSource()
+    if (hasRenderedFirstFrame || deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
+        return false
+    }
+
+    val state = _uiState.value
+    val allStreams = state.sourceAllStreams
+    if (allStreams.isNotEmpty()) {
+        val nextCandidate = StartupErrorFailoverPolicy.selectNextLiveCandidate(
+            streams = allStreams,
+            failedUrls = failedPlaybackUrls,
+            failedHashes = failedPlaybackHashes,
+            currentUrl = currentStreamUrl,
+            currentHash = state.currentStreamInfoHash ?: currentInfoHash,
+            currentName = state.currentStreamName
+        )
+        if (nextCandidate != null) {
+            deadSourceFailoverCount++
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "attemptStartupNextSourceFailover: failover $deadSourceFailoverCount/$MAX_DEAD_SOURCE_FAILOVERS from cached streams -> ${nextCandidate.getDisplayNameOrNull() ?: nextCandidate.addonName}"
+            )
+            _uiState.update {
+                it.copy(
+                    loadingMessage = context.getString(R.string.player_loading_preparing),
+                    showLoadingOverlay = true,
+                    isBuffering = true,
+                    error = null
+                )
+            }
+            switchToSourceStream(nextCandidate, preserveDeadSourceFailoverCount = true)
+            return true
+        }
+    }
+
+    val type = contentType
+    val vid = currentVideoId
+    if (type.isNullOrBlank() || type.equals("cloud", ignoreCase = true) || vid.isNullOrBlank()) {
+        return false
+    }
+
+    deadSourceFailoverCount++
+    startupSourceFailoverJob?.cancel()
+    _uiState.update {
+        it.copy(
+            loadingMessage = context.getString(R.string.player_loading_preparing),
+            showLoadingOverlay = true,
+            isBuffering = true,
+            error = null
+        )
+    }
+    releasePlayer(flushPlaybackState = false)
+
+    startupSourceFailoverJob = scope.launch {
+        try {
+            val installedAddons = addonRepository.getInstalledAddons().first().enabledAddons()
+            val installedAddonOrder = installedAddons.map { it.displayName }
+            val installedAddonNames = installedAddonOrder.toSet()
+
+            var latestAddonStreams: List<AddonStreams> = emptyList()
+            withTimeoutOrNull(STARTUP_FAILOVER_SCRAPE_TIMEOUT_MS) {
+                streamRepository.getStreamsFromAllAddons(
+                    type = type,
+                    videoId = vid,
+                    season = currentSeason,
+                    episode = currentEpisode,
+                    forceRefresh = true,
+                    title = contentName?.takeIf { it.isNotBlank() } ?: title.takeIf { it.isNotBlank() }
+                ).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            latestAddonStreams = result.data
+                        }
+                        is NetworkResult.Error -> {
+                            if (latestAddonStreams.isEmpty()) return@collect
+                        }
+                        is NetworkResult.Loading -> Unit
+                    }
+                }
+            }
+
+            val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(latestAddonStreams, installedAddonOrder)
+            val allFetchedStreams = orderedAddonStreams.flatMap { it.streams }
+            val eligibleStreams = allFetchedStreams.filter { stream ->
+                val url = stream.getStreamUrl()?.trim()
+                val hash = (stream.infoHash ?: stream.clientResolve?.infoHash)?.trim()?.lowercase()
+                val urlFailed = !url.isNullOrBlank() && url in failedPlaybackUrls
+                val hashFailed = !hash.isNullOrBlank() && hash in failedPlaybackHashes
+                !urlFailed && !hashFailed &&
+                    (!url.isNullOrBlank() || stream.isTorrent() || stream.isDirectDebrid())
+            }
+
+            val playerSettings = playerSettingsDataStore.playerSettings.first()
+            val candidate = StreamAutoPlaySelector.selectAutoPlayStream(
+                streams = eligibleStreams,
+                mode = playerSettings.streamAutoPlayMode,
+                regexPattern = playerSettings.streamAutoPlayRegex,
+                source = playerSettings.streamAutoPlaySource,
+                installedAddonNames = installedAddonNames,
+                selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                preferredBingeGroup = currentStreamBingeGroup,
+                preferBingeGroupInSelection = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode,
+                bingeGroupOnly = false
+            ) ?: eligibleStreams.firstOrNull()
+
+            if (candidate != null) {
+                _uiState.update { it.copy(sourceAllStreams = allFetchedStreams) }
+                switchToSourceStream(candidate, preserveDeadSourceFailoverCount = true)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        showLoadingOverlay = false,
+                        isBuffering = false,
+                        error = detailedError
+                    )
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.w(PlayerRuntimeController.TAG, "attemptStartupNextSourceFailover failed: ${t.message}", t)
+            _uiState.update {
+                it.copy(
+                    showLoadingOverlay = false,
+                    isBuffering = false,
+                    error = detailedError
+                )
+            }
+        }
+    }
+    return true
 }
 
 /**
@@ -336,6 +499,7 @@ internal fun PlayerRuntimeController.resetErrorRetryState() {
  * automatically advances to the next equivalent live source from cached streams.
  */
 internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: String): Boolean {
+    recordFailedCurrentSource()
     if (deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
         Log.w(PlayerRuntimeController.TAG, "advanceToNextLiveSource: failover budget ($MAX_DEAD_SOURCE_FAILOVERS) exhausted")
         return false
@@ -347,29 +511,14 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         return false
     }
 
-    val currentUrl = currentStreamUrl
-    val currentHash = _uiState.value.currentStreamInfoHash
-    val currentName = _uiState.value.currentStreamName
-
-    val currentIndex = allStreams.indexOfFirst { stream ->
-        (currentUrl.isNotBlank() && stream.getStreamUrl() == currentUrl) ||
-            (currentHash != null && stream.infoHash.equals(currentHash, ignoreCase = true)) ||
-            (currentName != null && stream.getDisplayNameOrNull() == currentName)
-    }
-
-    val nextCandidates = if (currentIndex >= 0 && currentIndex < allStreams.lastIndex) {
-        allStreams.subList(currentIndex + 1, allStreams.size)
-    } else if (currentIndex > 0) {
-        allStreams.filterIndexed { index, _ -> index != currentIndex }
-    } else if (currentIndex == -1 && allStreams.size > 1) {
-        allStreams
-    } else {
-        emptyList()
-    }
-
-    val nextCandidate = nextCandidates.firstOrNull { candidate ->
-        !candidate.getStreamUrl().isNullOrBlank() || candidate.isTorrent() || candidate.isDirectDebrid()
-    } ?: return false
+    val nextCandidate = StartupErrorFailoverPolicy.selectNextLiveCandidate(
+        streams = allStreams,
+        failedUrls = failedPlaybackUrls,
+        failedHashes = failedPlaybackHashes,
+        currentUrl = currentStreamUrl,
+        currentHash = _uiState.value.currentStreamInfoHash ?: currentInfoHash,
+        currentName = _uiState.value.currentStreamName
+    ) ?: return false
 
     deadSourceFailoverCount++
     Log.w(
@@ -386,7 +535,7 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         )
     }
 
-    switchToSourceStream(nextCandidate)
+    switchToSourceStream(nextCandidate, preserveDeadSourceFailoverCount = true)
     return true
 }
 

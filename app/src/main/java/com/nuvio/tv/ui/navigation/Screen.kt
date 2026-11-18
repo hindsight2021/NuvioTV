@@ -229,4 +229,10 @@ sealed class Screen(val route: String) {
             return "tmdb_entity_browse/${encode(entityKind)}/$entityId/${encode(entityName)}?sourceType=${encode(sourceType)}"
         }
     }
+
+    data object Music : Screen("music")
+
+    data object NowPlaying : Screen("music_now_playing")
+
+    data object DjMixer : Screen("music_dj_mixer")
 }

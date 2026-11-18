@@ -254,7 +254,19 @@ internal fun PlayerRuntimeController.handleMpvPlaybackError(
             lastPlaybackDiagnosticsForReport.copy(result = "Error: $detailedError")
 
         val startupFailed = !hasRenderedFirstFrame
-        if (startupFailed &&
+        val httpStatusCode = StartupErrorFailoverPolicy.extractHttpStatusCode(detailedError) ?: httpCode
+        val isUnrecoverableHttp = StartupErrorFailoverPolicy.isNonRetryableHttpStatusCode(httpStatusCode)
+        if (isUnrecoverableHttp) {
+            recordFailedCurrentSource()
+            if (startupFailed && attemptStartupNextSourceFailover(detailedError)) {
+                return
+            }
+            if (!startupFailed && advanceToNextLiveSource(detailedError)) {
+                return
+            }
+        }
+
+        if (!isUnrecoverableHttp && startupFailed &&
             maybeAutoSwitchInternalPlayerOnStartupError(
                 detailedError = detailedError,
                 allowEngineFailover = allowEngineFailover
@@ -268,7 +280,7 @@ internal fun PlayerRuntimeController.handleMpvPlaybackError(
         } else {
             mpvView?.currentPositionMs()?.coerceAtLeast(0L) ?: 0L
         }
-        if (attemptMpvAutoRetry(detailedError = detailedError, savedPosition = savedPosition)) return
+        if (!isUnrecoverableHttp && attemptMpvAutoRetry(detailedError = detailedError, savedPosition = savedPosition)) return
 
         finishLoadingDiagnostics("mpv_error")
         cancelNextEpisodeAutoPlayOnFatalError()
@@ -294,6 +306,12 @@ private fun PlayerRuntimeController.attemptMpvAutoRetry(
     detailedError: String,
     savedPosition: Long
 ): Boolean {
+    if (StartupErrorFailoverPolicy.isNonRetryableHttpStatusCode(
+            StartupErrorFailoverPolicy.extractHttpStatusCode(detailedError)
+        )
+    ) {
+        return false
+    }
     if (errorRetryCount >= MPV_MAX_AUTO_RETRIES) return false
 
     val paused = userPausedManually

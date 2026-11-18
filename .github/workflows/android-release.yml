@@ -39,6 +39,7 @@ jobs:
       RELEASE_STORE_PASSWORD: ${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
       HOME_ASSISTANT_BASE_URL: ${{ secrets.HOME_ASSISTANT_BASE_URL }}
       HOME_ASSISTANT_TOKEN: ${{ secrets.HOME_ASSISTANT_TOKEN }}
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
     steps:
       - name: Check out full history
@@ -178,6 +179,7 @@ jobs:
           set_property GITHUB_REPO "NuvioTV"
           set_property HOME_ASSISTANT_BASE_URL "${HOME_ASSISTANT_BASE_URL}"
           set_property HOME_ASSISTANT_TOKEN "${HOME_ASSISTANT_TOKEN}"
+          set_property TMDB_API_KEY "${TMDB_API_KEY}"
 
           for optional_prop in TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET SIMKL_CLIENT_ID; do
             if ! grep -Eq "^[[:space:]]*${optional_prop}[[:space:]]*=" local.properties; then

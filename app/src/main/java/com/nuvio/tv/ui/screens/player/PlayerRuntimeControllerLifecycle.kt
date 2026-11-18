@@ -62,6 +62,12 @@ internal fun PlayerRuntimeController.releasePlayer(
     mpvMediaLoadPrepared = false
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
+    preResolveNextEpisodeJob?.cancel()
+    preResolveNextEpisodeJob = null
+    preWarmJob?.cancel()
+    preWarmJob = null
+    preWarmedTargetKey = null
+    com.nuvio.tv.core.player.NextEpisodePreWarmer.resetStatus()
     debridResolveJob?.cancel()
     debridResolveJob = null
     stillWatchingPromptJob?.cancel()

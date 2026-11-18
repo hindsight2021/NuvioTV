@@ -876,22 +876,26 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val trimmed = contentId.trim()
         val siblingIds: List<String> = (runCatching { getShowIdSiblings()[trimmed] }.getOrNull().orEmpty() + trimmed).distinct()
 
-        // 1. Dismiss whole show across all siblings so it stays off CW unless actively watched again
+        // 1. Resolve all remote delete keys (sibling IDs + all episode keys matching any sibling)
+        // MUST be captured BEFORE clearing local watch progress!
+        val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, null, null, profileId)
+
+        // 2. Dismiss whole show across all siblings so it stays off CW unless actively watched again
         for (id in siblingIds) {
             traktSettingsDataStore.addDismissedNextUpKey(id)
         }
 
-        // 2. Clear local watch progress for all siblings
+        // 3. Clear local watch progress for all siblings
         for (id in siblingIds) {
             watchProgressPreferences.removeProgress(id, null, null, profileId)
         }
 
-        // 3. Clear local watched history for all siblings
+        // 4. Clear local watched history for all siblings
         for (id in siblingIds) {
             watchedItemsPreferences.unmarkAllForContent(id, profileId)
         }
 
-        // 4. Remote providers (Trakt + Simkl)
+        // 5. Remote providers (Trakt + Simkl)
         // Optimistic removal and remote delete of progress/history
         for (id in siblingIds) {
             for (provider in connectedProgressProviders()) {
@@ -910,8 +914,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
         broadcastHistoryRemoval(profileId, listOf(media))
 
-        // 5. Nuvio Sync / remote delete keys
-        val remoteDeleteKeys = siblingIds
+        // 6. Nuvio Sync / remote delete keys
         mutationStore.queueProgressDeletes(remoteDeleteKeys, profileId)
         mutationStore.queueWatchedDeletes(siblingIds.map { WatchedMutationKey(it, null, null) }, profileId)
 
@@ -1281,16 +1284,20 @@ class WatchProgressRepositoryImpl @Inject constructor(
         episode: Int?,
         profileId: Int = profileManager.activeProfileId.value
     ): List<String> {
+        val trimmed = contentId.trim()
+        val siblingIds = (runCatching { getShowIdSiblings()[trimmed] }.getOrNull().orEmpty() + trimmed).distinct()
         val rawEntries = watchProgressPreferences.getAllRawEntries(profileId)
         val keys = if (season != null && episode != null) {
-            listOf("${contentId}_s${season}e${episode}", contentId)
+            siblingIds.flatMap { id ->
+                listOf("${id}_s${season}e${episode}", id)
+            }
         } else {
             val matchingLocalKeys = rawEntries
                 .keys
                 .filter { key ->
-                    key == contentId || key.startsWith("${contentId}_")
+                    siblingIds.any { id -> key == id || key.startsWith("${id}_") }
                 }
-            matchingLocalKeys + contentId
+            matchingLocalKeys + siblingIds
         }
         val resolvedKeys = keys
             .map { it.trim() }

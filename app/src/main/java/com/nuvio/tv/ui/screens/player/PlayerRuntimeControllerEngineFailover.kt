@@ -10,12 +10,17 @@ import kotlinx.coroutines.launch
 
 internal fun PlayerRuntimeController.maybeAutoSwitchInternalPlayerOnStartupError(
     detailedError: String,
-    allowEngineFailover: Boolean
+    allowEngineFailover: Boolean,
+    error: androidx.media3.common.PlaybackException? = null
 ): Boolean {
     if (!allowEngineFailover) return false
     if (!autoSwitchInternalPlayerOnErrorEnabled) return false
     if (startupEngineFailoverTriggered) return false
     if (!isStartupPhaseForEngineFailover()) return false
+    if (!StartupErrorFailoverPolicy.shouldAllowStartupEngineFailover(error = error, detailedError = detailedError)) {
+        Log.d(PlayerRuntimeController.TAG, "Skipping internal player engine failover for unrecoverable HTTP error: $detailedError")
+        return false
+    }
 
     val targetEngine = when (currentInternalPlayerEngine) {
         InternalPlayerEngine.EXOPLAYER -> InternalPlayerEngine.MVP_PLAYER

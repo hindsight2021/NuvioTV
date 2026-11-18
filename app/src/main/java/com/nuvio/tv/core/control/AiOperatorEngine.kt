@@ -3,6 +3,8 @@ package com.nuvio.tv.core.control
 import android.content.Context
 import com.nuvio.tv.core.ai.AiManager
 import com.nuvio.tv.core.ai.ThematicChannelGenerator
+import com.nuvio.tv.core.livetv.AiBroadcastNetwork
+import com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -70,9 +72,39 @@ class AiOperatorEngine @Inject constructor(
             INTENT_NAVIGATE -> handleNavigate(intent)
             INTENT_SEARCH -> handleSearch(intent, originalPrompt)
             INTENT_THEMATIC_CHANNEL -> handleThematicChannel(intent, originalPrompt)
+            INTENT_TUNE_CHANNEL -> handleTuneChannel(intent, originalPrompt)
+            INTENT_SEEK -> handleSeekIntent(intent)
             INTENT_PLAY -> handlePlay(intent, originalPrompt)
             else -> CommandResult.Error("Unsupported intent: '${intent.intent}'")
         }
+    }
+
+    private suspend fun handleTuneChannel(intent: ParsedIntent, originalPrompt: String): CommandResult {
+        val query = intent.channelQuery ?: intent.title ?: originalPrompt
+        val channels = AiBroadcastNetwork.resolveChannels(context)
+        val normalized = query.lowercase()
+        val match = channels.firstOrNull { ch ->
+            normalized.contains(ch.number.lowercase()) ||
+                normalized.contains(ch.name.lowercase()) ||
+                normalized.contains(ch.callSign.lowercase()) ||
+                normalized.contains(ch.id.lowercase())
+        } ?: AiBroadcastNetwork.findChannelById(context, query)
+
+        return if (match != null) {
+            AiBroadcastTuneCoordinator.tuneAiChannel(
+                context = context,
+                channelId = match.id,
+                startFromBeginning = false,
+                justPlayCoordinator = justPlayCoordinator
+            )
+        } else {
+            CommandResult.Unavailable("No AI Broadcast channel matched '$query'")
+        }
+    }
+
+    private suspend fun handleSeekIntent(intent: ParsedIntent): CommandResult {
+        val deltaSec = intent.seekDeltaSeconds ?: return CommandResult.Error("seek intent missing seekDeltaSeconds")
+        return playerPlaybackBridge.executePlaybackCommand(AppCommand.SeekBy(deltaSec * 1000L))
     }
 
     private suspend fun handlePlaybackControl(intent: ParsedIntent): CommandResult {
@@ -174,7 +206,9 @@ class AiOperatorEngine @Inject constructor(
             episode = json.optIntOrNull("episode"),
             screen = json.optStringOrNull("screen"),
             controlAction = json.optStringOrNull("controlAction"),
-            thematicPrompt = json.optStringOrNull("thematicPrompt")
+            thematicPrompt = json.optStringOrNull("thematicPrompt"),
+            channelQuery = json.optStringOrNull("channelQuery"),
+            seekDeltaSeconds = json.optIntOrNull("seekDeltaSeconds")
         )
     }
 
@@ -210,12 +244,16 @@ class AiOperatorEngine @Inject constructor(
         val episode: Int?,
         val screen: String?,
         val controlAction: String?,
-        val thematicPrompt: String?
+        val thematicPrompt: String?,
+        val channelQuery: String? = null,
+        val seekDeltaSeconds: Int? = null
     )
 
     private companion object {
         const val INTENT_PLAY = "play"
         const val INTENT_THEMATIC_CHANNEL = "thematic_channel"
+        const val INTENT_TUNE_CHANNEL = "tune_channel"
+        const val INTENT_SEEK = "seek"
         const val INTENT_SEARCH = "search"
         const val INTENT_NAVIGATE = "navigate"
         const val INTENT_PLAYBACK_CONTROL = "playback_control"
@@ -226,17 +264,21 @@ class AiOperatorEngine @Inject constructor(
             no prose, no markdown, no code fences. Use this exact schema:
 
             {
-              "intent": "play" | "thematic_channel" | "search" | "navigate" | "playback_control",
+              "intent": "play" | "thematic_channel" | "tune_channel" | "seek" | "search" | "navigate" | "playback_control",
               "title": "string or null",
               "contentType": "movie" | "series" | null,
               "season": integer or null,
               "episode": integer or null,
               "screen": "string or null",
               "controlAction": "pause" | "resume" | "next" | "stop" | null,
-              "thematicPrompt": "string or null"
+              "thematicPrompt": "string or null",
+              "channelQuery": "string or null",
+              "seekDeltaSeconds": integer or null
             }
 
             Rules:
+            - Use "tune_channel" when the user asks to tune a Live TV or AI Broadcast channel (e.g. "tune channel 9001", "watch Cosmos Late Night"). Put the channel number/name in channelQuery.
+            - Use "seek" when the user asks to skip ahead or rewind (positive or negative seconds in seekDeltaSeconds).
             - Use "play" when the user wants to watch a specific show, movie, or episode.
             - Use "thematic_channel" when the user wants a marathon, mood channel, or curated vibe.
             - Use "search" when the user wants to look up content or browse titles.

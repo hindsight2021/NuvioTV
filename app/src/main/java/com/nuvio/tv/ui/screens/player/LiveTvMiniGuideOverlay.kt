@@ -278,13 +278,31 @@ fun LiveTvMiniGuideOverlay(
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(
-                                                text = "${channel.number} • ${channel.name}",
+                                                text = "${channel.number} • ${channel.name}" +
+                                                    if (channel.isAiNetwork && !channel.djHostName.isNullOrBlank()) " · DJ ${channel.djHostName}" else "",
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                                 color = NuvioTheme.colors.TextSecondary,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.weight(1f, fill = false)
                                             )
+                                            if (channel.isAiNetwork && !isWatching) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(channelColor.copy(alpha = 0.25f))
+                                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "AI TV",
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 9.sp
+                                                        ),
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
                                             if (isWatching) {
                                                 Box(
                                                     modifier = Modifier

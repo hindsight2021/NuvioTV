@@ -23,6 +23,7 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
 import com.nuvio.tv.NuvioApplication
 import com.nuvio.tv.core.network.IPv4FirstDns
+import com.nuvio.tv.core.player.NextEpisodePreWarmer
 import com.nuvio.tv.core.torrent.TorrServerBinary
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.VodCacheSizeMode
@@ -179,18 +180,24 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             maybeApplyLiveVodCacheCapIncrease(context, vodCacheMaxBytes, !previousVodCacheActive)
         }
 
+        val effectiveProgressiveUpstream: DataSource.Factory = if (!isLocalFile && !isHls && !isDash) {
+            NextEpisodePreWarmer.wrapDataSourceFactoryIfCached(context, progressiveUpstreamFactory, url)
+        } else {
+            progressiveUpstreamFactory
+        }
+
         val cachedProgressiveFactory: DataSource.Factory = if (vodCacheActive) {
             val cache = getReadySimpleCache(vodCacheMaxBytes) ?: getAnySimpleCache()
             if (cache != null) {
                 currentVodCacheActive = true
-                buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
+                buildVodCacheDataSourceFactory(effectiveProgressiveUpstream, cache)
             } else {
                 currentVodCacheActive = false
-                progressiveUpstreamFactory
+                effectiveProgressiveUpstream
             }
         } else {
             currentVodCacheActive = false
-            progressiveUpstreamFactory
+            effectiveProgressiveUpstream
         }
         val progressiveFactory = DataSource.Factory {
             BufferedReadDataSource(cachedProgressiveFactory.createDataSource())
@@ -406,6 +413,13 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         private fun getAnySimpleCache(): SimpleCache? = sharedSimpleCache
+
+        fun getVodCacheStats(): Pair<Int, Int> {
+            val cache = getAnySimpleCache() ?: return 0 to 0
+            val usedMb = (cache.cacheSpace / (1024L * 1024L)).toInt()
+            val maxMb = (configuredVodCacheMaxBytes / (1024L * 1024L)).toInt()
+            return usedMb to maxMb
+        }
 
         private fun maybeApplyLiveVodCacheCapIncrease(
             context: Context,
