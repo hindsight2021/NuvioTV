@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.music
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.music.DjConsoleTelemetry
 import com.nuvio.tv.core.music.EclipseAlbumDetail
 import com.nuvio.tv.core.music.EclipseArtistDetail
 import com.nuvio.tv.core.music.EclipseAudioMix
@@ -44,6 +45,7 @@ data class EclipseMusicUiState(
     val isResolvingQueue: Boolean = false,
     val djBannerMessage: String? = null,
     val isDjBusy: Boolean = false,
+    val includeDjSurprises: Boolean = true,
     val lastVoiceStatus: String? = null,
 )
 
@@ -67,6 +69,7 @@ class EclipseMusicViewModel @Inject constructor(
     )
 
     val audioTelemetry: StateFlow<EclipseAudioTelemetry> = audioPlayer.telemetry
+    val djTelemetry: StateFlow<DjConsoleTelemetry> = audioPlayer.djTelemetry
 
     private var djJob: Job? = null
 
@@ -335,6 +338,97 @@ class EclipseMusicViewModel @Inject constructor(
         _uiState.update { it.copy(isDjBusy = false) }
     }
 
+    fun toggleDjSurprises() {
+        _uiState.update { it.copy(includeDjSurprises = !it.includeDjSurprises) }
+    }
+
+    fun startProDjSet(
+        playlistId: String? = null,
+        tracks: List<EclipseTrack>? = null,
+        prompt: String? = null,
+        includeSurprises: Boolean = _uiState.value.includeDjSurprises,
+        onStarted: (() -> Unit)? = null,
+    ) {
+        djJob?.cancel()
+        djJob = viewModelScope.launch {
+            _uiState.update { it.copy(isDjBusy = true, error = null) }
+            try {
+                musicClient.startProDjSet(
+                    playlistId = playlistId,
+                    tracks = tracks,
+                    prompt = prompt?.takeIf { it.isNotBlank() },
+                    includeSurprises = includeSurprises,
+                    surpriseCount = if (includeSurprises) 2 else 0,
+                ).fold(
+                    onSuccess = { result ->
+                        val playable = result.tracks.filter { it.streamUrl.isNotBlank() }
+                        _uiState.update {
+                            it.copy(
+                                isDjBusy = false,
+                                djBannerMessage = result.commentary ?: result.message ?: "Pro AI DJ Beatmix Active",
+                            )
+                        }
+                        if (playable.isNotEmpty()) {
+                            audioPlayer.startDjMixSet(
+                                tracks = playable,
+                                djSessionId = result.sessionId,
+                                commentary = result.commentary ?: result.message,
+                                mood = result.mood,
+                            )
+                            onStarted?.invoke()
+                        } else {
+                            _uiState.update { it.copy(error = "Pro AI DJ returned no playable tracks.") }
+                        }
+                    },
+                    onFailure = { t ->
+                        if (t is CancellationException) throw t
+                        _uiState.update {
+                            it.copy(isDjBusy = false, error = t.message ?: "Pro AI DJ set failed")
+                        }
+                    },
+                )
+            } catch (_: CancellationException) {
+                _uiState.update { it.copy(isDjBusy = false) }
+            }
+        }
+    }
+
+    fun triggerDjMixNow() {
+        viewModelScope.launch {
+            audioPlayer.triggerDjMixNow()
+        }
+    }
+
+    fun injectDjWildcard(prompt: String? = null) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDjBusy = true, error = null) }
+            val currentSeed = djTelemetry.value.queue.take(5).ifEmpty {
+                audioTelemetry.value.queue.take(5)
+            }
+            musicClient.startProDjSet(
+                tracks = currentSeed.ifEmpty { null },
+                prompt = prompt ?: "Pick an unexpected crate-digger wildcard track not in this list with infectious energy",
+                includeSurprises = true,
+                surpriseCount = 1,
+            ).fold(
+                onSuccess = { result ->
+                    _uiState.update { it.copy(isDjBusy = false) }
+                    val existingIds = djTelemetry.value.queue.map { it.id }.toSet()
+                    val picks = result.tracks.filter { it.djMeta?.isWildcard == true && it.id !in existingIds }
+                        .ifEmpty { result.tracks.filter { it.id !in existingIds }.take(1) }
+                    if (picks.isNotEmpty()) {
+                        audioPlayer.injectDjSurprises(picks, result.commentary)
+                    }
+                },
+                onFailure = { t ->
+                    _uiState.update {
+                        it.copy(isDjBusy = false, error = t.message ?: "Could not fetch wildcard surprise")
+                    }
+                },
+            )
+        }
+    }
+
     fun nextUmbraDj() {
         djJob?.cancel()
         djJob = viewModelScope.launch {
@@ -372,8 +466,9 @@ class EclipseMusicViewModel @Inject constructor(
         djJob?.cancel()
         djJob = null
         viewModelScope.launch {
-            val sessionId = audioTelemetry.value.djSessionId
+            val sessionId = audioTelemetry.value.djSessionId ?: djTelemetry.value.djSessionId
             musicClient.stopUmbraDj(sessionId = sessionId)
+            audioPlayer.stopDjMix()
             audioPlayer.control("stop")
             _uiState.update { it.copy(isDjBusy = false, djBannerMessage = null) }
         }
@@ -451,7 +546,11 @@ class EclipseMusicViewModel @Inject constructor(
     /**
      * Parses spoken Shield TV remote commands into playback control, Umbra DJ, AI Mix, or instant Search & Play.
      */
-    fun handleVoiceCommand(spokenText: String, onOpenNowPlaying: () -> Unit) {
+    fun handleVoiceCommand(
+        spokenText: String,
+        onOpenNowPlaying: () -> Unit,
+        onOpenDjMixer: (() -> Unit)? = null,
+    ) {
         val raw = spokenText.trim()
         if (raw.isEmpty()) return
         val lower = raw.lowercase()
@@ -461,13 +560,27 @@ class EclipseMusicViewModel @Inject constructor(
             lower in setOf("pause", "pause music") -> control("pause")
             lower in setOf("play", "resume", "resume music", "unpause") -> control("play")
             lower in setOf("next", "next track", "next song", "skip") -> control("next")
+            lower in setOf("mix now", "beatmix", "transition", "transition now", "crossfade") -> triggerDjMixNow()
+            lower.contains("surprise") || lower.contains("wildcard") -> injectDjWildcard(raw)
             lower in setOf("previous", "prev", "previous track", "previous song", "go back") -> control("previous")
             lower in setOf("stop", "stop music", "stop dj", "close player") -> {
-                if (audioTelemetry.value.djSessionId != null) stopUmbraDj() else control("stop")
+                if (audioTelemetry.value.djSessionId != null || djTelemetry.value.isActive) stopUmbraDj() else control("stop")
+            }
+            lower.startsWith("dj mix") || lower.startsWith("pro dj") || lower.contains("beatmix") -> {
+                val prompt = raw.replace(Regex("^(?:pro\\s*dj(?:\\s+mix)?|dj\\s*mix)\\s*", RegexOption.IGNORE_CASE), "").trim()
+                startProDjSet(
+                    prompt = prompt.ifBlank { null },
+                    includeSurprises = true,
+                    onStarted = onOpenDjMixer ?: onOpenNowPlaying,
+                )
             }
             lower.startsWith("umbra") || lower.startsWith("dj ") || lower == "dj" -> {
                 val prompt = raw.replace(Regex("^(?:umbra(?:\\s+ai)?(?:\\s+dj)?|dj)\\s*", RegexOption.IGNORE_CASE), "").trim()
-                startUmbraDj(prompt.ifBlank { null }, onStarted = onOpenNowPlaying)
+                startProDjSet(
+                    prompt = prompt.ifBlank { null },
+                    includeSurprises = _uiState.value.includeDjSurprises,
+                    onStarted = onOpenDjMixer ?: onOpenNowPlaying,
+                )
             }
             lower.startsWith("mix ") || lower.startsWith("ai mix ") || lower.startsWith("make a playlist ") -> {
                 val prompt = raw.replace(Regex("^(?:ai\\s+mix|mix|make\\s+a\\s+playlist(?:\\s+of)?)\\s*", RegexOption.IGNORE_CASE), "").trim()

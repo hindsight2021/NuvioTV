@@ -20,12 +20,74 @@ data class EclipseTrackEnrichment(
     @SerializedName("provider") val provider: String? = null,
 )
 
+@Immutable
+data class EclipseDjTransitionPlan(
+    @SerializedName("transition_start_ms", alternate = ["transitionStartMs"])
+    val transitionStartMs: Long = 165_000L,
+    @SerializedName("fade_ms", alternate = ["fadeMs"])
+    val fadeMs: Long = 14_000L,
+    @SerializedName("incoming_cue_ms", alternate = ["incomingCueMs"])
+    val incomingCueMs: Long = 12_000L,
+    @SerializedName("outgoing_bpm", alternate = ["outgoingBpm"])
+    val outgoingBpm: Float = 122f,
+    @SerializedName("incoming_bpm", alternate = ["incomingBpm"])
+    val incomingBpm: Float = 122f,
+    @SerializedName("target_tempo_ratio", alternate = ["targetTempoRatio"])
+    val targetTempoRatio: Float = 1.0f,
+    @SerializedName("bass_swap", alternate = ["bassSwap"])
+    val bassSwap: Boolean = true,
+    @SerializedName("bass_swap_fraction", alternate = ["bassSwapFraction"])
+    val bassSwapFraction: Float = 0.60f,
+    @SerializedName("filter_sweep", alternate = ["filterSweep"])
+    val filterSweep: String = "lowpass",
+    @SerializedName("transition_style", alternate = ["transitionStyle"])
+    val transitionStyle: String = "Pro Beatmix",
+    @SerializedName("dj_note", alternate = ["djNote"])
+    val djNote: String = "Harmonic Beatmix",
+)
+
+@Immutable
+data class EclipseDjTrackMeta(
+    @SerializedName("bpm") val bpm: Float = 122f,
+    @SerializedName("musical_key", alternate = ["musicalKey"])
+    val musicalKey: String = "8A",
+    @SerializedName("energy") val energy: Float = 0.72f,
+    @SerializedName("waveform") val waveform: List<Float> = emptyList(),
+    @SerializedName("mix_in_ms", alternate = ["mixInMs"])
+    val mixInMs: Long = 12_000L,
+    @SerializedName("mix_out_ms", alternate = ["mixOutMs"])
+    val mixOutMs: Long = 170_000L,
+    @SerializedName("is_wildcard", alternate = ["isWildcard"])
+    val isWildcard: Boolean = false,
+    @SerializedName("dj_why", alternate = ["djWhy"])
+    val djWhy: String? = null,
+    @SerializedName("analyzed") val analyzed: Boolean = false,
+    @SerializedName("transition_plan", alternate = ["transitionPlan"])
+    val transitionPlan: EclipseDjTransitionPlan? = null,
+)
+
+@Immutable
+data class DjAudioAnalysisResult(
+    @SerializedName("ok") val ok: Boolean = false,
+    @SerializedName("bpm") val bpm: Float = 122f,
+    @SerializedName("musical_key", alternate = ["musicalKey"])
+    val musicalKey: String = "8A",
+    @SerializedName("energy") val energy: Float = 0.72f,
+    @SerializedName("waveform") val waveform: List<Float> = emptyList(),
+    @SerializedName("mix_in_ms", alternate = ["mixInMs"])
+    val mixInMs: Long = 12_000L,
+    @SerializedName("mix_out_ms", alternate = ["mixOutMs"])
+    val mixOutMs: Long = 170_000L,
+    @SerializedName("analyzed") val analyzed: Boolean = false,
+)
+
 /**
  * Playable audio track normalized for Nuvio+ audio playback and EclipseMCP REST/Connect APIs.
  */
 @Immutable
 data class EclipseTrack(
     @SerializedName("id") val id: String = "",
+    @SerializedName("isrc") val isrc: String? = null,
     @SerializedName("title", alternate = ["trackTitle", "name"])
     val title: String = "Unknown",
     @SerializedName("artist", alternate = ["artistName"])
@@ -54,8 +116,13 @@ data class EclipseTrack(
     @SerializedName("manifest_url_base", alternate = ["manifestUrlBase"])
     val manifestUrlBase: String? = null,
     @SerializedName("provider") val provider: String? = null,
+    @SerializedName("dj_meta", alternate = ["djMeta"])
+    val djMeta: EclipseDjTrackMeta? = null,
 ) {
     fun displayArtUrl(): String = artworkUrl.ifBlank { backdropUrl }
+    fun resolvedBpm(): Float = djMeta?.bpm ?: 122f
+    fun resolvedKey(): String = djMeta?.musicalKey?.ifBlank { "8A" } ?: "8A"
+    fun resolvedWaveform(): List<Float> = djMeta?.waveform.orEmpty()
 }
 
 @Immutable
@@ -200,6 +267,57 @@ data class EclipseAudioTelemetry(
     @SerializedName("queue") val queue: List<EclipseTrack> = emptyList(),
     @SerializedName("djSessionId") val djSessionId: String? = null,
     @SerializedName("error") val error: String? = null,
+)
+
+enum class DjDeckId { A, B }
+
+@Immutable
+data class DjDeckSnapshot(
+    val deck: DjDeckId = DjDeckId.A,
+    val track: EclipseTrack? = null,
+    val isPlaying: Boolean = false,
+    val isBuffering: Boolean = false,
+    val isCued: Boolean = false,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val bpm: Float = 122f,
+    val musicalKey: String = "8A",
+    val tempoRatio: Float = 1.0f,
+    val lowGain: Float = 1.0f,
+    val midGain: Float = 1.0f,
+    val highGain: Float = 1.0f,
+    val volume: Float = 1.0f,
+    val vuLevel: Float = 0f,
+    val bassEnergy: Float = 0f,
+    val midEnergy: Float = 0f,
+    val highEnergy: Float = 0f,
+    val beatPhase: Float = 0f,
+    val beatPulse: Float = 0f,
+    val waveform: List<Float> = emptyList(),
+    val liveWaveform: List<Float> = emptyList(),
+)
+
+@Immutable
+data class DjConsoleTelemetry(
+    val isActive: Boolean = false,
+    val isMixing: Boolean = false,
+    val activeDeck: DjDeckId = DjDeckId.A,
+    val deckA: DjDeckSnapshot = DjDeckSnapshot(deck = DjDeckId.A),
+    val deckB: DjDeckSnapshot = DjDeckSnapshot(deck = DjDeckId.B),
+    /** Crossfader position from `0f` (full Deck A) to `1f` (full Deck B). */
+    val crossfader: Float = 0f,
+    val mixProgress: Float = 0f,
+    val djSessionId: String? = null,
+    val commentary: String? = null,
+    val mood: String? = null,
+    val activeTransitionNote: String? = null,
+    val masterBpm: Float = 122f,
+    val beatNumber: Int = 1,
+    val clubLightPulse: Float = 0f,
+    val queue: List<EclipseTrack> = emptyList(),
+    val currentIndex: Int = -1,
+    val nextTrack: EclipseTrack? = null,
+    val error: String? = null,
 )
 
 @Immutable

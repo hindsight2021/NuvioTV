@@ -238,6 +238,75 @@ class EclipseMusicIntegrationTest {
         io.mockk.verify { eclipseAudioPlayer.pauseForVideo() }
     }
 
+    @Test
+    fun `Pro DJ metadata curve and 3-band audio processor operate accurately`() {
+        val gson = com.google.gson.Gson()
+        val djJson = """
+            {
+              "id": "dj_w_1",
+              "title": "Acid Dawn",
+              "artist": "DJ Test",
+              "duration_sec": 210,
+              "stream_url": "http://192.168.1.250:8771/audio/track/dj1.flac",
+              "dj_meta": {
+                "bpm": 126.4,
+                "musical_key": "9A",
+                "energy": 0.88,
+                "is_wildcard": true,
+                "dj_why": "Surprise harmonic peak bridge",
+                "waveform": [0.2, 0.5, 0.9, 0.6],
+                "transition_plan": {
+                  "transition_start_ms": 182000,
+                  "fade_ms": 15000,
+                  "incoming_cue_ms": 12000,
+                  "outgoing_bpm": 124.0,
+                  "incoming_bpm": 126.4,
+                  "target_tempo_ratio": 0.981,
+                  "bass_swap": true,
+                  "bass_swap_fraction": 0.6,
+                  "filter_sweep": "lowpass",
+                  "dj_note": "Bass Swap + Filter Sweep • 124->126 BPM"
+                }
+              }
+            }
+        """.trimIndent()
+        val track = gson.fromJson(djJson, EclipseTrack::class.java)
+        assertEquals(126.4f, track.resolvedBpm(), 0.01f)
+        assertEquals("9A", track.resolvedKey())
+        assertTrue(track.djMeta?.isWildcard == true)
+        assertEquals(4, track.resolvedWaveform().size)
+        assertEquals(15_000L, track.djMeta?.transitionPlan?.fadeMs)
+
+        // Verify equal-power crossfade + Bass Swap curve at start, midpoint (swap), and end
+        val plan = track.djMeta?.transitionPlan
+        val early = DjTransitionCurve.evaluate(0.15f, plan)
+        val late = DjTransitionCurve.evaluate(0.85f, plan)
+        assertTrue(early.outgoingVolume > early.incomingVolume)
+        assertTrue(early.outgoingLowGain > early.incomingLowGain)
+        assertTrue(late.incomingVolume > late.outgoingVolume)
+        assertTrue(late.incomingLowGain > late.outgoingLowGain)
+        assertTrue(late.outgoingHighGain < 0.5f)
+
+        // Verify DjDeckAudioProcessor processes PCM16 buffers & populates live meters
+        val proc = DjDeckAudioProcessor(DjDeckId.A)
+        val fmt = androidx.media3.common.audio.AudioProcessor.AudioFormat(44100, 2, androidx.media3.common.C.ENCODING_PCM_16BIT)
+        proc.configure(fmt)
+        proc.flush()
+        proc.lowGain = 0.25f
+        val samples = 1024
+        val buf = java.nio.ByteBuffer.allocateDirect(samples * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until samples) {
+            val s = (kotlin.math.sin(2.0 * Math.PI * 80.0 * i / 44100.0) * 16000.0).toInt().toShort()
+            buf.putShort(s)
+            buf.putShort(s)
+        }
+        buf.flip()
+        proc.queueInput(buf)
+        val snap = proc.snapshot()
+        assertTrue(snap.vuLevel > 0f)
+        assertEquals(32, snap.liveWaveform.size)
+    }
+
     private class FakeSession(
         private val method: NanoHTTPD.Method,
         private val uri: String,

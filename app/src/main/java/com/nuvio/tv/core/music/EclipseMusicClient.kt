@@ -36,6 +36,8 @@ data class EclipseDjStartResult(
     val sessionId: String?,
     val conversationId: String?,
     val message: String?,
+    val commentary: String? = null,
+    val mood: String? = null,
     val tracks: List<EclipseTrack>,
 )
 
@@ -54,6 +56,12 @@ class EclipseMusicClient @Inject constructor(
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    private val longReadClient: OkHttpClient = okHttpClient.newBuilder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(65, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
     suspend fun health(): Result<EclipseHealthStatus> = withContext(Dispatchers.IO) {
@@ -161,13 +169,75 @@ class EclipseMusicClient @Inject constructor(
             "/api/eclipse/dj/start",
             mapOf("prompt" to (prompt?.trim() ?: ""), "fresh" to fresh),
         ).mapCatching { json ->
+            val msg = json.get("message")?.takeIf { !it.isJsonNull }?.asString
             EclipseDjStartResult(
                 sessionId = json.get("session_id")?.takeIf { !it.isJsonNull }?.asString,
                 conversationId = json.get("conversation_id")?.takeIf { !it.isJsonNull }?.asString,
-                message = json.get("message")?.takeIf { !it.isJsonNull }?.asString,
+                message = msg,
+                commentary = json.get("commentary")?.takeIf { !it.isJsonNull }?.asString ?: msg,
+                mood = json.get("mood")?.takeIf { !it.isJsonNull }?.asString,
                 tracks = gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty(),
             )
         }
+
+    suspend fun startProDjSet(
+        playlistId: String? = null,
+        tracks: List<EclipseTrack>? = null,
+        prompt: String? = null,
+        includeSurprises: Boolean = true,
+        surpriseCount: Int = 2,
+    ): Result<EclipseDjStartResult> = withContext(Dispatchers.IO) {
+        val settings = settingsDataStore.getSettings()
+        if (!settings.enabled) return@withContext Result.failure(IllegalStateException("Eclipse Music is disabled in Settings"))
+        val payload = buildMap<String, Any?> {
+            if (!playlistId.isNullOrBlank()) put("playlist_id", playlistId)
+            if (!tracks.isNullOrEmpty()) put("tracks", tracks.take(30))
+            if (!prompt.isNullOrBlank()) put("prompt", prompt.trim())
+            put("include_surprises", includeSurprises)
+            put("surprise_count", surpriseCount.coerceIn(0, 5))
+        }
+        val body = gson.toJson(payload).toRequestBody(jsonMediaType)
+        val req = Request.Builder()
+            .url("${settings.bridgeBaseUrl}/api/eclipse/dj/pro-set")
+            .applyAuth(settings)
+            .post(body)
+            .build()
+        executeJson(req, JsonObject::class.java, httpClient = longReadClient).mapCatching { json ->
+            val comm = json.get("commentary")?.takeIf { !it.isJsonNull }?.asString
+            EclipseDjStartResult(
+                sessionId = json.get("session_id")?.takeIf { !it.isJsonNull }?.asString,
+                conversationId = null,
+                message = comm,
+                commentary = comm,
+                mood = json.get("mood")?.takeIf { !it.isJsonNull }?.asString,
+                tracks = gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty(),
+            )
+        }
+    }
+
+    suspend fun analyzeTrackAudio(track: EclipseTrack): DjAudioAnalysisResult? = withContext(Dispatchers.IO) {
+        val settings = settingsDataStore.getSettings()
+        if (!settings.enabled || settings.mcpBearerToken.isBlank()) return@withContext null
+        val httpUrl = "${settings.bridgeBaseUrl}/api/eclipse/audio/analysis".toHttpUrlOrNull()
+            ?.newBuilder()
+            ?.addQueryParameter("url", track.streamUrl)
+            ?.addQueryParameter("title", track.title)
+            ?.addQueryParameter("artist", track.artist)
+            ?.apply {
+                val genre = track.enrichment?.genre
+                if (!genre.isNullOrBlank()) addQueryParameter("genre", genre)
+                if (track.durationSec > 0) addQueryParameter("duration", track.durationSec.toString())
+            }
+            ?.build()
+            ?: return@withContext null
+        runCatching {
+            val req = Request.Builder().url(httpUrl).applyAuth(settings).get().build()
+            longReadClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                gson.fromJson(resp.body?.string().orEmpty(), DjAudioAnalysisResult::class.java)
+            }
+        }.getOrNull()
+    }
 
     suspend fun nextUmbraDj(sessionId: String? = null): Result<EclipseDjStartResult> =
         postJsonObject(
@@ -242,8 +312,12 @@ class EclipseMusicClient @Inject constructor(
             executeJson(req, JsonObject::class.java)
         }
 
-    private fun <T> executeJson(request: Request, clazz: Class<T>): Result<T> = runCatching {
-        client.newCall(request).execute().use { resp ->
+    private fun <T> executeJson(
+        request: Request,
+        clazz: Class<T>,
+        httpClient: OkHttpClient = client,
+    ): Result<T> = runCatching {
+        httpClient.newCall(request).execute().use { resp ->
             val raw = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
                 val errMsg = runCatching {

@@ -1465,12 +1465,20 @@ private fun PlaybackNavHost(
             com.nuvio.tv.ui.screens.music.EclipseMusicScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onOpenNowPlaying = { navController.navigate(Screen.NowPlaying.route) { launchSingleTop = true } },
+                onOpenDjMixer = { navController.navigate(Screen.DjMixer.route) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
             )
         }
 
         composable(Screen.NowPlaying.route) {
             com.nuvio.tv.ui.screens.music.NowPlayingScreen(
+                onBack = { navController.popBackStack() },
+                onOpenDjMixer = { navController.navigate(Screen.DjMixer.route) { launchSingleTop = true } }
+            )
+        }
+
+        composable(Screen.DjMixer.route) {
+            com.nuvio.tv.ui.screens.music.DjMixerScreen(
                 onBack = { navController.popBackStack() }
             )
         }

@@ -41,7 +41,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
@@ -108,12 +110,14 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 fun EclipseMusicScreen(
     showBuiltInHeader: Boolean = true,
     onOpenNowPlaying: () -> Unit,
+    onOpenDjMixer: () -> Unit = {},
     onOpenSettings: () -> Unit,
     viewModel: EclipseMusicViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val telemetry by viewModel.audioTelemetry.collectAsStateWithLifecycle()
+    val djTelemetry by viewModel.djTelemetry.collectAsStateWithLifecycle()
 
     val isConfigured = settings.enabled && settings.mcpBearerToken.isNotBlank()
     val context = LocalContext.current
@@ -261,13 +265,25 @@ fun EclipseMusicScreen(
             subtitle = detailSubtitle,
             coverUrl = detailCover,
             tracks = detailTracks,
-            isLoading = uiState.isLoadingDetail || uiState.isResolvingQueue,
+            isLoading = uiState.isLoadingDetail || uiState.isResolvingQueue || uiState.isDjBusy,
+            includeSurprises = uiState.includeDjSurprises,
             onBack = { viewModel.closeDetail() },
             onPlayAll = {
                 viewModel.playTracks(detailTracks, startIndex = 0, source = detailSource) {
                     onOpenNowPlaying()
                 }
             },
+            onProDjMix = {
+                val pid = selectedPlaylist?.playlist?.id
+                viewModel.startProDjSet(
+                    playlistId = pid,
+                    tracks = if (pid == null) detailTracks else null,
+                    includeSurprises = uiState.includeDjSurprises,
+                ) {
+                    onOpenDjMixer()
+                }
+            },
+            onToggleSurprises = { viewModel.toggleDjSurprises() },
             onQueueNext = {
                 viewModel.queueNext(detailTracks)
                 Toast.makeText(context, "Queued ${detailTracks.size} tracks up next", Toast.LENGTH_SHORT).show()
@@ -291,7 +307,7 @@ fun EclipseMusicScreen(
                     (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ASSIST ||
                         event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_VOICE_ASSIST)
                 ) {
-                    launchVoice { spoken -> viewModel.handleVoiceCommand(spoken, onOpenNowPlaying) }
+                    launchVoice { spoken -> viewModel.handleVoiceCommand(spoken, onOpenNowPlaying, onOpenDjMixer) }
                     true
                 } else {
                     false
@@ -310,14 +326,16 @@ fun EclipseMusicScreen(
         }
 
         MusicActionRow(
-            isDjActive = telemetry.djSessionId != null,
+            isDjActive = djTelemetry.isActive || telemetry.djSessionId != null,
+            isProDjBoothActive = djTelemetry.isActive,
             hasActiveAudio = telemetry.isActive,
             isDjBusy = uiState.isDjBusy,
             isVoiceListening = isVoiceListening,
             isVoiceAvailable = isVoiceAvailable,
-            onVoice = { launchVoice { spoken -> viewModel.handleVoiceCommand(spoken, onOpenNowPlaying) } },
+            onVoice = { launchVoice { spoken -> viewModel.handleVoiceCommand(spoken, onOpenNowPlaying, onOpenDjMixer) } },
             onSearch = { showSearchDialog = true },
             onUmbraDj = { showUmbraDialog = true },
+            onOpenDjBooth = onOpenDjMixer,
             onCancelUmbraDj = { viewModel.cancelUmbraDj() },
             onStopUmbraDj = { viewModel.stopUmbraDj() },
             onGenerateMix = { showMixDialog = true },
@@ -431,12 +449,17 @@ fun EclipseMusicScreen(
     if (showUmbraDialog) {
         UmbraDjLaunchDialog(
             isBusy = uiState.isDjBusy,
+            includeSurprises = uiState.includeDjSurprises,
             isVoiceAvailable = isVoiceAvailable,
+            onToggleSurprises = { viewModel.toggleDjSurprises() },
             onVoicePrompt = { fill -> launchVoice(fill) },
             onStart = { prompt ->
-                viewModel.startUmbraDj(prompt = prompt) {
+                viewModel.startProDjSet(
+                    prompt = prompt,
+                    includeSurprises = uiState.includeDjSurprises,
+                ) {
                     showUmbraDialog = false
-                    onOpenNowPlaying()
+                    onOpenDjMixer()
                 }
             },
             onCancelStartup = {
@@ -493,8 +516,11 @@ private fun MusicCollectionDetailView(
     coverUrl: String?,
     tracks: List<EclipseTrack>,
     isLoading: Boolean,
+    includeSurprises: Boolean,
     onBack: () -> Unit,
     onPlayAll: () -> Unit,
+    onProDjMix: () -> Unit,
+    onToggleSurprises: () -> Unit,
     onQueueNext: () -> Unit,
     onPlayTrack: (Int) -> Unit,
 ) {
@@ -596,6 +622,34 @@ private fun MusicCollectionDetailView(
                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(if (isLoading) "Loading…" else "Play All (${tracks.size})")
+                    }
+
+                    Button(
+                        onClick = onProDjMix,
+                        enabled = tracks.isNotEmpty() && !isLoading,
+                        colors = ButtonDefaults.colors(
+                            containerColor = colors.BackgroundCard,
+                            contentColor = colors.Primary,
+                            focusedContainerColor = colors.Primary,
+                            focusedContentColor = colors.OnPrimary,
+                        ),
+                    ) {
+                        Icon(Icons.Default.CompareArrows, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Pro AI DJ Mix")
+                    }
+
+                    Button(
+                        onClick = onToggleSurprises,
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (includeSurprises) colors.Primary.copy(alpha = 0.2f) else colors.BackgroundCard,
+                            contentColor = if (includeSurprises) colors.Primary else colors.TextSecondary,
+                            focusedContainerColor = colors.FocusBackground,
+                        ),
+                    ) {
+                        Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (includeSurprises) "Surprises: ON" else "Surprises: OFF")
                     }
 
                     Button(
@@ -723,7 +777,9 @@ private fun MusicCollectionDetailView(
 @Composable
 private fun UmbraDjLaunchDialog(
     isBusy: Boolean,
+    includeSurprises: Boolean,
     isVoiceAvailable: Boolean,
+    onToggleSurprises: () -> Unit,
     onVoicePrompt: ((String) -> Unit) -> Unit,
     onStart: (String) -> Unit,
     onCancelStartup: () -> Unit,
@@ -795,20 +851,33 @@ private fun UmbraDjLaunchDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (isVoiceAvailable && !isBusy) {
-                    Button(
-                        onClick = { onVoicePrompt { spoken -> promptText = spoken } },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundCard,
-                            contentColor = NuvioTheme.colors.TextPrimary,
-                        ),
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Voice")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isVoiceAvailable && !isBusy) {
+                        Button(
+                            onClick = { onVoicePrompt { spoken -> promptText = spoken } },
+                            colors = ButtonDefaults.colors(
+                                containerColor = NuvioTheme.colors.BackgroundCard,
+                                contentColor = NuvioTheme.colors.TextPrimary,
+                            ),
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Voice")
+                        }
                     }
-                } else {
-                    Spacer(Modifier.width(1.dp))
+                    if (!isBusy) {
+                        Button(
+                            onClick = onToggleSurprises,
+                            colors = ButtonDefaults.colors(
+                                containerColor = if (includeSurprises) NuvioTheme.colors.Primary.copy(alpha = 0.2f) else NuvioTheme.colors.BackgroundCard,
+                                contentColor = if (includeSurprises) NuvioTheme.colors.Primary else NuvioTheme.colors.TextSecondary,
+                            ),
+                        ) {
+                            Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(if (includeSurprises) "Surprises: ON" else "Surprises: OFF")
+                        }
+                    }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -912,6 +981,7 @@ private fun MusicNotConfiguredState(
 @Composable
 private fun MusicActionRow(
     isDjActive: Boolean,
+    isProDjBoothActive: Boolean,
     hasActiveAudio: Boolean,
     isDjBusy: Boolean,
     isVoiceListening: Boolean,
@@ -919,6 +989,7 @@ private fun MusicActionRow(
     onVoice: () -> Unit,
     onSearch: () -> Unit,
     onUmbraDj: () -> Unit,
+    onOpenDjBooth: () -> Unit,
     onCancelUmbraDj: () -> Unit,
     onStopUmbraDj: () -> Unit,
     onGenerateMix: () -> Unit,
@@ -963,6 +1034,16 @@ private fun MusicActionRow(
                     icon = Icons.Default.GraphicEq,
                     highlighted = isDjActive,
                     onClick = onUmbraDj,
+                )
+            }
+        }
+        if (isProDjBoothActive) {
+            item(key = "btn_dj_booth") {
+                MusicChipButton(
+                    label = "DJ Booth",
+                    icon = Icons.Default.CompareArrows,
+                    highlighted = true,
+                    onClick = onOpenDjBooth,
                 )
             }
         }

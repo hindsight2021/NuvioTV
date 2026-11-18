@@ -86,11 +86,13 @@ private enum class NowPlayingRightTab {
 @Composable
 fun NowPlayingScreen(
     onBack: () -> Unit,
+    onOpenDjMixer: () -> Unit = {},
     viewModel: EclipseMusicViewModel = hiltViewModel(),
 ) {
     BackHandler { onBack() }
 
     val telemetry by viewModel.audioTelemetry.collectAsStateWithLifecycle()
+    val djTelemetry by viewModel.djTelemetry.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NuvioTheme.colors
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -166,14 +168,43 @@ fun NowPlayingScreen(
                     )
                 }
 
-                if (!uiState.djBannerMessage.isNullOrBlank()) {
-                    Text(
-                        text = uiState.djBannerMessage.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.Primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (!uiState.djBannerMessage.isNullOrBlank()) {
+                        Text(
+                            text = uiState.djBannerMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.Primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.width(340.dp),
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            if (djTelemetry.isActive) {
+                                onOpenDjMixer()
+                            } else {
+                                viewModel.startProDjSet(
+                                    tracks = telemetry.queue.ifEmpty { null },
+                                    includeSurprises = true,
+                                    onStarted = onOpenDjMixer,
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = colors.BackgroundCard,
+                            contentColor = colors.Primary,
+                            focusedContainerColor = colors.Primary,
+                            focusedContentColor = colors.OnPrimary,
+                        ),
+                    ) {
+                        Icon(Icons.Default.GraphicEq, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (djTelemetry.isActive) "DJ Booth" else "Pro AI DJ Mix")
+                    }
                 }
             }
 

@@ -233,4 +233,6 @@ sealed class Screen(val route: String) {
     data object Music : Screen("music")
 
     data object NowPlaying : Screen("music_now_playing")
+
+    data object DjMixer : Screen("music_dj_mixer")
 }
