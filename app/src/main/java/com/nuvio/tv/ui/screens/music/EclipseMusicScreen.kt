@@ -285,7 +285,7 @@ fun EclipseMusicScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioTheme.colors.Background)
-            .padding(start = 48.dp, end = 48.dp, top = topScreenPadding, bottom = 16.dp)
+            .padding(top = topScreenPadding, bottom = 16.dp)
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
                     (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ASSIST ||
@@ -297,7 +297,7 @@ fun EclipseMusicScreen(
                     false
                 }
             },
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (showBuiltInHeader) {
             Text(
@@ -305,6 +305,7 @@ fun EclipseMusicScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 color = NuvioTheme.colors.TextPrimary,
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 48.dp),
             )
         }
 
@@ -330,6 +331,7 @@ fun EclipseMusicScreen(
                 text = statusMsg,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isVoiceListening) NuvioTheme.colors.Primary else NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.padding(horizontal = 48.dp),
             )
         }
 
@@ -341,6 +343,7 @@ fun EclipseMusicScreen(
                     focusedContainerColor = NuvioTheme.colors.FocusBackground,
                 ),
                 shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+                modifier = Modifier.padding(horizontal = 48.dp),
             ) {
                 Text(
                     text = "${uiState.error} (click to dismiss)",
@@ -508,12 +511,14 @@ private fun MusicCollectionDetailView(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.Background)
-            .padding(start = 48.dp, end = 48.dp, top = topPadding, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+            .padding(top = topPadding, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Seamless Hero Header
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(22.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -615,12 +620,15 @@ private fun MusicCollectionDetailView(
                 text = "Loading tracks & artwork…",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.TextSecondary,
+                modifier = Modifier.padding(horizontal = 48.dp),
             )
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 110.dp),
+                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp).let {
+                    PaddingValues(start = 48.dp, end = 48.dp, top = 10.dp, bottom = 110.dp)
+                },
             ) {
                 itemsIndexed(tracks, key = { idx, t -> "${t.id}_$idx" }) { index, track ->
                     Card(
@@ -630,9 +638,10 @@ private fun MusicCollectionDetailView(
                             focusedContainerColor = colors.FocusBackground,
                         ),
                         border = CardDefaults.border(
-                            border = Border(BorderStroke(1.dp, Color.Transparent)),
-                            focusedBorder = Border(BorderStroke(2.dp, colors.BorderFocused)),
+                            border = Border(BorderStroke(1.dp, Color.Transparent), shape = RoundedCornerShape(12.dp)),
+                            focusedBorder = Border(BorderStroke(2.dp, colors.BorderFocused), shape = RoundedCornerShape(12.dp)),
                         ),
+                        scale = CardDefaults.scale(focusedScale = 1.02f),
                         shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -917,8 +926,9 @@ private fun MusicActionRow(
     onNowPlaying: () -> Unit,
 ) {
     LazyRow(
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 2.dp),
+        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
     ) {
         if (isVoiceAvailable) {
             item(key = "btn_voice") {
@@ -1038,7 +1048,9 @@ private fun MusicSearchResultsBody(
     ) {
         item(key = "search_header") {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 48.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1131,16 +1143,18 @@ private fun MusicHorizontalSection(
     title: String,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             color = NuvioTheme.colors.TextPrimary,
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 48.dp),
         )
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            contentPadding = PaddingValues(start = 48.dp, end = 96.dp, top = 12.dp, bottom = 14.dp),
             content = content,
         )
     }
@@ -1155,6 +1169,7 @@ private fun MusicMediaCard(
     onClick: () -> Unit,
 ) {
     val colors = NuvioTheme.colors
+    val cardShape = RoundedCornerShape(14.dp)
     Card(
         onClick = onClick,
         colors = CardDefaults.colors(
@@ -1162,11 +1177,12 @@ private fun MusicMediaCard(
             focusedContainerColor = colors.FocusBackground,
         ),
         border = CardDefaults.border(
-            border = Border(BorderStroke(1.dp, colors.BorderMuted)),
-            focusedBorder = Border(BorderStroke(2.dp, colors.BorderFocused)),
+            border = Border(BorderStroke(1.dp, colors.BorderMuted), shape = cardShape),
+            focusedBorder = Border(BorderStroke(2.dp, colors.BorderFocused), shape = cardShape),
         ),
-        shape = CardDefaults.shape(RoundedCornerShape(14.dp)),
-        modifier = Modifier.width(190.dp),
+        scale = CardDefaults.scale(focusedScale = 1.04f),
+        shape = CardDefaults.shape(cardShape),
+        modifier = Modifier.width(188.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Box(
