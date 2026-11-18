@@ -3478,4 +3478,28 @@
     <string name="pref_in_app_pip_title">Picture-in-Picture (Mini Player)</string>
     <string name="pref_in_app_pip_desc">Shrink video to corner when pressing back to browse</string>
 
+    <!-- Eclipse Music -->
+    <string name="nav_music">Music</string>
+    <string name="settings_eclipse_music_title">Eclipse Music</string>
+    <string name="settings_eclipse_music_subtitle">Stream lossless &amp; high-res audio, Umbra AI DJ, and Connect speaker via EclipseMCP</string>
+    <string name="settings_eclipse_music_enable_title">Enable Eclipse Music</string>
+    <string name="settings_eclipse_music_enable_subtitle">Connect to your EclipseMCP bridge for TV music streaming and iOS Connect control</string>
+    <string name="settings_eclipse_music_sidebar_title">Show Music in Sidebar</string>
+    <string name="settings_eclipse_music_sidebar_subtitle">Display the Music tab in the navigation sidebar</string>
+    <string name="settings_eclipse_music_url_title">EclipseMCP Bridge URL</string>
+    <string name="settings_eclipse_music_token_title">MCP Bearer Token</string>
+    <string name="settings_eclipse_music_token_subtitle_set">Token configured (click to update)</string>
+    <string name="settings_eclipse_music_token_subtitle_empty">Not set (enter ECLIPSE_MCP_TOKEN)</string>
+    <string name="settings_eclipse_music_test_title">Test Connection</string>
+    <string name="settings_eclipse_music_test_subtitle">Verify EclipseMCP reachability, authentication, and Connect WebSocket status</string>
+    <string name="music_umbra_dj">Umbra AI DJ</string>
+    <string name="music_generate_mix">AI Mix</string>
+    <string name="music_search_placeholder">Search songs, albums, artists, playlists…</string>
+    <string name="music_now_playing">Now Playing</string>
+    <string name="music_lyrics">Lyrics</string>
+    <string name="music_up_next">Up Next</string>
+    <string name="music_not_configured_title">Eclipse Music Not Configured</string>
+    <string name="music_not_configured_subtitle">Open Settings → Integration → Eclipse Music to enable and configure your EclipseMCP bridge URL and Bearer token.</string>
+    <string name="music_open_settings">Open Eclipse Settings</string>
+
 </resources>

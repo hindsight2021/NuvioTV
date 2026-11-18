@@ -1,5 +1,6 @@
 package com.nuvio.tv.core.control
 
+import com.nuvio.tv.core.music.EclipseTrack
 import com.nuvio.tv.core.playlist.PlaylistItem
 
 /**
@@ -149,6 +150,31 @@ sealed interface AppCommand {
 
     /** Execute a natural-language prompt through the AI subsystem. */
     data class ExecuteAiPrompt(val prompt: String) : AppCommand
+
+    // ---------------------------------------------------------------------
+    // Eclipse Audio
+    // ---------------------------------------------------------------------
+
+    /** Start or replace the Eclipse audio queue. */
+    data class PlayAudioQueue(
+        val tracks: List<EclipseTrack>,
+        val startIndex: Int = 0,
+        val autoplay: Boolean = true,
+        val source: String = "eclipse",
+        val djSessionId: String? = null
+    ) : AppCommand
+
+    /** Append, play-next, or replace tracks in the Eclipse audio queue. */
+    data class QueueAudioTracks(
+        val tracks: List<EclipseTrack>,
+        val mode: String = "append"
+    ) : AppCommand
+
+    /** Control Eclipse audio playback (play, pause, stop, next, previous, seek_ms, volume, shuffle, repeat). */
+    data class AudioControl(
+        val action: String,
+        val value: Any? = null
+    ) : AppCommand
 }
 
 /**

@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.control
 
 import com.google.gson.annotations.SerializedName
+import com.nuvio.tv.core.music.EclipseAudioTelemetry
 
 /**
  * Snapshot of the current device and player status.
@@ -25,7 +26,10 @@ data class NuvioStatusResponse(
     val playback: PlaybackSnapshot? = null,
 
     @SerializedName("queue")
-    val queue: QueueSnapshot? = null
+    val queue: QueueSnapshot? = null,
+
+    @SerializedName("audio")
+    val audio: EclipseAudioTelemetry? = null
 )
 
 /**

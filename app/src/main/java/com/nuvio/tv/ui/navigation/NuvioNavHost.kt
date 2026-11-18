@@ -1461,6 +1461,20 @@ private fun PlaybackNavHost(
             )
         }
 
+        composable(Screen.Music.route) {
+            com.nuvio.tv.ui.screens.music.EclipseMusicScreen(
+                showBuiltInHeader = !hideBuiltInHeaders,
+                onOpenNowPlaying = { navController.navigate(Screen.NowPlaying.route) { launchSingleTop = true } },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
+            )
+        }
+
+        composable(Screen.NowPlaying.route) {
+            com.nuvio.tv.ui.screens.music.NowPlayingScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,

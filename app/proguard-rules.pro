@@ -55,6 +55,8 @@
 -keep class fi.iki.elonen.** { *; }
 # Keep server classes and their inner data classes (serialized with Gson)
 -keep class com.nuvio.tv.core.server.** { *; }
+-keep class com.nuvio.tv.core.control.** { *; }
+-keep class com.nuvio.tv.core.music.** { *; }
 
 # ── Torrent streaming (TorrServer) ─────────────────────────────────────────────
 -keep class com.nuvio.tv.core.torrent.** { *; }

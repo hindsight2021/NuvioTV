@@ -5,6 +5,7 @@ import com.nuvio.tv.core.ai.ThematicChannelGenerator
 import com.nuvio.tv.core.livetv.AiBroadcastNetwork
 import com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator
 import com.nuvio.tv.core.livetv.LiveTvManager
+import com.nuvio.tv.core.music.EclipseAudioPlayer
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
 import com.nuvio.tv.ui.navigation.Screen
@@ -28,6 +29,7 @@ class AppCommandBus @Inject constructor(
     private val justPlayCoordinator: JustPlayCoordinator,
     private val aiOperatorEngine: AiOperatorEngine,
     private val thematicChannelGenerator: ThematicChannelGenerator,
+    private val eclipseAudioPlayer: EclipseAudioPlayer? = null,
     private val ambientCoordinator: AmbientCoordinator? = null,
     private val ambientIdleController: AmbientIdleController? = null,
 ) {
@@ -91,11 +93,13 @@ class AppCommandBus @Inject constructor(
             // --- Content commands ---
             is AppCommand.PlayMedia -> {
                 dropScreensaver()
+                eclipseAudioPlayer?.pauseForVideo()
                 justPlayCoordinator.request(command)
             }
 
             is AppCommand.PlayStream -> {
                 dropScreensaver()
+                eclipseAudioPlayer?.pauseForVideo()
                 if (playerPlaybackBridge.playbackSnapshot.value?.isActive == true) {
                     playerPlaybackBridge.hotSwapStream(command.streamUrl, command.title, command.headers)
                 } else {
@@ -159,6 +163,7 @@ class AppCommandBus @Inject constructor(
 
             is AppCommand.TuneLiveChannel -> {
                 dropScreensaver()
+                eclipseAudioPlayer?.pauseForVideo()
                 val aiConfig = AiBroadcastNetwork.findChannelById(context, command.channelId)
                 if (aiConfig != null) {
                     AiBroadcastTuneCoordinator.tuneAiChannel(
@@ -248,6 +253,41 @@ class AppCommandBus @Inject constructor(
             // --- AI commands ---
             is AppCommand.ExecuteAiPrompt -> {
                 aiOperatorEngine.processPrompt(command.prompt)
+            }
+
+            // --- Eclipse Audio commands ---
+            is AppCommand.PlayAudioQueue -> {
+                val audio = eclipseAudioPlayer
+                    ?: return CommandResult.Unavailable("Audio player is unavailable")
+                dropScreensaver()
+                audio.playQueue(
+                    tracks = command.tracks,
+                    startIndex = command.startIndex,
+                    autoplay = command.autoplay,
+                    source = command.source,
+                    djSessionId = command.djSessionId
+                )
+                CommandResult.Success("Playing ${command.tracks.size} audio track(s)")
+            }
+
+            is AppCommand.QueueAudioTracks -> {
+                val audio = eclipseAudioPlayer
+                    ?: return CommandResult.Unavailable("Audio player is unavailable")
+                audio.queueTracks(command.tracks, mode = command.mode)
+                CommandResult.Success("Queued ${command.tracks.size} audio track(s)")
+            }
+
+            is AppCommand.AudioControl -> {
+                val audio = eclipseAudioPlayer
+                    ?: return CommandResult.Unavailable("Audio player is unavailable")
+                if (command.action.equals("play", ignoreCase = true) ||
+                    command.action.equals("toggle", ignoreCase = true)
+                ) {
+                    dropScreensaver()
+                }
+                val handled = audio.control(command.action, command.value)
+                if (handled) CommandResult.Success("Audio ${command.action}")
+                else CommandResult.Unavailable("Unsupported or inactive audio action: ${command.action}")
             }
         }
     }

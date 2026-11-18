@@ -123,7 +123,8 @@ private enum class IntegrationSettingsSection {
     AnimeSkip,
     AiAssistant,
     RemoteControl,
-    LocalNas
+    LocalNas,
+    EclipseMusic
 }
 
 internal enum class SettingsSectionDestination {
@@ -348,6 +349,7 @@ fun SettingsScreen(
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationRemoteControlFocusRequester = remember { FocusRequester() }
     val integrationLocalNasFocusRequester = remember { FocusRequester() }
+    val integrationEclipseMusicFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -735,6 +737,7 @@ fun SettingsScreen(
                                 integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                                 integrationRemoteControlFocusRequester = integrationRemoteControlFocusRequester,
                                 integrationLocalNasFocusRequester = integrationLocalNasFocusRequester,
+                                integrationEclipseMusicFocusRequester = integrationEclipseMusicFocusRequester,
                                 onNavigateToManageProfiles = onNavigateToManageProfiles,
                                 onNavigateToAddons = onNavigateToAddons,
                                 onNavigateToPlugins = onNavigateToPlugins,
@@ -913,6 +916,7 @@ fun SettingsScreen(
                         integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                         integrationRemoteControlFocusRequester = integrationRemoteControlFocusRequester,
                         integrationLocalNasFocusRequester = integrationLocalNasFocusRequester,
+                        integrationEclipseMusicFocusRequester = integrationEclipseMusicFocusRequester,
                         onNavigateToManageProfiles = onNavigateToManageProfiles,
                         onNavigateToAddons = onNavigateToAddons,
                         onNavigateToPlugins = onNavigateToPlugins,
@@ -944,6 +948,7 @@ private fun SettingsDetailPane(
     integrationAnimeSkipFocusRequester: FocusRequester,
     integrationRemoteControlFocusRequester: FocusRequester,
     integrationLocalNasFocusRequester: FocusRequester,
+    integrationEclipseMusicFocusRequester: FocusRequester,
     onNavigateToManageProfiles: () -> Unit,
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
@@ -1044,6 +1049,7 @@ private fun SettingsDetailPane(
             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
             remoteControlFocusRequester = integrationRemoteControlFocusRequester,
             localNasFocusRequester = integrationLocalNasFocusRequester,
+            eclipseMusicFocusRequester = integrationEclipseMusicFocusRequester,
             autoFocusEnabled = allowDetailAutofocus
         )
         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -1199,6 +1205,7 @@ private fun IntegrationSettingsContent(
     animeSkipFocusRequester: FocusRequester,
     remoteControlFocusRequester: FocusRequester,
     localNasFocusRequester: FocusRequester,
+    eclipseMusicFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -1218,6 +1225,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.AiAssistant -> aiAssistantFocusRequester
             IntegrationSettingsSection.RemoteControl -> remoteControlFocusRequester
             IntegrationSettingsSection.LocalNas -> localNasFocusRequester
+            IntegrationSettingsSection.EclipseMusic -> eclipseMusicFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -1257,6 +1265,13 @@ private fun IntegrationSettingsContent(
                                     title = stringResource(R.string.settings_remote_control_title),
                                     subtitle = stringResource(R.string.settings_remote_control_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.RemoteControl) }
+                                )
+                            }
+                            item(key = "integration_hub_eclipse_music") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.settings_eclipse_music_title),
+                                    subtitle = stringResource(R.string.settings_eclipse_music_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.EclipseMusic) }
                                 )
                             }
                             item(key = "integration_hub_local_nas") {
@@ -1340,6 +1355,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.LocalNas -> {
             LocalNasSettingsContent(
                 initialFocusRequester = localNasFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.EclipseMusic -> {
+            EclipseSettingsContent(
+                initialFocusRequester = eclipseMusicFocusRequester
             )
         }
     }

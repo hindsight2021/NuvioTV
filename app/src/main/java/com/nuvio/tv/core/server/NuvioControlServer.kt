@@ -15,6 +15,8 @@ import com.nuvio.tv.core.control.QueueSnapshot
 import com.nuvio.tv.core.control.RemoteControlSettingsDataStore
 import com.nuvio.tv.core.livetv.AiBroadcastNetwork
 import com.nuvio.tv.core.livetv.LiveTvManager
+import com.nuvio.tv.core.music.EclipseAudioPlayer
+import com.nuvio.tv.core.music.EclipseTrack
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.playlist.PlaylistItem
 import com.nuvio.tv.core.playlist.PlaylistManager
@@ -53,6 +55,7 @@ class NuvioControlServer(
     private val addonRepository: AddonRepository? = null,
     private val catalogRepository: CatalogRepository? = null,
     private val streamRepository: StreamRepository? = null,
+    private val eclipseAudioPlayer: EclipseAudioPlayer? = null,
     port: Int = 8910
 ) : NanoHTTPD(port) {
 
@@ -161,6 +164,10 @@ class NuvioControlServer(
             uri == "$API_PREFIX/queue/reorder" && method == Method.POST -> handleQueueReorder(session)
             uri == "$API_PREFIX/queue/remove" && method == Method.POST -> handleQueueRemove(session)
 
+            uri == "$API_PREFIX/audio/play" && method == Method.POST -> handleAudioPlay(session)
+            uri == "$API_PREFIX/audio/queue" && method == Method.POST -> handleAudioQueue(session)
+            uri == "$API_PREFIX/audio/control" && method == Method.POST -> handleAudioControl(session)
+
             else -> jsonError(Response.Status.NOT_FOUND, "Endpoint not found: $uri")
         }
     }
@@ -192,13 +199,21 @@ class NuvioControlServer(
             items = queueItems
         )
 
+        val audioSnapshot = eclipseAudioPlayer?.telemetry?.value
+        val activeScreen = when {
+            playback?.isActive == true -> "player"
+            audioSnapshot?.isActive == true -> "music"
+            else -> "main"
+        }
+
         val response = NuvioStatusResponse(
             app = "Nuvio TV",
             version = BuildConfig.VERSION_NAME,
             deviceIp = DeviceIpAddress.get(context),
-            activeScreen = if (playback?.isActive == true) "player" else "main",
+            activeScreen = activeScreen,
             playback = playback,
-            queue = queueSnapshot
+            queue = queueSnapshot,
+            audio = audioSnapshot
         )
         return jsonResponse(gson.toJson(response))
     }
@@ -722,6 +737,81 @@ class NuvioControlServer(
             ?: return jsonError(Response.Status.BAD_REQUEST, "channelId required")
         val startFromBeginning = body.get("startFromBeginning")?.asBoolean ?: false
         return dispatch(AppCommand.TuneLiveChannel(channelId = channelId, startFromBeginning = startFromBeginning))
+    }
+
+    private fun parseAudioTracks(body: com.google.gson.JsonObject): List<EclipseTrack> {
+        val tracks = mutableListOf<EclipseTrack>()
+        val array = body.getAsJsonArray("tracks")
+        if (array != null) {
+            for (elem in array) {
+                runCatching { gson.fromJson(elem, EclipseTrack::class.java) }
+                    .getOrNull()
+                    ?.takeIf { it.streamUrl.isNotBlank() }
+                    ?.let(tracks::add)
+            }
+        } else if (body.has("track") && body.get("track").isJsonObject) {
+            runCatching { gson.fromJson(body.getAsJsonObject("track"), EclipseTrack::class.java) }
+                .getOrNull()
+                ?.takeIf { it.streamUrl.isNotBlank() }
+                ?.let(tracks::add)
+        } else if (body.has("stream_url") || body.has("streamUrl")) {
+            runCatching { gson.fromJson(body, EclipseTrack::class.java) }
+                .getOrNull()
+                ?.takeIf { it.streamUrl.isNotBlank() }
+                ?.let(tracks::add)
+        }
+        return tracks
+    }
+
+    private fun handleAudioPlay(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val tracks = parseAudioTracks(body)
+        if (tracks.isEmpty()) {
+            return jsonError(Response.Status.BAD_REQUEST, "tracks with valid stream_url required")
+        }
+        val startIndex = body.get("start_index")?.asInt ?: body.get("startIndex")?.asInt ?: 0
+        val autoplay = body.get("autoplay")?.asBoolean ?: true
+        val source = body.get("source")?.asString?.takeIf { it.isNotBlank() } ?: "eclipse"
+        val djSessionId = body.get("dj_session_id")?.asString ?: body.get("djSessionId")?.asString
+        return dispatch(
+            AppCommand.PlayAudioQueue(
+                tracks = tracks,
+                startIndex = startIndex,
+                autoplay = autoplay,
+                source = source,
+                djSessionId = djSessionId
+            )
+        )
+    }
+
+    private fun handleAudioQueue(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val tracks = parseAudioTracks(body)
+        if (tracks.isEmpty()) {
+            return jsonError(Response.Status.BAD_REQUEST, "tracks with valid stream_url required")
+        }
+        val mode = body.get("mode")?.asString?.takeIf { it.isNotBlank() } ?: "append"
+        return dispatch(AppCommand.QueueAudioTracks(tracks = tracks, mode = mode))
+    }
+
+    private fun handleAudioControl(session: IHTTPSession): Response {
+        val body = parseJsonBody(session)
+        val action = body.get("action")?.asString?.trim()?.takeIf { it.isNotBlank() }
+            ?: return jsonError(Response.Status.BAD_REQUEST, "action required")
+        val valueElem = body.get("value")
+        val value: Any? = when {
+            valueElem == null || valueElem.isJsonNull -> null
+            valueElem.isJsonPrimitive -> {
+                val prim = valueElem.asJsonPrimitive
+                when {
+                    prim.isBoolean -> prim.asBoolean
+                    prim.isNumber -> prim.asNumber
+                    else -> prim.asString
+                }
+            }
+            else -> valueElem.toString()
+        }
+        return dispatch(AppCommand.AudioControl(action = action, value = value))
     }
 
     private fun serveText(content: String, contentType: String): Response {

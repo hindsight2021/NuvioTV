@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
@@ -69,6 +70,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -347,6 +349,12 @@ open class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var playerPlaybackBridge: com.nuvio.tv.core.control.PlayerPlaybackBridge
+
+    @Inject
+    lateinit var eclipseSettingsDataStore: com.nuvio.tv.data.local.EclipseSettingsDataStore
+
+    @Inject
+    lateinit var eclipseAudioPlayer: com.nuvio.tv.core.music.EclipseAudioPlayer
 
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
@@ -1137,8 +1145,26 @@ open class MainActivity : ComponentActivity() {
                     val selectedHomeTab = mainUiPrefs.selectedHomeTab
                     val liveTvEnabled = mainUiPrefs.liveTvEnabled
                     val calendarEnabled = mainUiPrefs.calendarEnabled
+                    val eclipseSettings by eclipseSettingsDataStore.settings.collectAsState(
+                        initial = com.nuvio.tv.data.local.EclipseSettings()
+                    )
+                    val eclipseAudioTelemetry by eclipseAudioPlayer.telemetry.collectAsState()
+                    val videoPlaybackSnapshot by playerPlaybackBridge.playbackSnapshot.collectAsState()
+                    val musicSidebarEnabled = eclipseSettings.enabled && eclipseSettings.showMusicInSidebar
 
-                    val rootRoutes = remember(discoverLocation, separateMoviesTvEnabled, liveTvEnabled, calendarEnabled) {
+                    LaunchedEffect(videoPlaybackSnapshot?.isActive) {
+                        if (videoPlaybackSnapshot?.isActive == true && eclipseAudioPlayer.telemetry.value.isPlaying) {
+                            eclipseAudioPlayer.pauseForVideo()
+                        }
+                    }
+
+                    val rootRoutes = remember(
+                        discoverLocation,
+                        separateMoviesTvEnabled,
+                        liveTvEnabled,
+                        calendarEnabled,
+                        musicSidebarEnabled
+                    ) {
                         buildSet {
                             add(Screen.Home.route)
                             if (separateMoviesTvEnabled) {
@@ -1150,6 +1176,9 @@ open class MainActivity : ComponentActivity() {
                             }
                             if (calendarEnabled) {
                                 add(Screen.Calendar.route)
+                            }
+                            if (musicSidebarEnabled) {
+                                add(Screen.Music.route)
                             }
                             add(Screen.Search.route)
                             add(Screen.Library.route)
@@ -1165,6 +1194,7 @@ open class MainActivity : ComponentActivity() {
                     val strNavMovies = stringResource(R.string.home_tab_movies)
                     val strNavLiveTv = stringResource(R.string.nav_live_tv)
                     val strNavCalendar = stringResource(R.string.nav_calendar)
+                    val strNavMusic = stringResource(R.string.nav_music)
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
@@ -1175,6 +1205,7 @@ open class MainActivity : ComponentActivity() {
                         strNavMovies,
                         strNavLiveTv,
                         strNavCalendar,
+                        strNavMusic,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
@@ -1182,7 +1213,8 @@ open class MainActivity : ComponentActivity() {
                         discoverLocation,
                         separateMoviesTvEnabled,
                         liveTvEnabled,
-                        calendarEnabled
+                        calendarEnabled,
+                        musicSidebarEnabled
                     ) {
                         buildList {
                             if (separateMoviesTvEnabled) {
@@ -1224,6 +1256,15 @@ open class MainActivity : ComponentActivity() {
                                         route = Screen.Calendar.route,
                                         label = strNavCalendar,
                                         icon = Icons.Default.CalendarToday
+                                    )
+                                )
+                            }
+                            if (musicSidebarEnabled) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.Music.route,
+                                        label = strNavMusic,
+                                        icon = Icons.Default.MusicNote
                                     )
                                 )
                             }
@@ -1363,6 +1404,35 @@ open class MainActivity : ComponentActivity() {
                                     onNavigate = { optimisticRoute = it },
                                     onSelectHomeTab = handleSelectHomeTab,
                                     onExitApp = handleExitApp
+                                )
+                            }
+
+                            val miniAudioScope = rememberCoroutineScope()
+                            val showMiniNowPlaying = eclipseAudioTelemetry.isActive &&
+                                currentRoute != Screen.NowPlaying.route &&
+                                currentRoute?.startsWith("player/") != true &&
+                                currentRoute?.startsWith("stream") != true
+                            if (showMiniNowPlaying) {
+                                com.nuvio.tv.ui.screens.music.MiniNowPlayingBar(
+                                    telemetry = eclipseAudioTelemetry,
+                                    onOpenNowPlaying = {
+                                        navController.navigate(Screen.NowPlaying.route) {
+                                            launchSingleTop = true
+                                        }
+                                    },
+                                    onTogglePlayPause = {
+                                        miniAudioScope.launch {
+                                            eclipseAudioPlayer.control("toggle_play_pause")
+                                        }
+                                    },
+                                    onNext = {
+                                        miniAudioScope.launch {
+                                            eclipseAudioPlayer.control("next")
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(end = 28.dp, bottom = 24.dp),
                                 )
                             }
 
