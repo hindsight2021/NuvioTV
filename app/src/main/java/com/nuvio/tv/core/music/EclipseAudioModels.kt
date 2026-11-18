@@ -36,7 +36,7 @@ data class EclipseTrack(
     val durationSec: Int = 0,
     @SerializedName("stream_url", alternate = ["streamUrl", "streamURL"])
     val streamUrl: String = "",
-    @SerializedName("artwork_url", alternate = ["artworkUrl", "cover_url_hd", "cover_url", "coverUrl"])
+    @SerializedName("artwork_url", alternate = ["artworkUrl", "artworkURL", "cover_url_hd", "cover_url", "coverUrl"])
     val artworkUrl: String = "",
     @SerializedName("backdrop_url", alternate = ["backdropUrl"])
     val backdropUrl: String = "",
@@ -64,7 +64,7 @@ data class EclipsePlaylistSummary(
     @SerializedName("name", alternate = ["title"])
     val name: String = "",
     @SerializedName("description") val description: String? = null,
-    @SerializedName("artwork_url", alternate = ["artworkUrl", "cover_url_hd", "cover_url", "coverUrl"])
+    @SerializedName("artwork_url", alternate = ["artworkUrl", "artworkURL", "cover_url_hd", "cover_url", "coverUrl"])
     val artworkUrl: String? = null,
     @SerializedName("track_count", alternate = ["trackCount"])
     val trackCount: Int = 0,
@@ -118,7 +118,7 @@ data class EclipseAudioMix(
     @SerializedName("title") val title: String = "",
     @SerializedName("name") val name: String = "",
     @SerializedName("description") val description: String? = null,
-    @SerializedName("artwork_url", alternate = ["artworkUrl", "cover_url_hd", "cover_url", "coverUrl"])
+    @SerializedName("artwork_url", alternate = ["artworkUrl", "artworkURL", "cover_url_hd", "cover_url", "coverUrl"])
     val artworkUrl: String? = null,
     @SerializedName("tracks") val tracks: List<EclipseTrack> = emptyList(),
 ) {

@@ -180,7 +180,7 @@ class EclipseAudioPlayer @Inject constructor(
             "pause" -> {
                 exo.pause()
             }
-            "toggle", "play_pause" -> {
+            "toggle", "play_pause", "toggle_play_pause" -> {
                 if (exo.isPlaying) exo.pause() else {
                     exo.playWhenReady = true
                     exo.play()

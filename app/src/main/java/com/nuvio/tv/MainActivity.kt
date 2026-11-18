@@ -1430,6 +1430,11 @@ open class MainActivity : ComponentActivity() {
                                             eclipseAudioPlayer.control("next")
                                         }
                                     },
+                                    onClose = {
+                                        miniAudioScope.launch {
+                                            eclipseAudioPlayer.control("stop")
+                                        }
+                                    },
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
                                         .padding(end = 28.dp, bottom = 24.dp),

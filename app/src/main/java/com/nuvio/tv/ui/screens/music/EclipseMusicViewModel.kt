@@ -15,6 +15,8 @@ import com.nuvio.tv.core.music.EclipseTrack
 import com.nuvio.tv.data.local.EclipseSettings
 import com.nuvio.tv.data.local.EclipseSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +27,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * UI state for the Eclipse Music browse and Now Playing TV experience.
+ * UI state for the Eclipse Music browse, inline collection detail, and Now Playing TV experience.
  */
 data class EclipseMusicUiState(
     val isLoading: Boolean = false,
@@ -42,6 +44,7 @@ data class EclipseMusicUiState(
     val isResolvingQueue: Boolean = false,
     val djBannerMessage: String? = null,
     val isDjBusy: Boolean = false,
+    val lastVoiceStatus: String? = null,
 )
 
 /**
@@ -64,6 +67,8 @@ class EclipseMusicViewModel @Inject constructor(
     )
 
     val audioTelemetry: StateFlow<EclipseAudioTelemetry> = audioPlayer.telemetry
+
+    private var djJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -109,7 +114,15 @@ class EclipseMusicViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isSearching = true, error = null) }
+            _uiState.update {
+                it.copy(
+                    isSearching = true,
+                    selectedPlaylist = null,
+                    selectedAlbum = null,
+                    selectedArtist = null,
+                    error = null,
+                )
+            }
             musicClient.search(trimmed, source = "auto", limit = 20).fold(
                 onSuccess = { resp ->
                     _uiState.update {
@@ -220,7 +233,7 @@ class EclipseMusicViewModel @Inject constructor(
             playTracks(mix.tracks, startIndex = 0, source = "eclipse_mix", onStarted = onStarted)
             return
         }
-        playRadio(kind = "mix", query = mix.displayTitle(), mixIndex = mixIndex, onStarted = onStarted)
+        playRadio(kind = "daily_mix", query = mix.displayTitle(), mixIndex = mixIndex, onStarted = onStarted)
     }
 
     fun playTracks(
@@ -271,106 +284,134 @@ class EclipseMusicViewModel @Inject constructor(
             }
             val ready = playable.filter { it.streamUrl.isNotBlank() }
             if (ready.isNotEmpty()) {
-                audioPlayer.queueTracks(ready, mode = "next")
+                audioPlayer.queueTracks(ready, mode = "play_next")
             }
         }
     }
 
     fun startUmbraDj(prompt: String? = null, onStarted: (() -> Unit)? = null) {
-        viewModelScope.launch {
+        djJob?.cancel()
+        djJob = viewModelScope.launch {
             _uiState.update { it.copy(isDjBusy = true, error = null) }
-            musicClient.startUmbraDj(prompt = prompt, fresh = true).fold(
-                onSuccess = { result ->
-                    val tracks = result.tracks.filter { it.streamUrl.isNotBlank() }
-                    _uiState.update {
-                        it.copy(
-                            isDjBusy = false,
-                            djBannerMessage = result.message ?: "Umbra AI DJ is on air",
-                        )
-                    }
-                    if (tracks.isNotEmpty()) {
-                        audioPlayer.playQueue(
-                            tracks = tracks,
-                            startIndex = 0,
-                            autoplay = true,
-                            source = "umbra_dj",
-                            djSessionId = result.sessionId,
-                        )
-                        onStarted?.invoke()
-                    }
-                },
-                onFailure = { t ->
-                    _uiState.update {
-                        it.copy(isDjBusy = false, error = t.message ?: "Umbra DJ failed to start")
-                    }
-                },
-            )
+            try {
+                musicClient.startUmbraDj(prompt = prompt?.takeIf { it.isNotBlank() }, fresh = true).fold(
+                    onSuccess = { result ->
+                        val tracks = result.tracks.filter { it.streamUrl.isNotBlank() }
+                        _uiState.update {
+                            it.copy(
+                                isDjBusy = false,
+                                djBannerMessage = result.message ?: "Umbra AI DJ is on air",
+                            )
+                        }
+                        if (tracks.isNotEmpty()) {
+                            audioPlayer.playQueue(
+                                tracks = tracks,
+                                startIndex = 0,
+                                autoplay = true,
+                                source = "umbra_dj",
+                                djSessionId = result.sessionId,
+                            )
+                            onStarted?.invoke()
+                        } else {
+                            _uiState.update { it.copy(error = "Umbra DJ did not return any playable tracks.") }
+                        }
+                    },
+                    onFailure = { t ->
+                        if (t is CancellationException) throw t
+                        _uiState.update {
+                            it.copy(isDjBusy = false, error = t.message ?: "Umbra DJ failed to start")
+                        }
+                    },
+                )
+            } catch (_: CancellationException) {
+                _uiState.update { it.copy(isDjBusy = false) }
+            }
         }
     }
 
+    fun cancelUmbraDj() {
+        djJob?.cancel()
+        djJob = null
+        _uiState.update { it.copy(isDjBusy = false) }
+    }
+
     fun nextUmbraDj() {
-        viewModelScope.launch {
+        djJob?.cancel()
+        djJob = viewModelScope.launch {
             val sessionId = audioTelemetry.value.djSessionId
             _uiState.update { it.copy(isDjBusy = true, error = null) }
-            musicClient.nextUmbraDj(sessionId = sessionId).fold(
-                onSuccess = { result ->
-                    val tracks = result.tracks.filter { it.streamUrl.isNotBlank() }
-                    _uiState.update { it.copy(isDjBusy = false) }
-                    if (tracks.isNotEmpty()) {
-                        audioPlayer.playQueue(
-                            tracks = tracks,
-                            startIndex = 0,
-                            autoplay = true,
-                            source = "umbra_dj",
-                            djSessionId = result.sessionId ?: sessionId,
-                        )
-                    }
-                },
-                onFailure = { t ->
-                    _uiState.update {
-                        it.copy(isDjBusy = false, error = t.message ?: "Umbra DJ next segment failed")
-                    }
-                },
-            )
+            try {
+                musicClient.nextUmbraDj(sessionId = sessionId).fold(
+                    onSuccess = { result ->
+                        val tracks = result.tracks.filter { it.streamUrl.isNotBlank() }
+                        _uiState.update { it.copy(isDjBusy = false) }
+                        if (tracks.isNotEmpty()) {
+                            audioPlayer.playQueue(
+                                tracks = tracks,
+                                startIndex = 0,
+                                autoplay = true,
+                                source = "umbra_dj",
+                                djSessionId = result.sessionId ?: sessionId,
+                            )
+                        }
+                    },
+                    onFailure = { t ->
+                        if (t is CancellationException) throw t
+                        _uiState.update {
+                            it.copy(isDjBusy = false, error = t.message ?: "Umbra DJ next segment failed")
+                        }
+                    },
+                )
+            } catch (_: CancellationException) {
+                _uiState.update { it.copy(isDjBusy = false) }
+            }
         }
     }
 
     fun stopUmbraDj() {
+        djJob?.cancel()
+        djJob = null
         viewModelScope.launch {
             val sessionId = audioTelemetry.value.djSessionId
             musicClient.stopUmbraDj(sessionId = sessionId)
             audioPlayer.control("stop")
-            _uiState.update { it.copy(djBannerMessage = null) }
+            _uiState.update { it.copy(isDjBusy = false, djBannerMessage = null) }
         }
     }
 
     fun generateAiMix(prompt: String, onStarted: (() -> Unit)? = null) {
         val trimmed = prompt.trim()
         if (trimmed.isEmpty()) return
-        viewModelScope.launch {
+        djJob?.cancel()
+        djJob = viewModelScope.launch {
             _uiState.update { it.copy(isDjBusy = true, error = null) }
-            musicClient.generatePlaylist(prompt = trimmed, count = 20, save = true).fold(
-                onSuccess = { tracks ->
-                    _uiState.update { it.copy(isDjBusy = false) }
-                    val ready = tracks.filter { it.streamUrl.isNotBlank() }
-                    if (ready.isNotEmpty()) {
-                        audioPlayer.playQueue(
-                            tracks = ready,
-                            startIndex = 0,
-                            autoplay = true,
-                            source = "eclipse_ai_mix",
-                        )
-                        onStarted?.invoke()
-                    } else {
-                        _uiState.update { it.copy(error = "AI Mix returned no playable tracks") }
-                    }
-                },
-                onFailure = { t ->
-                    _uiState.update {
-                        it.copy(isDjBusy = false, error = t.message ?: "AI Mix generation failed")
-                    }
-                },
-            )
+            try {
+                musicClient.generatePlaylist(prompt = trimmed, count = 20, save = true).fold(
+                    onSuccess = { tracks ->
+                        _uiState.update { it.copy(isDjBusy = false) }
+                        val ready = tracks.filter { it.streamUrl.isNotBlank() }
+                        if (ready.isNotEmpty()) {
+                            audioPlayer.playQueue(
+                                tracks = ready,
+                                startIndex = 0,
+                                autoplay = true,
+                                source = "eclipse_ai_mix",
+                            )
+                            onStarted?.invoke()
+                        } else {
+                            _uiState.update { it.copy(error = "AI Mix returned no playable tracks") }
+                        }
+                    },
+                    onFailure = { t ->
+                        if (t is CancellationException) throw t
+                        _uiState.update {
+                            it.copy(isDjBusy = false, error = t.message ?: "AI Mix generation failed")
+                        }
+                    },
+                )
+            } catch (_: CancellationException) {
+                _uiState.update { it.copy(isDjBusy = false) }
+            }
         }
     }
 
@@ -404,6 +445,53 @@ class EclipseMusicViewModel @Inject constructor(
                     }
                 },
             )
+        }
+    }
+
+    /**
+     * Parses spoken Shield TV remote commands into playback control, Umbra DJ, AI Mix, or instant Search & Play.
+     */
+    fun handleVoiceCommand(spokenText: String, onOpenNowPlaying: () -> Unit) {
+        val raw = spokenText.trim()
+        if (raw.isEmpty()) return
+        val lower = raw.lowercase()
+        _uiState.update { it.copy(lastVoiceStatus = "Heard: \"$raw\"") }
+
+        when {
+            lower in setOf("pause", "pause music") -> control("pause")
+            lower in setOf("play", "resume", "resume music", "unpause") -> control("play")
+            lower in setOf("next", "next track", "next song", "skip") -> control("next")
+            lower in setOf("previous", "prev", "previous track", "previous song", "go back") -> control("previous")
+            lower in setOf("stop", "stop music", "stop dj", "close player") -> {
+                if (audioTelemetry.value.djSessionId != null) stopUmbraDj() else control("stop")
+            }
+            lower.startsWith("umbra") || lower.startsWith("dj ") || lower == "dj" -> {
+                val prompt = raw.replace(Regex("^(?:umbra(?:\\s+ai)?(?:\\s+dj)?|dj)\\s*", RegexOption.IGNORE_CASE), "").trim()
+                startUmbraDj(prompt.ifBlank { null }, onStarted = onOpenNowPlaying)
+            }
+            lower.startsWith("mix ") || lower.startsWith("ai mix ") || lower.startsWith("make a playlist ") -> {
+                val prompt = raw.replace(Regex("^(?:ai\\s+mix|mix|make\\s+a\\s+playlist(?:\\s+of)?)\\s*", RegexOption.IGNORE_CASE), "").trim()
+                if (prompt.isNotBlank()) generateAiMix(prompt, onStarted = onOpenNowPlaying) else search(raw)
+            }
+            lower.startsWith("play ") -> {
+                val query = raw.substring(5).trim()
+                if (query.isEmpty()) return
+                viewModelScope.launch {
+                    _uiState.update { it.copy(isSearching = true, searchQuery = query, error = null) }
+                    musicClient.search(query, source = "auto", limit = 15).fold(
+                        onSuccess = { resp ->
+                            _uiState.update { it.copy(isSearching = false, searchResults = resp, error = resp.error) }
+                            if (resp.tracks.isNotEmpty()) {
+                                playTracks(resp.tracks, startIndex = 0, source = "eclipse_voice", onStarted = onOpenNowPlaying)
+                            }
+                        },
+                        onFailure = { t ->
+                            _uiState.update { it.copy(isSearching = false, error = t.message ?: "Voice search failed") }
+                        },
+                    )
+                }
+            }
+            else -> search(raw)
         }
     }
 

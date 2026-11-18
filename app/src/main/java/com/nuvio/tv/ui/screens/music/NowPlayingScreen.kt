@@ -638,8 +638,32 @@ private fun UpNextQueuePanel(
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.BackgroundCard),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val art = item.displayArtUrl()
+                        if (art.isNotBlank()) {
+                            AsyncImage(
+                                model = art,
+                                contentDescription = item.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = colors.TextSecondary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "${index + 1}. ${item.title}",

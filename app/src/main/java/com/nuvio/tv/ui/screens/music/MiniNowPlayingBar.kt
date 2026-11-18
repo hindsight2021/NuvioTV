@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -42,8 +43,8 @@ import com.nuvio.tv.core.music.EclipseAudioTelemetry
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /**
- * Compact focusable Now Playing bar overlaid in the corner during browse screens.
- * Clicking the main card opens [NowPlayingScreen]; adjacent buttons allow quick Play/Pause and Next.
+ * Compact focusable Now Playing bar overlaid in the bottom-right corner during browse screens.
+ * Includes quick Play/Pause, Next, and Close (Stop) controls.
  */
 @Composable
 fun MiniNowPlayingBar(
@@ -51,6 +52,7 @@ fun MiniNowPlayingBar(
     onOpenNowPlaying: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onNext: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val track = telemetry.currentTrack ?: return
@@ -58,9 +60,9 @@ fun MiniNowPlayingBar(
 
     Row(
         modifier = modifier
-            .widthIn(min = 280.dp, max = 420.dp)
+            .widthIn(min = 320.dp, max = 460.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(colors.BackgroundElevated.copy(alpha = 0.94f))
+            .background(colors.BackgroundElevated.copy(alpha = 0.96f))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -169,6 +171,21 @@ fun MiniNowPlayingBar(
             Icon(
                 imageVector = Icons.Default.SkipNext,
                 contentDescription = "Next track",
+            )
+        }
+
+        IconButton(
+            onClick = onClose,
+            colors = IconButtonDefaults.colors(
+                containerColor = colors.BackgroundCard,
+                contentColor = colors.TextSecondary,
+                focusedContainerColor = colors.FocusBackground,
+                focusedContentColor = colors.TextPrimary,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close mini player",
             )
         }
     }
