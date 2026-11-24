@@ -167,7 +167,7 @@ class AndroidTvChannelSyncService @Inject constructor(
             .filter {
                 !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
                     it.isReleaseAlert, settings.dismissedNextUp,
-                    hasActiveProgress = it.contentId in inProgressContentIds)
+                    hasActiveProgress = true)
             }
 
         val deduplicatedNextUp = filteredNextUp.filter { it.contentId !in inProgressContentIds }

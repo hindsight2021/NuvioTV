@@ -285,6 +285,8 @@ class HomeViewModel @Inject constructor(
     /** Cached show ID siblings from the last badge evaluation cycle (for anime ID expansion). */
     @Volatile
     internal var cwLastShowIdSiblings: Map<String, Set<String>> = emptyMap()
+    @Volatile
+    internal var cwLastDismissedNextUpKeys: Set<String> = emptySet()
     internal val cwTmdbIdCache: MutableMap<String, String?> = createLruMap(MAX_CW_CACHE_SIZE)
     internal val cwNextUpResolutionCache = Collections.synchronizedMap(mutableMapOf<String, NextUpResolution?>())
     internal val cwNextUpNegativeCacheTimestamps = ConcurrentHashMap<String, Long>()
@@ -372,10 +374,14 @@ class HomeViewModel @Inject constructor(
         loadContinueWatchingFromCache()
         viewModelScope.launch {
             uiState
-                .map { it.continueWatchingItems }
+                .map { it.continueWatchingItems to it.upcomingItems }
                 .distinctUntilChanged()
-                .collect { items ->
-                    Log.d("ContinueWatching", "published count=${items.size} next=" + items.mapNotNull {
+                .collect { (items, upcoming) ->
+                    Log.d("ContinueWatching", "published count=${items.size} upcomingCount=${upcoming.size} next=" + items.mapNotNull {
+                        (it as? ContinueWatchingItem.NextUp)?.info?.let { info ->
+                            "${info.contentId}:${info.season}:${info.episode}:alert=${info.isReleaseAlert}"
+                        }
+                    }.joinToString() + " upcoming=" + upcoming.mapNotNull {
                         (it as? ContinueWatchingItem.NextUp)?.info?.let { info ->
                             "${info.contentId}:${info.season}:${info.episode}:alert=${info.isReleaseAlert}"
                         }
@@ -395,6 +401,9 @@ class HomeViewModel @Inject constructor(
                 if (!hasSimpsonsProgress) {
                     for (id in simpsonsIds) {
                         traktSettingsDataStore.addDismissedNextUpKey(id)
+                        traktSettingsDataStore.addDismissedNextUpKey(
+                            com.nuvio.tv.domain.model.nextUpSeriesDeleteDismissKey(id)
+                        )
                     }
                 }
             }
@@ -444,6 +453,7 @@ class HomeViewModel @Inject constructor(
                     cwEnrichedInProgressOverlay.clear()
                     cwLastBadgeEpisodeKeys = emptySet()
                     cwLastShowIdSiblings = emptyMap()
+                    cwLastDismissedNextUpKeys = emptySet()
                     _uiState.update {
                         it.copy(layoutPreferencesReady = false, continueWatchingItems = emptyList())
                     }
@@ -501,6 +511,7 @@ class HomeViewModel @Inject constructor(
         cwEnrichedInProgressOverlay.clear()
         cwLastBadgeEpisodeKeys = emptySet()
         cwLastShowIdSiblings = emptyMap()
+        cwLastDismissedNextUpKeys = emptySet()
         watchedSeriesStateHolder.clearValidationState()
         _uiState.update { it.copy(continueWatchingItems = emptyList(), upcomingItems = emptyList()) }
         // Bump trigger so the pipeline's collectLatest restarts with fresh state.
@@ -889,7 +900,7 @@ class HomeViewModel @Inject constructor(
                 .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
                 .filter {
                     !isContinueWatchingNextUpDismissed(it.contentId, it.season, it.episode,
-                        recalculateCachedReleaseBadge(it).second, dismissedNextUp, hasActiveProgress = false)
+                        recalculateCachedReleaseBadge(it).second, dismissedNextUp, hasActiveProgress = true)
                 }
                 .map { cached ->
                     ContinueWatchingItem.NextUp(

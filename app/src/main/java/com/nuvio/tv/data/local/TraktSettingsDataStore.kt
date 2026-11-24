@@ -167,7 +167,10 @@ class TraktSettingsDataStore @Inject constructor(
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
             val filtered = current.filterNot { key ->
                 targets.any { id ->
-                    key == id || key.startsWith("$id|") || key.startsWith("episode|$id|")
+                    key == id ||
+                        key == "deleted|$id" ||
+                        key.startsWith("$id|") ||
+                        key.startsWith("episode|$id|")
                 }
             }.toSet()
             if (filtered.size != current.size) {

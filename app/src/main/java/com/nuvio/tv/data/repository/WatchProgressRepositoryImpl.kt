@@ -880,9 +880,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
         // MUST be captured BEFORE clearing local watch progress!
         val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, null, null, profileId)
 
-        // 2. Dismiss whole show across all siblings so it stays off CW unless actively watched again
+        // 2. Permanently dismiss whole show across all siblings so it stays off CW unless actively watched again
         for (id in siblingIds) {
             traktSettingsDataStore.addDismissedNextUpKey(id)
+            traktSettingsDataStore.addDismissedNextUpKey(
+                com.nuvio.tv.domain.model.nextUpSeriesDeleteDismissKey(id)
+            )
         }
 
         // 3. Clear local watch progress for all siblings

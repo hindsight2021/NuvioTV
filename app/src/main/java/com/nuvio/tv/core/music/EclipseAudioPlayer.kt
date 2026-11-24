@@ -2,6 +2,7 @@ package com.nuvio.tv.core.music
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -554,6 +555,8 @@ class EclipseAudioPlayer @Inject constructor(
         // Sync standard telemetry so bottom mini-bar and NowPlaying remain accurate
         syncStandardTelemetryFromDj(first, playable, 0, djSessionId)
         deckA.playWhenReady = true
+        deckA.play()
+        Log.d("EclipseAudioPlayer", "startDjMixSet started with ${playable.size} tracks; deckA=${first.title}, deckB=${second?.title}")
         startDjTicker()
         scheduleUpcomingWaveformAnalysis(startIdx = 0)
     }
@@ -706,10 +709,12 @@ class EclipseAudioPlayer @Inject constructor(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                Log.e("EclipseAudioPlayer", "DJ Deck ${deckId.name} playback error: ${error.errorCodeName} ${error.message}", error)
                 if (_djTelemetry.value.isActive && deckId == djActiveDeck) {
                     val nextIdx = _djTelemetry.value.currentIndex + 1
                     if (nextIdx in _djTelemetry.value.queue.indices) {
                         beginMixTransition(djActiveDeck, nextIdx, manualTrigger = true)
+                        completeMixTransition()
                     } else {
                         _djTelemetry.update { it.copy(error = error.message ?: "DJ Deck ${deckId.name} error") }
                     }
@@ -801,6 +806,7 @@ class EclipseAudioPlayer @Inject constructor(
         if (outPlayer?.isPlaying != true && outPlayer != null) {
             outPlayer.play()
         }
+        startDjTicker()
         _djTelemetry.update {
             it.copy(
                 isMixing = true,

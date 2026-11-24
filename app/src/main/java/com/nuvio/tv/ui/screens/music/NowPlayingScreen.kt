@@ -172,7 +172,16 @@ fun NowPlayingScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (!uiState.djBannerMessage.isNullOrBlank()) {
+                    if (!uiState.error.isNullOrBlank()) {
+                        Text(
+                            text = uiState.error.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.Error,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.width(340.dp),
+                        )
+                    } else if (!uiState.djBannerMessage.isNullOrBlank()) {
                         Text(
                             text = uiState.djBannerMessage.orEmpty(),
                             style = MaterialTheme.typography.bodySmall,
@@ -183,6 +192,7 @@ fun NowPlayingScreen(
                         )
                     }
                     Button(
+                        enabled = !uiState.isDjBusy,
                         onClick = {
                             if (djTelemetry.isActive) {
                                 onOpenDjMixer()
@@ -203,7 +213,13 @@ fun NowPlayingScreen(
                     ) {
                         Icon(Icons.Default.GraphicEq, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (djTelemetry.isActive) "DJ Booth" else "Pro AI DJ Mix")
+                        Text(
+                            when {
+                                uiState.isDjBusy -> "Curating…"
+                                djTelemetry.isActive -> "DJ Booth"
+                                else -> "Pro AI DJ Mix"
+                            },
+                        )
                     }
                 }
             }

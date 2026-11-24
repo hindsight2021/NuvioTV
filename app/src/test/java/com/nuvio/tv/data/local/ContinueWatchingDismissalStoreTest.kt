@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.TestPreferencesStore
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.nextUpEpisodeDismissKey
+import com.nuvio.tv.domain.model.nextUpSeriesDeleteDismissKey
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,8 +49,10 @@ class ContinueWatchingDismissalStoreTest {
         val tmdbKey = nextUpEpisodeDismissKey("tmdb:2190", 29, 4)
         val bareImdb = "tt0121955"
         val bareTmdb = "tmdb:2190"
+        val deletedImdb = nextUpSeriesDeleteDismissKey("tt0121955")
+        val deletedTmdb = nextUpSeriesDeleteDismissKey("tmdb:2190")
         val other = nextUpEpisodeDismissKey("tt9999999", 1, 1)
-        data.edit { it[key] = setOf(imdbKey, tmdbKey, bareImdb, bareTmdb, other) }
+        data.edit { it[key] = setOf(imdbKey, tmdbKey, bareImdb, bareTmdb, deletedImdb, deletedTmdb, other) }
         val factory = mockk<ProfileDataStoreFactory> { every { get(any(), any()) } returns data }
         val profiles = mockk<ProfileManager> { every { activeProfileId } returns MutableStateFlow(1) }
         val settings = TraktSettingsDataStore(factory, profiles)

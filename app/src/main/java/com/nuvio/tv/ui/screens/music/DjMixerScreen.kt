@@ -134,6 +134,7 @@ fun DjMixerScreen(
             BoothStatusHeader(
                 telemetry = telemetry,
                 isBusy = uiState.isDjBusy,
+                errorMessage = uiState.error ?: telemetry.error,
                 onBack = onBack,
             )
 
@@ -185,7 +186,13 @@ fun DjMixerScreen(
                 isBusy = uiState.isDjBusy,
                 playPauseFocus = playPauseFocus,
                 onMixNow = { viewModel.triggerDjMixNow() },
-                onPlayPause = { viewModel.control("toggle") },
+                onPlayPause = {
+                    if (telemetry.isActive) {
+                        viewModel.control("toggle")
+                    } else if (!uiState.isDjBusy) {
+                        viewModel.startProDjSet(includeSurprises = uiState.includeDjSurprises)
+                    }
+                },
                 onDropSurprise = { viewModel.injectDjWildcard() },
                 onNewSet = { viewModel.startProDjSet(includeSurprises = true) },
                 onStopBooth = {
@@ -254,6 +261,7 @@ private fun ClubSpotlightsLayer(
 private fun BoothStatusHeader(
     telemetry: DjConsoleTelemetry,
     isBusy: Boolean,
+    errorMessage: String? = null,
     onBack: () -> Unit,
 ) {
     val pulseColor = if (telemetry.isMixing) GoldBadge else LedGreen
@@ -336,9 +344,14 @@ private fun BoothStatusHeader(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Text(
-                text = telemetry.activeTransitionNote?.takeIf { it.isNotBlank() }
-                    ?: "Waiting for cue transition…",
-                color = if (telemetry.isMixing) GoldBadge else TextPrimary,
+                text = errorMessage?.takeIf { it.isNotBlank() }
+                    ?: telemetry.activeTransitionNote?.takeIf { it.isNotBlank() }
+                    ?: if (isBusy) "AI DJ curating harmonic beatmix set…" else "Waiting for cue transition…",
+                color = when {
+                    !errorMessage.isNullOrBlank() -> LedRed
+                    telemetry.isMixing -> GoldBadge
+                    else -> TextPrimary
+                },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,

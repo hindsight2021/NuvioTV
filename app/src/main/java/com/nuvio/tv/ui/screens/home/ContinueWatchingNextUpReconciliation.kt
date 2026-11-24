@@ -236,7 +236,8 @@ internal fun reconcileConclusiveNextUpItems(
     resolvedItems: List<ContinueWatchingItem.NextUp>,
     conclusivelyProcessedContentIds: Set<String>,
     dismissedNextUpKeys: Set<String>,
-    siblingsMap: Map<String, Set<String>> = emptyMap()
+    siblingsMap: Map<String, Set<String>> = emptyMap(),
+    activeProgressContentIds: Set<String> = emptySet()
 ): List<ContinueWatchingItem> {
     val resolvedByContentId = resolvedItems
         .distinctBy { item -> item.info.contentId }
@@ -249,6 +250,8 @@ internal fun reconcileConclusiveNextUpItems(
             item.info.contentId in conclusivelyProcessedContentIds
     }
     val acceptedResolvedItems = resolvedByContentId.values.filter { item ->
+        val hasActiveProgress = item.info.contentId in activeProgressContentIds ||
+            siblingsMap[item.info.contentId].orEmpty().any { it in activeProgressContentIds }
         item.info.contentId !in inProgressContentIds &&
             item.info.contentId in conclusivelyProcessedContentIds &&
             !isContinueWatchingNextUpDismissed(
@@ -257,7 +260,7 @@ internal fun reconcileConclusiveNextUpItems(
                 item.info.episode,
                 item.info.isReleaseAlert,
                 dismissedNextUpKeys,
-                hasActiveProgress = false
+                hasActiveProgress = hasActiveProgress
             )
     }
     val combined = retainedItems + acceptedResolvedItems
@@ -283,7 +286,8 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
     dismissedNextUpKeys: Set<String>,
     sortMode: ContinueWatchingSortMode,
     pipelineProfileId: Int,
-    persistSnapshot: Boolean
+    persistSnapshot: Boolean,
+    activeProgressContentIds: Set<String> = emptySet()
 ) {
     if (profileManager.activeProfileId.value != pipelineProfileId) return
     if (resolvedItems.isEmpty() && conclusivelyProcessedContentIds.isEmpty()) return
@@ -291,6 +295,8 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
     val acceptedResolvedItems = resolvedItems
         .distinctBy { item -> item.info.contentId }
         .filter { item ->
+            val hasActiveProgress = item.info.contentId in activeProgressContentIds ||
+                cwLastShowIdSiblings[item.info.contentId].orEmpty().any { it in activeProgressContentIds }
             item.info.contentId in conclusivelyProcessedContentIds &&
                 !isContinueWatchingNextUpDismissed(
                     item.info.contentId,
@@ -298,7 +304,7 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
                     item.info.episode,
                     item.info.isReleaseAlert,
                     dismissedNextUpKeys,
-                    hasActiveProgress = false
+                    hasActiveProgress = hasActiveProgress
                 )
         }
     val reconciledContentIds = conclusivelyProcessedContentIds
@@ -317,7 +323,8 @@ internal suspend fun HomeViewModel.applyConclusiveOlderNextUpResults(
             resolvedItems = acceptedResolvedItems,
             conclusivelyProcessedContentIds = conclusivelyProcessedContentIds,
             dismissedNextUpKeys = dismissedNextUpKeys,
-            siblingsMap = cwLastShowIdSiblings
+            siblingsMap = cwLastShowIdSiblings,
+            activeProgressContentIds = activeProgressContentIds
         )
         val sorted = sortContinueWatchingItems(reconciled, sortMode)
         val (main, upcoming) = splitUpcomingItems(sorted, sortMode, separateNextUpRow, cwLastShowIdSiblings)

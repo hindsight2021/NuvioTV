@@ -342,17 +342,50 @@ class EclipseMusicViewModel @Inject constructor(
         _uiState.update { it.copy(includeDjSurprises = !it.includeDjSurprises) }
     }
 
+    private suspend fun resolvePlayableDjTracks(rawTracks: List<EclipseTrack>): List<EclipseTrack> {
+        if (rawTracks.isEmpty()) return emptyList()
+        val resolved = if (rawTracks.any { it.streamUrl.isBlank() }) {
+            musicClient.resolveQueue(rawTracks).getOrElse { rawTracks }
+        } else {
+            rawTracks
+        }
+        val resolvedById = resolved.filter { it.id.isNotBlank() }.associateBy { it.id }
+        return rawTracks.mapIndexed { index, original ->
+            val match = resolvedById[original.id] ?: resolved.getOrNull(index)
+            if (match == null) {
+                original
+            } else {
+                original.copy(
+                    streamUrl = match.streamUrl.ifBlank { original.streamUrl },
+                    artworkUrl = match.artworkUrl.ifBlank { original.artworkUrl },
+                    backdropUrl = match.backdropUrl.ifBlank { original.backdropUrl },
+                    durationSec = match.durationSec.takeIf { it > 0 } ?: original.durationSec,
+                    lyricsLrc = match.lyricsLrc ?: original.lyricsLrc,
+                )
+            }
+        }.filter { it.streamUrl.isNotBlank() }
+    }
+
     fun startProDjSet(
         playlistId: String? = null,
         tracks: List<EclipseTrack>? = null,
         prompt: String? = null,
         includeSurprises: Boolean = _uiState.value.includeDjSurprises,
+        fallbackTracks: List<EclipseTrack>? = null,
         onStarted: (() -> Unit)? = null,
     ) {
         djJob?.cancel()
         djJob = viewModelScope.launch {
             _uiState.update { it.copy(isDjBusy = true, error = null) }
             try {
+                var bannerMessage: String? = null
+                var commentary: String? = null
+                var mood: String? = null
+                var sessionId: String? = null
+                var lastFailure: String? = null
+                var playable: List<EclipseTrack> = emptyList()
+
+                // Tier 1: Pro AI DJ server curation & beatmix planning.
                 musicClient.startProDjSet(
                     playlistId = playlistId,
                     tracks = tracks,
@@ -361,34 +394,107 @@ class EclipseMusicViewModel @Inject constructor(
                     surpriseCount = if (includeSurprises) 2 else 0,
                 ).fold(
                     onSuccess = { result ->
-                        val playable = result.tracks.filter { it.streamUrl.isNotBlank() }
-                        _uiState.update {
-                            it.copy(
-                                isDjBusy = false,
-                                djBannerMessage = result.commentary ?: result.message ?: "Pro AI DJ Beatmix Active",
-                            )
-                        }
-                        if (playable.isNotEmpty()) {
-                            audioPlayer.startDjMixSet(
-                                tracks = playable,
-                                djSessionId = result.sessionId,
-                                commentary = result.commentary ?: result.message,
-                                mood = result.mood,
-                            )
-                            onStarted?.invoke()
-                        } else {
-                            _uiState.update { it.copy(error = "Pro AI DJ returned no playable tracks.") }
-                        }
+                        bannerMessage = result.commentary ?: result.message ?: "Pro AI DJ Beatmix Active"
+                        commentary = result.commentary ?: result.message
+                        mood = result.mood
+                        sessionId = result.sessionId
+                        playable = resolvePlayableDjTracks(result.tracks)
                     },
                     onFailure = { t ->
                         if (t is CancellationException) throw t
-                        _uiState.update {
-                            it.copy(isDjBusy = false, error = t.message ?: "Pro AI DJ set failed")
-                        }
+                        lastFailure = t.message
                     },
                 )
-            } catch (_: CancellationException) {
+
+                // Tier 2: Seed tracks / fallback playlist tracks / active playback queue.
+                if (playable.isEmpty()) {
+                    val seed = tracks?.takeIf { it.isNotEmpty() }
+                        ?: fallbackTracks?.takeIf { it.isNotEmpty() }
+                        ?: audioTelemetry.value.queue.takeIf { it.isNotEmpty() }
+                        ?: djTelemetry.value.queue
+                    if (seed.isNotEmpty()) {
+                        playable = resolvePlayableDjTracks(seed)
+                        if (playable.isNotEmpty()) {
+                            bannerMessage = bannerMessage ?: "Pro AI DJ Beatmix Active"
+                            commentary = commentary ?: "Dual-deck beatmix engaged from your current set"
+                        }
+                    }
+                }
+
+                // Tier 3: Classic Umbra AI DJ endpoint.
+                if (playable.isEmpty()) {
+                    musicClient.startUmbraDj(
+                        prompt = prompt?.takeIf { it.isNotBlank() },
+                        fresh = true,
+                    ).fold(
+                        onSuccess = { result ->
+                            playable = resolvePlayableDjTracks(result.tracks)
+                            if (playable.isNotEmpty()) {
+                                bannerMessage = result.commentary ?: result.message ?: "Umbra AI DJ is on air"
+                                commentary = result.commentary ?: result.message
+                                mood = result.mood
+                                sessionId = result.sessionId
+                            }
+                        },
+                        onFailure = { t ->
+                            if (t is CancellationException) throw t
+                            if (lastFailure.isNullOrBlank()) lastFailure = t.message
+                        },
+                    )
+                }
+
+                // Tier 4: Eclipse Radio mix fallback.
+                if (playable.isEmpty()) {
+                    musicClient.playRadio(
+                        kind = "mix",
+                        query = prompt ?: "",
+                        mixIndex = 0,
+                    ).fold(
+                        onSuccess = { radioTracks ->
+                            playable = resolvePlayableDjTracks(radioTracks)
+                            if (playable.isNotEmpty()) {
+                                bannerMessage = bannerMessage ?: "AI DJ Radio Beatmix Active"
+                                commentary = commentary ?: "Dual-deck beatmix engaged from Eclipse Radio"
+                            }
+                        },
+                        onFailure = { t ->
+                            if (t is CancellationException) throw t
+                            if (lastFailure.isNullOrBlank()) lastFailure = t.message
+                        },
+                    )
+                }
+
+                if (playable.isNotEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isDjBusy = false,
+                            djBannerMessage = bannerMessage ?: "Pro AI DJ Beatmix Active",
+                            error = null,
+                        )
+                    }
+                    audioPlayer.startDjMixSet(
+                        tracks = playable,
+                        djSessionId = sessionId,
+                        commentary = commentary,
+                        mood = mood,
+                    )
+                    onStarted?.invoke()
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isDjBusy = false,
+                            error = lastFailure?.takeIf { m -> m.isNotBlank() }
+                                ?: "Pro AI DJ returned no playable tracks.",
+                        )
+                    }
+                }
+            } catch (t: CancellationException) {
                 _uiState.update { it.copy(isDjBusy = false) }
+                throw t
+            } catch (t: Throwable) {
+                _uiState.update {
+                    it.copy(isDjBusy = false, error = t.message ?: "Pro AI DJ set failed")
+                }
             }
         }
     }
@@ -402,30 +508,61 @@ class EclipseMusicViewModel @Inject constructor(
     fun injectDjWildcard(prompt: String? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isDjBusy = true, error = null) }
-            val currentSeed = djTelemetry.value.queue.take(5).ifEmpty {
-                audioTelemetry.value.queue.take(5)
+            try {
+                val currentSeed = djTelemetry.value.queue.take(5).ifEmpty {
+                    audioTelemetry.value.queue.take(5)
+                }
+                val existingIds = djTelemetry.value.queue.map { it.id }.toSet()
+                var picks: List<EclipseTrack> = emptyList()
+                var commentary: String? = null
+                var lastFailure: String? = null
+
+                musicClient.startProDjSet(
+                    tracks = currentSeed.ifEmpty { null },
+                    prompt = prompt ?: "Pick an unexpected crate-digger wildcard track not in this list with infectious energy",
+                    includeSurprises = true,
+                    surpriseCount = 1,
+                ).fold(
+                    onSuccess = { result ->
+                        val resolved = resolvePlayableDjTracks(result.tracks)
+                        commentary = result.commentary
+                        picks = resolved.filter { it.djMeta?.isWildcard == true && it.id !in existingIds }
+                            .ifEmpty { resolved.filter { it.id !in existingIds }.take(1) }
+                    },
+                    onFailure = { t ->
+                        if (t is CancellationException) throw t
+                        lastFailure = t.message
+                    },
+                )
+
+                if (picks.isEmpty()) {
+                    musicClient.startUmbraDj(
+                        prompt = prompt ?: "Unexpected crate-digger wildcard track",
+                        fresh = true,
+                    ).onSuccess { result ->
+                        val resolved = resolvePlayableDjTracks(result.tracks)
+                        commentary = commentary ?: result.commentary ?: result.message
+                        picks = resolved.filter { it.id !in existingIds }.take(1)
+                    }
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isDjBusy = false,
+                        error = if (picks.isEmpty()) (lastFailure ?: "Could not fetch wildcard surprise") else null,
+                    )
+                }
+                if (picks.isNotEmpty()) {
+                    audioPlayer.injectDjSurprises(picks, commentary)
+                }
+            } catch (t: CancellationException) {
+                _uiState.update { it.copy(isDjBusy = false) }
+                throw t
+            } catch (t: Throwable) {
+                _uiState.update {
+                    it.copy(isDjBusy = false, error = t.message ?: "Could not fetch wildcard surprise")
+                }
             }
-            musicClient.startProDjSet(
-                tracks = currentSeed.ifEmpty { null },
-                prompt = prompt ?: "Pick an unexpected crate-digger wildcard track not in this list with infectious energy",
-                includeSurprises = true,
-                surpriseCount = 1,
-            ).fold(
-                onSuccess = { result ->
-                    _uiState.update { it.copy(isDjBusy = false) }
-                    val existingIds = djTelemetry.value.queue.map { it.id }.toSet()
-                    val picks = result.tracks.filter { it.djMeta?.isWildcard == true && it.id !in existingIds }
-                        .ifEmpty { result.tracks.filter { it.id !in existingIds }.take(1) }
-                    if (picks.isNotEmpty()) {
-                        audioPlayer.injectDjSurprises(picks, result.commentary)
-                    }
-                },
-                onFailure = { t ->
-                    _uiState.update {
-                        it.copy(isDjBusy = false, error = t.message ?: "Could not fetch wildcard surprise")
-                    }
-                },
-            )
         }
     }
 

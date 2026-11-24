@@ -266,8 +266,11 @@ fun EclipseMusicScreen(
             coverUrl = detailCover,
             tracks = detailTracks,
             isLoading = uiState.isLoadingDetail || uiState.isResolvingQueue || uiState.isDjBusy,
+            isDjBusy = uiState.isDjBusy,
+            error = uiState.error,
             includeSurprises = uiState.includeDjSurprises,
             onBack = { viewModel.closeDetail() },
+            onDismissError = { viewModel.clearError() },
             onPlayAll = {
                 viewModel.playTracks(detailTracks, startIndex = 0, source = detailSource) {
                     onOpenNowPlaying()
@@ -279,6 +282,7 @@ fun EclipseMusicScreen(
                     playlistId = pid,
                     tracks = if (pid == null) detailTracks else null,
                     includeSurprises = uiState.includeDjSurprises,
+                    fallbackTracks = detailTracks,
                 ) {
                     onOpenDjMixer()
                 }
@@ -449,6 +453,7 @@ fun EclipseMusicScreen(
     if (showUmbraDialog) {
         UmbraDjLaunchDialog(
             isBusy = uiState.isDjBusy,
+            error = uiState.error,
             includeSurprises = uiState.includeDjSurprises,
             isVoiceAvailable = isVoiceAvailable,
             onToggleSurprises = { viewModel.toggleDjSurprises() },
@@ -516,8 +521,11 @@ private fun MusicCollectionDetailView(
     coverUrl: String?,
     tracks: List<EclipseTrack>,
     isLoading: Boolean,
+    isDjBusy: Boolean = false,
+    error: String? = null,
     includeSurprises: Boolean,
     onBack: () -> Unit,
+    onDismissError: () -> Unit = {},
     onPlayAll: () -> Unit,
     onProDjMix: () -> Unit,
     onToggleSurprises: () -> Unit,
@@ -606,6 +614,15 @@ private fun MusicCollectionDetailView(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                if (!error.isNullOrBlank()) {
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.Error,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
@@ -636,7 +653,7 @@ private fun MusicCollectionDetailView(
                     ) {
                         Icon(Icons.Default.CompareArrows, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Pro AI DJ Mix")
+                        Text(if (isDjBusy) "Curating…" else "Pro AI DJ Mix")
                     }
 
                     Button(
@@ -777,6 +794,7 @@ private fun MusicCollectionDetailView(
 @Composable
 private fun UmbraDjLaunchDialog(
     isBusy: Boolean,
+    error: String? = null,
     includeSurprises: Boolean,
     isVoiceAvailable: Boolean,
     onToggleSurprises: () -> Unit,
@@ -843,6 +861,16 @@ private fun UmbraDjLaunchDialog(
                                 false
                             }
                         },
+                )
+            }
+
+            if (!error.isNullOrBlank() && !isBusy) {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioTheme.colors.Error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 

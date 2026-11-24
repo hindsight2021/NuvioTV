@@ -223,4 +223,74 @@ class HomeContinueWatchingRefreshTest {
         vm.cwPipelineJob?.join()
         Unit
     }
+
+    @Test
+    fun `clearing dismissal key immediately evicts negative cache and publishes newly aired episode`() = runBlocking {
+        val timestamp = System.currentTimeMillis()
+        val belowDeck = "tt2342499"
+        val seed = WatchProgress(
+            contentId = belowDeck,
+            contentType = "series",
+            name = "Below Deck",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "$belowDeck:13:6",
+            season = 13,
+            episode = 6,
+            episodeTitle = null,
+            position = 1L,
+            duration = 1L,
+            lastWatched = timestamp - 86_400_000L * 7,
+            progressPercent = 100f
+        )
+        // Start with no WatchProgressPrefs entry and bare dismissal -> drops and negative-caches 13x6
+        val progressFlow = MutableStateFlow<List<WatchProgress>>(emptyList())
+        every { vm.watchProgressRepository.allProgress } returns progressFlow
+        every { vm.watchProgressRepository.observeNextUpSeeds() } returns MutableStateFlow(listOf(seed))
+        every { vm.watchProgressRepository.observeRemoteProgressLoaded() } returns MutableStateFlow(true)
+        every { vm.watchProgressRepository.watchedItems } returns MutableStateFlow(emptyList())
+        every { vm.watchProgressRepository.activeProviderContinueWatchingCutoffEpochMs(any(), any()) } returns null
+        every { vm.watchProgressRepository.shouldUseAsNextUpSeed(any(), any()) } returns true
+        coEvery { vm.watchProgressRepository.prepareNextUpSeed(any()) } answers { firstArg() }
+        coEvery { vm.watchProgressRepository.getWatchedShowEpisodes() } returns emptyMap()
+        coEvery { vm.watchProgressRepository.getShowIdSiblings() } returns emptyMap()
+        every { holder.fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
+        every { vm.traktSettingsDataStore.continueWatchingDaysCap } returns MutableStateFlow(0)
+        val dismissals = MutableStateFlow(setOf(belowDeck, nextUpEpisodeDismissKey(belowDeck, 13, 6)))
+        every { vm.traktSettingsDataStore.dismissedNextUpKeys } returns dismissals
+        every { vm.layoutPreferenceDataStore.showUnairedNextUp } returns MutableStateFlow(false)
+        every { vm.layoutPreferenceDataStore.nextUpFromFurthestEpisode } returns MutableStateFlow(true)
+        every { vm.layoutPreferenceDataStore.continueWatchingSortMode } returns MutableStateFlow(ContinueWatchingSortMode.DEFAULT)
+        every { vm.layoutPreferenceDataStore.separateNextUpRow } returns MutableStateFlow(false)
+        every { vm.layoutPreferenceDataStore.nextUpRowPosition } returns MutableStateFlow(NextUpRowPosition.BELOW_CONTINUE_WATCHING)
+        coEvery { vm.cwEnrichmentCache.getNextUpSnapshot() } returns emptyList()
+        coEvery { vm.cwEnrichmentCache.getInProgressSnapshot() } returns emptyList()
+        vm.cwMetaCache["series:$belowDeck"] = summary(belowDeck).copy(
+            name = "Below Deck",
+            releaseInfo = "2013-",
+            videos = listOf(
+                CwVideoSummary("$belowDeck:13:6", "Over the Rainbeau", java.time.Instant.ofEpochMilli(timestamp - 86_400_000L * 7).toString(), null, 13, 6, null, true),
+                CwVideoSummary("$belowDeck:13:7", "Who's the Boss?", java.time.Instant.ofEpochMilli(timestamp - 7_200_000L).toString(), null, 13, 7, null, true)
+            )
+        )
+        vm.loadContinueWatchingPipeline()
+        // Wait until first pass negative-caches tt2342499|13|6|unaired=false
+        val expectedKey = "$belowDeck|13|6|unaired=false"
+        withTimeout(6_000L) {
+            while (!vm.cwNextUpNegativeCacheTimestamps.containsKey(expectedKey)) delay(20L)
+        }
+        assertFalse(vm.uiState.value.continueWatchingItems.any { it.contentId() == belowDeck })
+
+        // Clearing the dismissal key must immediately evict the negative cache and publish S13E7
+        dismissals.value = emptySet()
+        withTimeout(6_000L) {
+            while (vm.uiState.value.continueWatchingItems.none {
+                it is ContinueWatchingItem.NextUp && it.info.contentId == belowDeck && it.info.season == 13 && it.info.episode == 7
+            }) delay(20L)
+        }
+        vm.cwPipelineJob?.cancel()
+        vm.cwPipelineJob?.join()
+        Unit
+    }
 }

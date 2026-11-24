@@ -1,5 +1,6 @@
 package com.nuvio.tv.core.music
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nuvio.tv.data.local.EclipseSettings
@@ -176,7 +177,7 @@ class EclipseMusicClient @Inject constructor(
                 message = msg,
                 commentary = json.get("commentary")?.takeIf { !it.isJsonNull }?.asString ?: msg,
                 mood = json.get("mood")?.takeIf { !it.isJsonNull }?.asString,
-                tracks = gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty(),
+                tracks = parseTracks(json),
             )
         }
 
@@ -204,14 +205,20 @@ class EclipseMusicClient @Inject constructor(
             .build()
         executeJson(req, JsonObject::class.java, httpClient = longReadClient).mapCatching { json ->
             val comm = json.get("commentary")?.takeIf { !it.isJsonNull }?.asString
+            val parsedTracks = parseTracks(json)
+            if (parsedTracks.isEmpty()) {
+                Log.w(TAG, "startProDjSet returned empty tracks (playlistId=$playlistId, prompt=${prompt?.take(80)})")
+            }
             EclipseDjStartResult(
                 sessionId = json.get("session_id")?.takeIf { !it.isJsonNull }?.asString,
                 conversationId = null,
                 message = comm,
                 commentary = comm,
                 mood = json.get("mood")?.takeIf { !it.isJsonNull }?.asString,
-                tracks = gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty(),
+                tracks = parsedTracks,
             )
+        }.onFailure { e ->
+            Log.w(TAG, "startProDjSet request failed (playlistId=$playlistId, prompt=${prompt?.take(80)})", e)
         }
     }
 
@@ -250,7 +257,7 @@ class EclipseMusicClient @Inject constructor(
                 sessionId = json.get("session_id")?.takeIf { !it.isJsonNull }?.asString ?: sessionId,
                 conversationId = null,
                 message = null,
-                tracks = gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty(),
+                tracks = parseTracks(json),
             )
         }
 
@@ -267,7 +274,7 @@ class EclipseMusicClient @Inject constructor(
             "/api/eclipse/playlist/generate",
             mapOf("prompt" to prompt.trim(), "count" to count, "save" to save),
         ).mapCatching { json ->
-            gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty()
+            parseTracks(json)
         }
 
     suspend fun playRadio(kind: String, query: String = "", mixIndex: Int = 0): Result<List<EclipseTrack>> =
@@ -275,7 +282,7 @@ class EclipseMusicClient @Inject constructor(
             "/api/eclipse/radio",
             mapOf("kind" to kind, "query" to query, "mix_index" to mixIndex),
         ).mapCatching { json ->
-            gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty()
+            parseTracks(json)
         }
 
     suspend fun resolveQueue(tracks: List<EclipseTrack>): Result<List<EclipseTrack>> =
@@ -283,7 +290,7 @@ class EclipseMusicClient @Inject constructor(
             "/api/eclipse/resolve-queue",
             mapOf("tracks" to tracks, "include_lyrics" to true),
         ).mapCatching { json ->
-            gson.fromJson(json.getAsJsonArray("tracks"), Array<EclipseTrack>::class.java)?.toList().orEmpty()
+            parseTracks(json)
         }
 
     private suspend fun <T> getJson(path: String, clazz: Class<T>): Result<T> = withContext(Dispatchers.IO) {
@@ -321,13 +328,22 @@ class EclipseMusicClient @Inject constructor(
             val raw = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
                 val errMsg = runCatching {
-                    gson.fromJson(raw, JsonObject::class.java)?.get("error")?.asString
+                    val obj = gson.fromJson(raw, JsonObject::class.java)
+                    val error = obj?.get("error")?.takeIf { !it.isJsonNull }?.asString
+                    val detail = obj?.get("detail")?.takeIf { !it.isJsonNull }?.asString
+                    error ?: detail
                 }.getOrNull()
                 throw IOException(errMsg ?: "HTTP ${resp.code}: ${raw.take(200)}")
             }
             gson.fromJson(raw, clazz) ?: throw IOException("Empty JSON response")
         }
     }
+
+    private fun parseTracks(json: JsonObject): List<EclipseTrack> =
+        json.get("tracks")
+            ?.takeIf { it.isJsonArray }
+            ?.let { gson.fromJson(it, Array<EclipseTrack>::class.java)?.toList() }
+            .orEmpty()
 
     private fun Request.Builder.applyAuth(settings: EclipseSettings): Request.Builder {
         if (settings.mcpBearerToken.isNotBlank()) {
@@ -338,4 +354,8 @@ class EclipseMusicClient @Inject constructor(
 
     private fun encodeSegment(value: String): String =
         URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+    private companion object {
+        private const val TAG = "EclipseMusicClient"
+    }
 }
