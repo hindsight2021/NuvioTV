@@ -7,6 +7,7 @@ import com.nuvio.tv.core.music.EclipseAudioTelemetry
 import com.nuvio.tv.core.music.EclipseDjStartResult
 import com.nuvio.tv.core.music.EclipseDjTrackMeta
 import com.nuvio.tv.core.music.EclipseMusicClient
+import com.nuvio.tv.core.music.EclipseSearchResponse
 import com.nuvio.tv.core.music.EclipseTrack
 import com.nuvio.tv.data.local.EclipseSettings
 import com.nuvio.tv.data.local.EclipseSettingsDataStore
@@ -94,7 +95,7 @@ class EclipseMusicViewModelProDjTest {
 
         coEvery { musicClient.startProDjSet(any(), any(), any(), any(), any()) } returns
             Result.success(startResult(tracks = listOf(proTrack1, proTrack2)))
-        coEvery { musicClient.resolveQueue(any()) } returns Result.success(listOf(resolved1, resolved2))
+        coEvery { musicClient.resolveQueue(any(), any()) } returns Result.success(listOf(resolved1, resolved2))
 
         val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
         runCurrent()
@@ -106,7 +107,7 @@ class EclipseMusicViewModelProDjTest {
         )
         runCurrent()
 
-        coVerify(exactly = 1) { musicClient.resolveQueue(any()) }
+        coVerify(exactly = 1) { musicClient.resolveQueue(any(), false) }
         coVerify(exactly = 1) {
             audioPlayer.startDjMixSet(
                 match { tracks ->
@@ -134,7 +135,7 @@ class EclipseMusicViewModelProDjTest {
 
         coEvery { musicClient.startProDjSet(any(), any(), any(), any(), any()) } returns
             Result.failure(IOException("boom"))
-        coEvery { musicClient.resolveQueue(any()) } returns Result.success(listOf(resolvedFallback))
+        coEvery { musicClient.resolveQueue(any(), any()) } returns Result.success(listOf(resolvedFallback))
 
         val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
         runCurrent()
@@ -171,7 +172,7 @@ class EclipseMusicViewModelProDjTest {
             Result.failure(IOException("pro-set unavailable"))
         coEvery { musicClient.startUmbraDj(any(), any()) } returns
             Result.success(startResult(sessionId = "umbra-s1", tracks = listOf(umbraTrack)))
-        coEvery { musicClient.resolveQueue(any()) } returns Result.success(listOf(resolvedUmbra))
+        coEvery { musicClient.resolveQueue(any(), any()) } returns Result.success(listOf(resolvedUmbra))
 
         val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
         runCurrent()
@@ -198,12 +199,97 @@ class EclipseMusicViewModelProDjTest {
     }
 
     @Test
+    fun startProDjSet_fallsBackToGeneratePlaylist_whenDjCuratorsTimeOut() = runTest {
+        stubDefaults()
+
+        val genTrack = track("gen1", streamUrl = "")
+        val resolvedGen = genTrack.copy(streamUrl = "http://resolved/gen1")
+
+        coEvery { musicClient.startProDjSet(any(), any(), any(), any(), any()) } returns
+            Result.failure(java.net.SocketTimeoutException("timeout"))
+        coEvery { musicClient.startUmbraDj(any(), any()) } returns
+            Result.failure(java.net.SocketTimeoutException("timeout"))
+        coEvery { musicClient.generatePlaylist("90s hip hop", any(), false) } returns
+            Result.success(listOf(genTrack))
+        coEvery { musicClient.resolveQueue(any(), false) } returns
+            Result.success(listOf(resolvedGen))
+
+        val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
+        runCurrent()
+
+        var started = false
+        viewModel.startProDjSet(
+            prompt = "90s hip hop",
+            onStarted = { started = true },
+        )
+        runCurrent()
+
+        assertTrue(started)
+        assertFalse(viewModel.uiState.value.isDjBusy)
+        assertNull(viewModel.uiState.value.error)
+        coVerify(exactly = 1) {
+            audioPlayer.startDjMixSet(
+                match { it.size == 1 && it.first().streamUrl == "http://resolved/gen1" },
+                any(),
+                any(),
+                "90s hip hop",
+            )
+        }
+    }
+
+    @Test
+    fun startProDjSet_fallsBackToSearch_whenAiEndpointsTimeOutOnVoiceTopic() = runTest {
+        stubDefaults()
+
+        val searchTrack = track("srch1", streamUrl = "")
+        val resolvedSearch = searchTrack.copy(streamUrl = "http://resolved/srch1")
+
+        coEvery { musicClient.startProDjSet(any(), any(), any(), any(), any()) } returns
+            Result.failure(java.net.SocketTimeoutException("timeout"))
+        coEvery { musicClient.startUmbraDj(any(), any()) } returns
+            Result.failure(java.net.SocketTimeoutException("timeout"))
+        coEvery { musicClient.generatePlaylist(any(), any(), any()) } returns
+            Result.failure(java.net.SocketTimeoutException("timeout"))
+        coEvery { musicClient.search("synthwave workout", any(), any()) } returns
+            Result.success(EclipseSearchResponse(tracks = listOf(searchTrack)))
+        coEvery { musicClient.resolveQueue(any(), false) } returns
+            Result.success(listOf(resolvedSearch))
+
+        val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
+        runCurrent()
+
+        var started = false
+        viewModel.startProDjSet(
+            prompt = "synthwave workout",
+            onStarted = { started = true },
+        )
+        runCurrent()
+
+        assertTrue(started)
+        assertFalse(viewModel.uiState.value.isDjBusy)
+        assertNull(viewModel.uiState.value.error)
+        coVerify(exactly = 1) { musicClient.search("synthwave workout", "auto", 20) }
+        coVerify(exactly = 1) {
+            audioPlayer.startDjMixSet(
+                match { it.size == 1 && it.first().streamUrl == "http://resolved/srch1" },
+                any(),
+                any(),
+                "synthwave workout",
+            )
+        }
+    }
+
+    @Test
     fun startProDjSet_surfacesError_whenAllTiersFail() = runTest {
         stubDefaults()
 
         coEvery { musicClient.startProDjSet(any(), any(), any(), any(), any()) } returns
             Result.failure(IOException("Unauthorized"))
         coEvery { musicClient.startUmbraDj(any(), any()) } returns
+            Result.failure(IOException("Unauthorized"))
+        coEvery { musicClient.generatePlaylist(any(), any(), any()) } returns
+            Result.failure(IOException("Unauthorized"))
+        coEvery { musicClient.search(any(), any(), any()) } returns
             Result.failure(IOException("Unauthorized"))
         coEvery { musicClient.playRadio(any(), any(), any()) } returns
             Result.failure(IOException("Unauthorized"))
@@ -233,7 +319,7 @@ class EclipseMusicViewModelProDjTest {
 
         coEvery { musicClient.startProDjSet(any(), any(), any(), any(), any()) } returns
             Result.success(startResult(tracks = listOf(wildcard)))
-        coEvery { musicClient.resolveQueue(any()) } returns Result.success(listOf(resolvedWildcard))
+        coEvery { musicClient.resolveQueue(any(), any()) } returns Result.success(listOf(resolvedWildcard))
 
         val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
         runCurrent()
@@ -241,7 +327,7 @@ class EclipseMusicViewModelProDjTest {
         viewModel.injectDjWildcard("disco surprise")
         runCurrent()
 
-        coVerify(exactly = 1) { musicClient.resolveQueue(any()) }
+        coVerify(exactly = 1) { musicClient.resolveQueue(any(), false) }
         coVerify(exactly = 1) {
             audioPlayer.injectDjSurprises(
                 match { tracks -> tracks.size == 1 && tracks.first().streamUrl == "http://resolved/wild1" },

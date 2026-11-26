@@ -453,9 +453,11 @@ fun EclipseMusicScreen(
     if (showUmbraDialog) {
         UmbraDjLaunchDialog(
             isBusy = uiState.isDjBusy,
+            statusMessage = uiState.djStatusMessage,
             error = uiState.error,
             includeSurprises = uiState.includeDjSurprises,
             isVoiceAvailable = isVoiceAvailable,
+            isVoiceListening = isVoiceListening,
             onToggleSurprises = { viewModel.toggleDjSurprises() },
             onVoicePrompt = { fill -> launchVoice(fill) },
             onStart = { prompt ->
@@ -794,9 +796,11 @@ private fun MusicCollectionDetailView(
 @Composable
 private fun UmbraDjLaunchDialog(
     isBusy: Boolean,
+    statusMessage: String? = null,
     error: String? = null,
     includeSurprises: Boolean,
     isVoiceAvailable: Boolean,
+    isVoiceListening: Boolean = false,
     onToggleSurprises: () -> Unit,
     onVoicePrompt: ((String) -> Unit) -> Unit,
     onStart: (String) -> Unit,
@@ -805,6 +809,7 @@ private fun UmbraDjLaunchDialog(
 ) {
     var promptText by remember { mutableStateOf("") }
     val inputFocus = remember { FocusRequester() }
+    val startFocus = remember { FocusRequester() }
     val cancelFocus = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -864,7 +869,15 @@ private fun UmbraDjLaunchDialog(
                 )
             }
 
-            if (!error.isNullOrBlank() && !isBusy) {
+            if (isBusy) {
+                Text(
+                    text = statusMessage ?: "Curating Pro AI DJ beatmix…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioTheme.colors.Primary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (!error.isNullOrBlank()) {
                 Text(
                     text = error,
                     style = MaterialTheme.typography.bodySmall,
@@ -882,15 +895,20 @@ private fun UmbraDjLaunchDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (isVoiceAvailable && !isBusy) {
                         Button(
-                            onClick = { onVoicePrompt { spoken -> promptText = spoken } },
+                            onClick = {
+                                onVoicePrompt { spoken ->
+                                    promptText = spoken
+                                    runCatching { startFocus.requestFocus() }
+                                }
+                            },
                             colors = ButtonDefaults.colors(
-                                containerColor = NuvioTheme.colors.BackgroundCard,
-                                contentColor = NuvioTheme.colors.TextPrimary,
+                                containerColor = if (isVoiceListening) NuvioTheme.colors.Primary.copy(alpha = 0.25f) else NuvioTheme.colors.BackgroundCard,
+                                contentColor = if (isVoiceListening) NuvioTheme.colors.Primary else NuvioTheme.colors.TextPrimary,
                             ),
                         ) {
                             Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Voice")
+                            Text(if (isVoiceListening) "Listening…" else "Voice")
                         }
                     }
                     if (!isBusy) {
@@ -923,6 +941,7 @@ private fun UmbraDjLaunchDialog(
                     if (!isBusy) {
                         Button(
                             onClick = { onStart(promptText.trim()) },
+                            modifier = Modifier.focusRequester(startFocus),
                             colors = ButtonDefaults.colors(
                                 containerColor = NuvioTheme.colors.Primary,
                                 contentColor = NuvioTheme.colors.OnPrimary,

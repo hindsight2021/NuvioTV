@@ -59,9 +59,15 @@ class EclipseMusicClient @Inject constructor(
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    private val djCurateClient: OkHttpClient = okHttpClient.newBuilder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+
     private val longReadClient: OkHttpClient = okHttpClient.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(65, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
@@ -169,6 +175,7 @@ class EclipseMusicClient @Inject constructor(
         postJsonObject(
             "/api/eclipse/dj/start",
             mapOf("prompt" to (prompt?.trim() ?: ""), "fresh" to fresh),
+            httpClient = djCurateClient,
         ).mapCatching { json ->
             val msg = json.get("message")?.takeIf { !it.isJsonNull }?.asString
             EclipseDjStartResult(
@@ -203,7 +210,7 @@ class EclipseMusicClient @Inject constructor(
             .applyAuth(settings)
             .post(body)
             .build()
-        executeJson(req, JsonObject::class.java, httpClient = longReadClient).mapCatching { json ->
+        executeJson(req, JsonObject::class.java, httpClient = djCurateClient).mapCatching { json ->
             val comm = json.get("commentary")?.takeIf { !it.isJsonNull }?.asString
             val parsedTracks = parseTracks(json)
             if (parsedTracks.isEmpty()) {
@@ -273,6 +280,7 @@ class EclipseMusicClient @Inject constructor(
         postJsonObject(
             "/api/eclipse/playlist/generate",
             mapOf("prompt" to prompt.trim(), "count" to count, "save" to save),
+            httpClient = djCurateClient,
         ).mapCatching { json ->
             parseTracks(json)
         }
@@ -285,10 +293,14 @@ class EclipseMusicClient @Inject constructor(
             parseTracks(json)
         }
 
-    suspend fun resolveQueue(tracks: List<EclipseTrack>): Result<List<EclipseTrack>> =
+    suspend fun resolveQueue(
+        tracks: List<EclipseTrack>,
+        includeLyrics: Boolean = true,
+    ): Result<List<EclipseTrack>> =
         postJsonObject(
             "/api/eclipse/resolve-queue",
-            mapOf("tracks" to tracks, "include_lyrics" to true),
+            mapOf("tracks" to tracks, "include_lyrics" to includeLyrics),
+            httpClient = longReadClient,
         ).mapCatching { json ->
             parseTracks(json)
         }
@@ -306,7 +318,11 @@ class EclipseMusicClient @Inject constructor(
 
     private suspend fun getJsonObject(path: String): Result<JsonObject> = getJson(path, JsonObject::class.java)
 
-    private suspend fun postJsonObject(path: String, bodyMap: Map<String, Any?>): Result<JsonObject> =
+    private suspend fun postJsonObject(
+        path: String,
+        bodyMap: Map<String, Any?>,
+        httpClient: OkHttpClient = client,
+    ): Result<JsonObject> =
         withContext(Dispatchers.IO) {
             val settings = settingsDataStore.getSettings()
             if (!settings.enabled) return@withContext Result.failure(IllegalStateException("Eclipse Music is disabled in Settings"))
@@ -316,7 +332,7 @@ class EclipseMusicClient @Inject constructor(
                 .applyAuth(settings)
                 .post(body)
                 .build()
-            executeJson(req, JsonObject::class.java)
+            executeJson(req, JsonObject::class.java, httpClient = httpClient)
         }
 
     private fun <T> executeJson(

@@ -44,6 +44,7 @@ data class EclipseMusicUiState(
     val isLoadingDetail: Boolean = false,
     val isResolvingQueue: Boolean = false,
     val djBannerMessage: String? = null,
+    val djStatusMessage: String? = null,
     val isDjBusy: Boolean = false,
     val includeDjSurprises: Boolean = true,
     val lastVoiceStatus: String? = null,
@@ -335,7 +336,7 @@ class EclipseMusicViewModel @Inject constructor(
     fun cancelUmbraDj() {
         djJob?.cancel()
         djJob = null
-        _uiState.update { it.copy(isDjBusy = false) }
+        _uiState.update { it.copy(isDjBusy = false, djStatusMessage = null) }
     }
 
     fun toggleDjSurprises() {
@@ -344,13 +345,19 @@ class EclipseMusicViewModel @Inject constructor(
 
     private suspend fun resolvePlayableDjTracks(rawTracks: List<EclipseTrack>): List<EclipseTrack> {
         if (rawTracks.isEmpty()) return emptyList()
-        val resolved = if (rawTracks.any { it.streamUrl.isBlank() }) {
-            musicClient.resolveQueue(rawTracks).getOrElse { rawTracks }
+        val subset = rawTracks.take(12)
+        val resolved = if (subset.any { it.streamUrl.isBlank() }) {
+            // Skip slow bulk lyrics lookup during DJ startup (lyrics load lazily per playing track).
+            musicClient.resolveQueue(subset, includeLyrics = false).getOrElse {
+                // Retry a smaller quick batch if resolving 12 tracks timed out so Deck A & B still launch fast.
+                val quickBatch = subset.take(6)
+                musicClient.resolveQueue(quickBatch, includeLyrics = false).getOrElse { subset }
+            }
         } else {
-            rawTracks
+            subset
         }
         val resolvedById = resolved.filter { it.id.isNotBlank() }.associateBy { it.id }
-        return rawTracks.mapIndexed { index, original ->
+        return subset.mapIndexed { index, original ->
             val match = resolvedById[original.id] ?: resolved.getOrNull(index)
             if (match == null) {
                 original
@@ -374,9 +381,20 @@ class EclipseMusicViewModel @Inject constructor(
         fallbackTracks: List<EclipseTrack>? = null,
         onStarted: (() -> Unit)? = null,
     ) {
+        val cleanPrompt = prompt?.trim()?.takeIf { it.isNotBlank() }
         djJob?.cancel()
         djJob = viewModelScope.launch {
-            _uiState.update { it.copy(isDjBusy = true, error = null) }
+            _uiState.update {
+                it.copy(
+                    isDjBusy = true,
+                    djStatusMessage = if (cleanPrompt != null) {
+                        "Curating Pro AI DJ beatmix for \"$cleanPrompt\"…"
+                    } else {
+                        "Curating Pro AI DJ beatmix…"
+                    },
+                    error = null,
+                )
+            }
             try {
                 var bannerMessage: String? = null
                 var commentary: String? = null
@@ -389,7 +407,7 @@ class EclipseMusicViewModel @Inject constructor(
                 musicClient.startProDjSet(
                     playlistId = playlistId,
                     tracks = tracks,
-                    prompt = prompt?.takeIf { it.isNotBlank() },
+                    prompt = cleanPrompt,
                     includeSurprises = includeSurprises,
                     surpriseCount = if (includeSurprises) 2 else 0,
                 ).fold(
@@ -410,9 +428,14 @@ class EclipseMusicViewModel @Inject constructor(
                 if (playable.isEmpty()) {
                     val seed = tracks?.takeIf { it.isNotEmpty() }
                         ?: fallbackTracks?.takeIf { it.isNotEmpty() }
-                        ?: audioTelemetry.value.queue.takeIf { it.isNotEmpty() }
-                        ?: djTelemetry.value.queue
+                        ?: if (cleanPrompt == null) {
+                            audioTelemetry.value.queue.takeIf { it.isNotEmpty() }
+                                ?: djTelemetry.value.queue
+                        } else {
+                            emptyList()
+                        }
                     if (seed.isNotEmpty()) {
+                        _uiState.update { it.copy(djStatusMessage = "Resolving tracks for beatmix…") }
                         playable = resolvePlayableDjTracks(seed)
                         if (playable.isNotEmpty()) {
                             bannerMessage = bannerMessage ?: "Pro AI DJ Beatmix Active"
@@ -423,8 +446,17 @@ class EclipseMusicViewModel @Inject constructor(
 
                 // Tier 3: Classic Umbra AI DJ endpoint.
                 if (playable.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            djStatusMessage = if (cleanPrompt != null) {
+                                "Switching to Umbra AI DJ for \"$cleanPrompt\"…"
+                            } else {
+                                "Switching to Umbra AI DJ…"
+                            },
+                        )
+                    }
                     musicClient.startUmbraDj(
-                        prompt = prompt?.takeIf { it.isNotBlank() },
+                        prompt = cleanPrompt,
                         fresh = true,
                     ).fold(
                         onSuccess = { result ->
@@ -443,11 +475,70 @@ class EclipseMusicViewModel @Inject constructor(
                     )
                 }
 
-                // Tier 4: Eclipse Radio mix fallback.
+                // Tier 4: AI Playlist Generator for spoken / custom topics when DJ curation endpoints time out.
+                if (playable.isEmpty() && cleanPrompt != null) {
+                    _uiState.update { it.copy(djStatusMessage = "Generating AI set for \"$cleanPrompt\"…") }
+                    musicClient.generatePlaylist(
+                        prompt = cleanPrompt,
+                        count = 15,
+                        save = false,
+                    ).fold(
+                        onSuccess = { generated ->
+                            playable = resolvePlayableDjTracks(generated)
+                            if (playable.isNotEmpty()) {
+                                bannerMessage = "AI DJ Beatmix • $cleanPrompt"
+                                commentary = "Dual-deck beatmix generated for \"$cleanPrompt\""
+                                mood = cleanPrompt
+                            }
+                        },
+                        onFailure = { t ->
+                            if (t is CancellationException) throw t
+                            if (lastFailure.isNullOrBlank()) lastFailure = t.message
+                        },
+                    )
+                }
+
+                // Tier 5: Instant Eclipse Search fallback for spoken topics (sub-3s) so voice topics never dead-end on timeout!
+                if (playable.isEmpty() && cleanPrompt != null) {
+                    _uiState.update { it.copy(djStatusMessage = "Building instant DJ mix for \"$cleanPrompt\"…") }
+                    musicClient.search(
+                        query = cleanPrompt,
+                        source = "auto",
+                        limit = 20,
+                    ).fold(
+                        onSuccess = { searchResp ->
+                            var candidateTracks = searchResp.tracks
+                            if (candidateTracks.isEmpty()) {
+                                val topPlaylist = searchResp.playlists.firstOrNull()
+                                val topArtist = searchResp.artists.firstOrNull()
+                                val topAlbum = searchResp.albums.firstOrNull()
+                                candidateTracks = when {
+                                    topPlaylist != null -> musicClient.fetchPlaylist(topPlaylist.id).getOrNull()?.tracks.orEmpty()
+                                    topArtist != null -> musicClient.fetchArtist(topArtist.artistId.ifBlank { topArtist.id }).getOrNull()?.topSongs.orEmpty()
+                                    topAlbum != null -> musicClient.fetchAlbum(topAlbum.albumId.ifBlank { topAlbum.id }).getOrNull()?.tracks.orEmpty()
+                                    else -> emptyList()
+                                }
+                            }
+                            playable = resolvePlayableDjTracks(candidateTracks)
+                            if (playable.isNotEmpty()) {
+                                bannerMessage = "Instant AI DJ • $cleanPrompt"
+                                commentary = "Live dual-deck beatmix spun from Eclipse tracks matching \"$cleanPrompt\""
+                                mood = cleanPrompt
+                            }
+                        },
+                        onFailure = { t ->
+                            if (t is CancellationException) throw t
+                            if (lastFailure.isNullOrBlank()) lastFailure = t.message
+                        },
+                    )
+                }
+
+                // Tier 6: Eclipse Radio mix fallback.
                 if (playable.isEmpty()) {
+                    _uiState.update { it.copy(djStatusMessage = "Loading Eclipse Radio beatmix…") }
                     musicClient.playRadio(
-                        kind = "mix",
-                        query = prompt ?: "",
+                        kind = if (cleanPrompt == null) "daily_mix" else "mix",
+                        query = cleanPrompt ?: "",
                         mixIndex = 0,
                     ).fold(
                         onSuccess = { radioTracks ->
@@ -468,6 +559,7 @@ class EclipseMusicViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isDjBusy = false,
+                            djStatusMessage = null,
                             djBannerMessage = bannerMessage ?: "Pro AI DJ Beatmix Active",
                             error = null,
                         )
@@ -483,17 +575,18 @@ class EclipseMusicViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isDjBusy = false,
+                            djStatusMessage = null,
                             error = lastFailure?.takeIf { m -> m.isNotBlank() }
                                 ?: "Pro AI DJ returned no playable tracks.",
                         )
                     }
                 }
             } catch (t: CancellationException) {
-                _uiState.update { it.copy(isDjBusy = false) }
+                _uiState.update { it.copy(isDjBusy = false, djStatusMessage = null) }
                 throw t
             } catch (t: Throwable) {
                 _uiState.update {
-                    it.copy(isDjBusy = false, error = t.message ?: "Pro AI DJ set failed")
+                    it.copy(isDjBusy = false, djStatusMessage = null, error = t.message ?: "Pro AI DJ set failed")
                 }
             }
         }

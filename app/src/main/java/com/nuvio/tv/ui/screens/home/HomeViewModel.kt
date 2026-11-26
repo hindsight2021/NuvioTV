@@ -93,7 +93,8 @@ class HomeViewModel @Inject constructor(
     internal val continueWatchingPreScrapeCoordinator: com.nuvio.tv.core.scraper.ContinueWatchingPreScrapeCoordinator? = null,
     internal val simklTrendingRepository: com.nuvio.tv.data.simkl.trending.SimklTrendingRepository? = null,
     internal val localMediaRepository: com.nuvio.tv.domain.repository.LocalMediaRepository? = null,
-    internal val smartRandomEpisodeSelector: com.nuvio.tv.core.playlist.SmartRandomEpisodeSelector? = null
+    internal val smartRandomEpisodeSelector: com.nuvio.tv.core.playlist.SmartRandomEpisodeSelector? = null,
+    internal val newReleasesCatalogService: com.nuvio.tv.core.tmdb.NewReleasesCatalogService? = null
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -237,6 +238,7 @@ class HomeViewModel @Inject constructor(
     internal var customCatalogTitles: Map<String, String> = emptyMap()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var localMediaRows: List<CatalogRow> = emptyList()
+    internal var newReleasesRow: CatalogRow? = null
     internal var catalogUpdateJob: Job? = null
     internal var hasRenderedFirstCatalog = false
     internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
@@ -421,6 +423,7 @@ class HomeViewModel @Inject constructor(
             observeProgressSourceChanges()
             observeCollections()
             observeLocalMedia()
+            loadNewReleasesDailyPipeline()
             observeInstalledAddons()
             observeManualAddonRefresh()
             loadSimklTrending()

@@ -79,6 +79,22 @@ internal fun HomeViewModel.observeLocalMediaPipeline() {
     }
 }
 
+internal fun HomeViewModel.loadNewReleasesDailyPipeline(forceRefresh: Boolean = false) {
+    val service = newReleasesCatalogService ?: return
+    viewModelScope.launch {
+        val cached = withContext(Dispatchers.IO) { service.getCachedRow() }
+        if (cached != null && newReleasesRow == null) {
+            newReleasesRow = cached
+            scheduleUpdateCatalogRows()
+        }
+        val fresh = service.getOrRefreshDailyRow(forceRefresh = forceRefresh)
+        if (fresh != null && fresh != newReleasesRow) {
+            newReleasesRow = fresh
+            scheduleUpdateCatalogRows()
+        }
+    }
+}
+
 internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
     viewModelScope.launch {
         layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->
@@ -142,6 +158,9 @@ internal fun HomeViewModel.observeTmdbSettingsPipeline() {
                     _enrichedPreviews.value = emptyMap()
                     _lastEnrichedPreview.value = null
                     clearEnrichmentFailures()
+                    if (languageChanged) {
+                        loadNewReleasesDailyPipeline(forceRefresh = false)
+                    }
                 }
                 scheduleUpdateCatalogRows()
             }
@@ -181,6 +200,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
 
     activeCatalogLoadSignature = signature
     catalogsLoadInProgress = true
+    loadNewReleasesDailyPipeline(forceRefresh = forceReload)
     // A full load leaves every catalog fresh, so the next return to Home has nothing to do.
     lastHomeCatalogRefreshAtMs = android.os.SystemClock.elapsedRealtime()
     catalogLoadGeneration += 1
@@ -869,6 +889,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                     if (matchesTab) {
                         add(HomeRow.Catalog(localRow))
                     }
+                }
+            }
+
+            // Daily "New Releases" TV shows row: situated directly below Continue Watching
+            // and directly above Simkl Plan to Watch / catalog rows.
+            newReleasesRow?.takeIf { it.items.isNotEmpty() }?.let { freshRow ->
+                val matchesTab = !separateMoviesTvEnabled || selectedHomeTab == HomeTab.TV_SHOWS
+                if (matchesTab && freshRow.legacyKey() !in disabledHomeCatalogKeys) {
+                    add(HomeRow.Catalog(freshRow))
                 }
             }
 

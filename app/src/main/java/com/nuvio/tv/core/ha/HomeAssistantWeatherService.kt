@@ -24,6 +24,32 @@ object HomeAssistantWeatherService {
     private val _weatherState = MutableStateFlow(HomeAssistantWeather())
     val weatherState: StateFlow<HomeAssistantWeather> = _weatherState.asStateFlow()
 
+    private val OUTDOOR_WEATHER_ENTITIES = listOf(
+        "weather.ihome",
+        "weather.home_weather_station",
+        "weather.fredericton"
+    )
+
+    private val OUTDOOR_TEMP_SENSORS = listOf(
+        "sensor.ihome_atlas_temperature",
+        "sensor.average_outdoor_temperature"
+    )
+
+    private val INDOOR_ENTITIES = listOf(
+        "sensor.living_room_temperature",
+        "weather.indoor_climate",
+        "sensor.main_floor_average_temperature",
+        "sensor.average_main_floor_temperature",
+        "sensor.main_floor_ac_current_temperature",
+        "sensor.indoor_temperature"
+    )
+
+    internal data class OutdoorWeatherResult(
+        val condition: String = "",
+        val conditionIcon: String = "",
+        val outdoorTemp: String = ""
+    )
+
     suspend fun refresh() {
         withContext(Dispatchers.IO) {
             if (BASE_URL.isBlank() || TOKEN.isBlank()) {
@@ -31,69 +57,26 @@ object HomeAssistantWeatherService {
                 return@withContext
             }
             try {
-                // 1. Fetch outdoor weather: try weather.ihome, then weather.home_weather_station, then weather.fredericton
-                val weatherJson = fetchEntity("weather.ihome")
-                    ?: fetchEntity("weather.home_weather_station")
-                    ?: fetchEntity("weather.fredericton")
+                // 1. Lazily fetch outdoor weather in priority order, skipping unavailable/unknown entities
+                val outdoor = parseOutdoorWeather(
+                    OUTDOOR_WEATHER_ENTITIES.asSequence().mapNotNull { fetchEntity(it) }
+                )
 
-                var condition = ""
-                var conditionIcon = ""
-                var outdoorTemp = ""
+                val condition = outdoor.condition
+                val conditionIcon = outdoor.conditionIcon
+                var outdoorTemp = outdoor.outdoorTemp
 
-                if (weatherJson != null) {
-                    val rawState = weatherJson.optString("state", "")
-                    val (cText, cIcon) = mapCondition(rawState)
-                    condition = cText
-                    conditionIcon = cIcon
-
-                    val attributes = weatherJson.optJSONObject("attributes")
-                    val temp = attributes?.optDouble("temperature", Double.NaN)
-                    val unit = attributes?.optString("temperature_unit", "°C")?.takeIf { it.isNotBlank() } ?: "°C"
-                    if (temp != null && !temp.isNaN()) {
-                        outdoorTemp = "${temp.formatOneDecimal()}$unit"
-                    }
-                }
-
-                // If outdoor temp still missing, fallback to sensor.ihome_atlas_temperature
+                // If outdoor temp still missing, fallback to outdoor temperature sensors
                 if (outdoorTemp.isBlank()) {
-                    val sensorJson = fetchEntity("sensor.ihome_atlas_temperature")
-                    if (sensorJson != null) {
-                        val stateStr = sensorJson.optString("state", "")
-                        val temp = stateStr.toDoubleOrNull()
-                        val unit = sensorJson.optJSONObject("attributes")?.optString("unit_of_measurement", "°C") ?: "°C"
-                        if (temp != null) {
-                            outdoorTemp = "${temp.formatOneDecimal()}$unit"
-                        }
-                    }
+                    outdoorTemp = parseOutdoorTemperatureSensors(
+                        OUTDOOR_TEMP_SENSORS.asSequence().mapNotNull { fetchEntity(it) }
+                    )
                 }
 
-                // 2. Fetch indoor temperature: try sensor.living_room_temperature, then climate / indoor sensors
-                var indoorTemp = ""
-                val indoorSensor = fetchEntity("sensor.living_room_temperature")
-                    ?: fetchEntity("weather.indoor_climate")
-                    ?: fetchEntity("sensor.indoor_temperature")
-
-                if (indoorSensor != null) {
-                    val attributes = indoorSensor.optJSONObject("attributes")
-                    val tempFromAttr = attributes?.let { attrs ->
-                        var t = attrs.optDouble("current_temperature", Double.NaN)
-                        if (t.isNaN()) t = attrs.optDouble("temperature", Double.NaN)
-                        t
-                    } ?: Double.NaN
-                    val unit = attributes?.optString("unit_of_measurement")
-                        ?: attributes?.optString("temperature_unit", "°C")
-                        ?: "°C"
-
-                    if (tempFromAttr != null && !tempFromAttr.isNaN()) {
-                        indoorTemp = "${tempFromAttr.formatOneDecimal()}$unit"
-                    } else {
-                        val stateStr = indoorSensor.optString("state", "")
-                        val tempFromState = stateStr.toDoubleOrNull()
-                        if (tempFromState != null) {
-                            indoorTemp = "${tempFromState.formatOneDecimal()}$unit"
-                        }
-                    }
-                }
+                // 2. Lazily fetch indoor temperature in priority order, skipping unavailable/unknown sensors
+                val indoorTemp = parseIndoorTemperature(
+                    INDOOR_ENTITIES.asSequence().mapNotNull { fetchEntity(it) }
+                )
 
                 val hasData = outdoorTemp.isNotBlank() || indoorTemp.isNotBlank() || condition.isNotBlank()
                 if (hasData) {
@@ -108,6 +91,96 @@ object HomeAssistantWeatherService {
             } catch (_: Exception) {
                 // Silently keep last state if temporary network hiccup
             }
+        }
+    }
+
+    internal fun isValidState(state: String?): Boolean {
+        if (state == null) return false
+        val trimmed = state.trim()
+        if (trimmed.isEmpty()) return false
+        val lower = trimmed.lowercase()
+        return lower != "unavailable" && lower != "unknown" && lower != "none"
+    }
+
+    internal fun parseOutdoorWeather(entities: Sequence<JSONObject>): OutdoorWeatherResult {
+        for (entity in entities) {
+            val rawState = entity.optString("state", "")
+            if (rawState.trim().equals("unavailable", ignoreCase = true)) continue
+
+            val attributes = entity.optJSONObject("attributes")
+            val temp = attributes?.optDouble("temperature", Double.NaN) ?: Double.NaN
+            val hasNumericTemp = !temp.isNaN()
+
+            val validConditionState = isValidState(rawState)
+            val (cText, cIcon) = if (validConditionState) mapCondition(rawState) else ("" to "")
+            val hasCondition = cText.isNotBlank()
+
+            if (!hasCondition && !hasNumericTemp) continue
+
+            val outdoorTemp = if (hasNumericTemp) {
+                val unit = normalizeUnit(attributes?.optString("temperature_unit", "°C"))
+                "${temp.formatOneDecimal()}$unit"
+            } else {
+                ""
+            }
+
+            return OutdoorWeatherResult(
+                condition = cText,
+                conditionIcon = cIcon,
+                outdoorTemp = outdoorTemp
+            )
+        }
+        return OutdoorWeatherResult()
+    }
+
+    internal fun parseOutdoorTemperatureSensors(entities: Sequence<JSONObject>): String {
+        for (entity in entities) {
+            val stateStr = entity.optString("state", "")
+            if (!isValidState(stateStr)) continue
+            val temp = stateStr.trim().toDoubleOrNull() ?: continue
+            val unit = normalizeUnit(entity.optJSONObject("attributes")?.optString("unit_of_measurement", "°C"))
+            return "${temp.formatOneDecimal()}$unit"
+        }
+        return ""
+    }
+
+    internal fun parseIndoorTemperature(entities: Sequence<JSONObject>): String {
+        for (entity in entities) {
+            val rawState = entity.optString("state", "")
+            if (rawState.trim().equals("unavailable", ignoreCase = true)) continue
+
+            val attributes = entity.optJSONObject("attributes")
+            var tempFromAttr = attributes?.optDouble("current_temperature", Double.NaN) ?: Double.NaN
+            if (tempFromAttr.isNaN()) {
+                tempFromAttr = attributes?.optDouble("temperature", Double.NaN) ?: Double.NaN
+            }
+
+            val unit = normalizeUnit(
+                attributes?.optString("unit_of_measurement")?.takeIf { it.isNotBlank() }
+                    ?: attributes?.optString("temperature_unit", "°C")
+            )
+
+            if (!tempFromAttr.isNaN()) {
+                return "${tempFromAttr.formatOneDecimal()}$unit"
+            }
+
+            if (isValidState(rawState)) {
+                val tempFromState = rawState.trim().toDoubleOrNull()
+                if (tempFromState != null) {
+                    return "${tempFromState.formatOneDecimal()}$unit"
+                }
+            }
+        }
+        return ""
+    }
+
+    private fun normalizeUnit(rawUnit: String?): String {
+        val cleaned = rawUnit?.trim().orEmpty()
+        return when {
+            cleaned.isBlank() -> "°C"
+            cleaned.equals("C", ignoreCase = true) -> "°C"
+            cleaned.equals("F", ignoreCase = true) -> "°F"
+            else -> cleaned
         }
     }
 
