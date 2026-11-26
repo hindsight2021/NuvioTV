@@ -349,7 +349,9 @@ class EclipseMusicClient @Inject constructor(
                     val detail = obj?.get("detail")?.takeIf { !it.isJsonNull }?.asString
                     error ?: detail
                 }.getOrNull()
-                throw IOException(errMsg ?: "HTTP ${resp.code}: ${raw.take(200)}")
+                val msg = errMsg ?: "HTTP ${resp.code}: ${raw.take(200)}"
+                Log.w(TAG, "Eclipse API ${request.method} ${request.url.encodedPath} failed (${resp.code}): $msg")
+                throw IOException(msg)
             }
             gson.fromJson(raw, clazz) ?: throw IOException("Empty JSON response")
         }

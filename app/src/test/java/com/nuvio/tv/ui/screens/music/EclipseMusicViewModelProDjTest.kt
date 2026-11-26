@@ -280,6 +280,46 @@ class EclipseMusicViewModelProDjTest {
     }
 
     @Test
+    fun generateAiMix_fallsBackToKeywordSearch_whenGeneratePlaylistReturnsNetworkError() = runTest {
+        stubDefaults()
+        coEvery { audioPlayer.playQueue(any(), any(), any(), any(), any()) } returns Unit
+
+        val foundTrack = track("mix1", streamUrl = "")
+        val resolvedFound = foundTrack.copy(streamUrl = "http://resolved/mix1")
+
+        coEvery { musicClient.generatePlaylist(any(), any(), any()) } returns
+            Result.failure(IOException("Network error contacting Eclipse"))
+        coEvery { musicClient.startUmbraDj(any(), any()) } returns
+            Result.failure(IOException("Network error contacting Eclipse"))
+        coEvery { musicClient.search("play some chill jazz music", any(), any()) } returns
+            Result.success(EclipseSearchResponse(tracks = emptyList()))
+        coEvery { musicClient.search("chill jazz", any(), any()) } returns
+            Result.success(EclipseSearchResponse(tracks = listOf(foundTrack)))
+        coEvery { musicClient.resolveQueue(any(), false) } returns
+            Result.success(listOf(resolvedFound))
+
+        val viewModel = EclipseMusicViewModel(musicClient, audioPlayer, settingsDataStore)
+        runCurrent()
+
+        var started = false
+        viewModel.generateAiMix("play some chill jazz music", onStarted = { started = true })
+        runCurrent()
+
+        assertTrue(started)
+        assertFalse(viewModel.uiState.value.isDjBusy)
+        assertNull(viewModel.uiState.value.error)
+        coVerify(exactly = 1) {
+            audioPlayer.playQueue(
+                match { it.size == 1 && it.first().streamUrl == "http://resolved/mix1" },
+                0,
+                true,
+                "eclipse_ai_mix",
+                null,
+            )
+        }
+    }
+
+    @Test
     fun startProDjSet_surfacesError_whenAllTiersFail() = runTest {
         stubDefaults()
 
