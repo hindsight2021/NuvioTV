@@ -308,6 +308,8 @@ fun EpisodesRow(
     posterCardCornerRadiusDp: Int = 12,
     onEpisodeClick: (Video) -> Unit,
     onPlayRandomEpisode: ((Video) -> Unit)? = null,
+    onRequestPlayRandomEpisode: ((List<Video>, Video) -> Unit)? = null,
+    onRequestStartShuffleChannel: ((List<Video>, Video) -> Unit)? = null,
     canPlayEpisode: (Video) -> Boolean = { true },
     onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = onEpisodeClick,
@@ -556,35 +558,43 @@ fun EpisodesRow(
             onPlayRandomEpisode = {
                 val pool = if (allEpisodes.isNotEmpty()) allEpisodes else dedupedEpisodes
                 val playable = pool.filter { canPlayEpisode(it) && it.season != null && it.episode != null && it.season!! > 0 }
-                val randomEp = playable.randomOrNull() ?: selectedEpisode
-                val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
-                    contentId = contentId,
-                    seriesTitle = seriesTitle,
-                    episodes = playable.ifEmpty { pool },
-                    startEpisode = randomEp,
-                    shuffle = true,
-                    isRandomEpisode = true
-                )
-                val targetEp = playable.firstOrNull {
-                    (first?.videoId != null && it.id == first.videoId) ||
-                    (it.season == first?.season && it.episode == first?.episode)
-                } ?: randomEp
-                onPlayRandomEpisode?.invoke(targetEp) ?: onEpisodeClick(targetEp)
+                if (onRequestPlayRandomEpisode != null) {
+                    onRequestPlayRandomEpisode(playable.ifEmpty { pool }, selectedEpisode)
+                } else {
+                    val randomEp = playable.randomOrNull() ?: selectedEpisode
+                    val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                        contentId = contentId,
+                        seriesTitle = seriesTitle,
+                        episodes = playable.ifEmpty { pool },
+                        startEpisode = randomEp,
+                        shuffle = true,
+                        isRandomEpisode = true
+                    )
+                    val targetEp = playable.firstOrNull {
+                        (first?.videoId != null && it.id == first.videoId) ||
+                        (it.season == first?.season && it.episode == first?.episode)
+                    } ?: randomEp
+                    onPlayRandomEpisode?.invoke(targetEp) ?: onEpisodeClick(targetEp)
+                }
                 optionsEpisode = null
             },
             onStartChannelShuffle = {
                 val pool = if (allEpisodes.isNotEmpty()) allEpisodes else dedupedEpisodes
                 val validEpisodes = pool.filter { it.season != null && it.episode != null && it.season!! > 0 }
-                val randomStart = validEpisodes.randomOrNull() ?: selectedEpisode
-                val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
-                    contentId = contentId,
-                    seriesTitle = seriesTitle,
-                    episodes = validEpisodes,
-                    startEpisode = randomStart,
-                    shuffle = true
-                )
-                val targetEp = validEpisodes.firstOrNull { it.id == first?.videoId } ?: randomStart
-                onEpisodeClick(targetEp)
+                if (onRequestStartShuffleChannel != null) {
+                    onRequestStartShuffleChannel(validEpisodes.ifEmpty { pool }, selectedEpisode)
+                } else {
+                    val randomStart = validEpisodes.randomOrNull() ?: selectedEpisode
+                    val first = com.nuvio.tv.core.playlist.PlaylistManager.startChannel(
+                        contentId = contentId,
+                        seriesTitle = seriesTitle,
+                        episodes = validEpisodes,
+                        startEpisode = randomStart,
+                        shuffle = true
+                    )
+                    val targetEp = validEpisodes.firstOrNull { it.id == first?.videoId } ?: randomStart
+                    onEpisodeClick(targetEp)
+                }
                 optionsEpisode = null
             },
             onStartChannelOrder = {

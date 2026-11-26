@@ -426,6 +426,10 @@ internal fun PlayerRuntimeController.resetPostPlayOverlayState(clearEpisode: Boo
         preResolveNextEpisodeJob = null
         preResolvedNextStream = null
         preResolvedNextVideoId = null
+        preWarmJob?.cancel()
+        preWarmJob = null
+        preWarmedTargetKey = null
+        com.nuvio.tv.core.player.NextEpisodePreWarmer.resetStatus()
     }
 }
 
@@ -453,6 +457,10 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
 
     val state = _uiState.value
     if (state.nextEpisode == null || nextEpisodeVideo == null || state.nextEpisode.hasAired == false) {
+        val remainingMsNoNext = effectiveDurationEarly - positionMs
+        if (speculativePreWarmEnabledSetting && remainingMsNoNext in 1..90_000L) {
+            preWarmQueuedOrAutopilotIfNeeded()
+        }
         if (autopilotEnabledSetting) {
             val effectiveDuration = effectiveDurationEarly
             val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(

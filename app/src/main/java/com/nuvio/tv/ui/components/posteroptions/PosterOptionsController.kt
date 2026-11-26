@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.playlist.PlaylistManager
+import com.nuvio.tv.core.playlist.SmartRandomEpisodeSelector
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
 import com.nuvio.tv.core.tracking.mergeTrackingMembershipWithTabs
@@ -52,7 +53,8 @@ class PosterOptionsController @Inject constructor(
     private val metaRepository: MetaRepository,
     private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     private val tmdbService: TmdbService,
-    private val watchlistManager: com.nuvio.tv.ui.components.watchlist.WatchlistManager? = null
+    private val watchlistManager: com.nuvio.tv.ui.components.watchlist.WatchlistManager? = null,
+    private val smartRandomEpisodeSelector: SmartRandomEpisodeSelector? = null
 ) {
     private val _state = MutableStateFlow(PosterOptionsState())
     val state: StateFlow<PosterOptionsState> = _state.asStateFlow()
@@ -617,13 +619,20 @@ class PosterOptionsController @Inject constructor(
             }
             val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
             if (validEpisodes.isNotEmpty()) {
-                val randomEp = validEpisodes.random()
+                val smartSelection = smartRandomEpisodeSelector?.selectRandomAndQueue(
+                    contentId = item.id,
+                    episodes = validEpisodes,
+                    recordPick = true
+                )
+                val randomEp = smartSelection?.chosen ?: validEpisodes.random()
+                val queueEpisodes = smartSelection?.orderedQueue ?: validEpisodes
                 PlaylistManager.startChannel(
                     contentId = item.id,
                     seriesTitle = item.name,
-                    episodes = validEpisodes,
+                    episodes = queueEpisodes,
                     startEpisode = randomEp,
                     shuffle = true,
+                    preserveOrder = smartSelection != null,
                     isRandomEpisode = true
                 )
                 onLaunchEpisode(item.id, item.apiType, state.addonBaseUrl, randomEp.season!!, randomEp.episode!!)
@@ -653,13 +662,26 @@ class PosterOptionsController @Inject constructor(
             }
             val validEpisodes = episodes.filter { it.season != null && it.episode != null && it.season!! > 0 }
             if (validEpisodes.isNotEmpty()) {
-                val startEp = if (shuffle) validEpisodes.random() else validEpisodes.first()
+                val smartSelection = if (shuffle) {
+                    smartRandomEpisodeSelector?.selectRandomAndQueue(
+                        contentId = item.id,
+                        episodes = validEpisodes,
+                        recordPick = true
+                    )
+                } else null
+                val startEp = if (shuffle) {
+                    smartSelection?.chosen ?: validEpisodes.random()
+                } else {
+                    validEpisodes.first()
+                }
+                val queueEpisodes = smartSelection?.orderedQueue ?: validEpisodes
                 PlaylistManager.startChannel(
                     contentId = item.id,
                     seriesTitle = item.name,
-                    episodes = validEpisodes,
+                    episodes = queueEpisodes,
                     startEpisode = startEp,
-                    shuffle = shuffle
+                    shuffle = shuffle,
+                    preserveOrder = smartSelection != null
                 )
                 onLaunchEpisode(item.id, item.apiType, state.addonBaseUrl, startEp.season!!, startEp.episode!!)
             }

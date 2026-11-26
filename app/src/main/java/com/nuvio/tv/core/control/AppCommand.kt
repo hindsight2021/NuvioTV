@@ -1,5 +1,6 @@
 package com.nuvio.tv.core.control
 
+import com.nuvio.tv.core.music.EclipseTrack
 import com.nuvio.tv.core.playlist.PlaylistItem
 
 /**
@@ -114,6 +115,25 @@ sealed interface AppCommand {
     /** Advance to the next item in the queue. */
     data object AdvanceQueue : AppCommand
 
+    /** Reorder an item in the playback queue from [fromIndex] to [toIndex]. */
+    data class ReorderQueue(val fromIndex: Int, val toIndex: Int) : AppCommand
+
+    /** Remove an item from the playback queue at [index]. */
+    data class RemoveQueueItem(val index: Int) : AppCommand
+
+    /** Hot-swap the currently playing stream while preserving playback timestamp. */
+    data class HotSwapStream(
+        val streamUrl: String,
+        val title: String,
+        val headers: Map<String, String>? = null
+    ) : AppCommand
+
+    /** Tune a Live TV or AI Broadcast Network channel. */
+    data class TuneLiveChannel(
+        val channelId: String,
+        val startFromBeginning: Boolean = false
+    ) : AppCommand
+
     // ---------------------------------------------------------------------
     // Thematic
     // ---------------------------------------------------------------------
@@ -130,6 +150,31 @@ sealed interface AppCommand {
 
     /** Execute a natural-language prompt through the AI subsystem. */
     data class ExecuteAiPrompt(val prompt: String) : AppCommand
+
+    // ---------------------------------------------------------------------
+    // Eclipse Audio
+    // ---------------------------------------------------------------------
+
+    /** Start or replace the Eclipse audio queue. */
+    data class PlayAudioQueue(
+        val tracks: List<EclipseTrack>,
+        val startIndex: Int = 0,
+        val autoplay: Boolean = true,
+        val source: String = "eclipse",
+        val djSessionId: String? = null
+    ) : AppCommand
+
+    /** Append, play-next, or replace tracks in the Eclipse audio queue. */
+    data class QueueAudioTracks(
+        val tracks: List<EclipseTrack>,
+        val mode: String = "append"
+    ) : AppCommand
+
+    /** Control Eclipse audio playback (play, pause, stop, next, previous, seek_ms, volume, shuffle, repeat). */
+    data class AudioControl(
+        val action: String,
+        val value: Any? = null
+    ) : AppCommand
 }
 
 /**

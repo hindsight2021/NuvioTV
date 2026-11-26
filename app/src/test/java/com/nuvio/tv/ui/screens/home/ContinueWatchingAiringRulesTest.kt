@@ -1195,6 +1195,169 @@ class ContinueWatchingAiringRulesTest {
         assertTrue(deduplicated.first() is ContinueWatchingItem.InProgress)
     }
 
+    @Test
+    fun `deduplicateContinueWatchingItems removes duplicate Traitors Canada across distinct IMDb IDs`() {
+        val primary = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28251824",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = "poster1.jpg",
+                backdrop = null,
+                logo = null,
+                videoId = "tt28251824:4:9",
+                season = 4,
+                episode = 9,
+                episodeTitle = "For Better or Worse",
+                thumbnail = null,
+                released = "2026-11-16T22:00:00.000Z",
+                releaseInfo = "2023–",
+                lastWatched = 1794439530407L,
+                sortTimestamp = 1794943200000L,
+                isReleaseAlert = true
+            )
+        )
+        val duplicateImdb = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28642270",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = "poster2.jpg",
+                backdrop = null,
+                logo = null,
+                videoId = "tt28642270:4:9",
+                season = 4,
+                episode = 9,
+                episodeTitle = "Episode 9",
+                thumbnail = null,
+                released = "2026-11-16T00:00:00.000Z",
+                releaseInfo = "2023–",
+                lastWatched = 1791373294805L,
+                sortTimestamp = 1794873600000L,
+                isReleaseAlert = true
+            )
+        )
+
+        val deduplicated = deduplicateContinueWatchingItems(listOf(duplicateImdb, primary), emptyMap())
+        assertEquals(1, deduplicated.size)
+        val survivor = deduplicated.first() as ContinueWatchingItem.NextUp
+        assertEquals("tt28251824", survivor.info.contentId)
+        assertEquals("For Better or Worse", survivor.info.episodeTitle)
+    }
+
+    @Test
+    fun `deduplicateContinueWatchingItems removes duplicate IMDb show at older episode when title and releaseInfo match`() {
+        val active = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28251824",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt28251824:4:9",
+                season = 4,
+                episode = 9,
+                episodeTitle = "For Better or Worse",
+                thumbnail = null,
+                released = "2026-11-16T22:00:00.000Z",
+                releaseInfo = "2023–",
+                lastWatched = 1794439530407L,
+                sortTimestamp = 1794943200000L,
+                isReleaseAlert = true
+            )
+        )
+        val staleDuplicate = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28642270",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt28642270:4:4",
+                season = 4,
+                episode = 4,
+                episodeTitle = "The Misfits",
+                thumbnail = null,
+                released = "2026-10-12T00:00:00.000Z",
+                releaseInfo = "2023-",
+                lastWatched = 1791373294805L,
+                sortTimestamp = 1791373294805L,
+                isReleaseAlert = false
+            )
+        )
+
+        val deduplicated = deduplicateContinueWatchingItems(listOf(staleDuplicate, active), emptyMap())
+        assertEquals(1, deduplicated.size)
+        val survivor = deduplicated.first() as ContinueWatchingItem.NextUp
+        assertEquals("tt28251824", survivor.info.contentId)
+        assertEquals(9, survivor.info.episode)
+    }
+
+    @Test
+    fun `deduplicateContinueWatchingItems keeps distinct shows with different start years or null metadata separate`() {
+        val uk2022 = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt15557874",
+                contentType = "series",
+                name = "The Traitors",
+                poster = null, backdrop = null, logo = null,
+                videoId = "tt15557874:3:1",
+                season = 3, episode = 1, episodeTitle = "Episode 1", thumbnail = null,
+                releaseInfo = "2022–",
+                lastWatched = 1700000000000L, sortTimestamp = 1700000000000L
+            )
+        )
+        val us2023 = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt23743442",
+                contentType = "series",
+                name = "The Traitors",
+                poster = null, backdrop = null, logo = null,
+                videoId = "tt23743442:3:1",
+                season = 3, episode = 1, episodeTitle = "Episode 1", thumbnail = null,
+                releaseInfo = "2023–",
+                lastWatched = 1700000001000L, sortTimestamp = 1700000001000L
+            )
+        )
+        assertEquals(2, deduplicateContinueWatchingItems(listOf(uk2022, us2023), emptyMap()).size)
+
+        val bareA = uk2022.copy(info = uk2022.info.copy(releaseInfo = null, released = null))
+        val bareB = us2023.copy(info = us2023.info.copy(releaseInfo = null, released = null))
+        assertEquals(2, deduplicateContinueWatchingItems(listOf(bareA, bareB), emptyMap()).size)
+    }
+
+    @Test
+    fun `deduplicateContinueWatchingItems matches show IMDb contentId against videoId even when episode IMDb differs`() {
+        val tmdbItem = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tmdb:234613",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = null, backdrop = null, logo = null,
+                videoId = "tt28251824:4:9",
+                season = 4, episode = 9, episodeTitle = "For Better or Worse", thumbnail = null,
+                lastWatched = 1794439530407L, sortTimestamp = 1794943200000L
+            )
+        )
+        val imdbWithEpisodeVideoId = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tt28251824",
+                contentType = "series",
+                name = "The Traitors Canada",
+                poster = null, backdrop = null, logo = null,
+                videoId = "tt28642270:4:9",
+                season = 4, episode = 9, episodeTitle = "Episode 9", thumbnail = null,
+                lastWatched = 1791373294805L, sortTimestamp = 1791373294805L
+            )
+        )
+
+        val deduplicated = deduplicateContinueWatchingItems(listOf(imdbWithEpisodeVideoId, tmdbItem), emptyMap())
+        assertEquals(1, deduplicated.size)
+        assertEquals("For Better or Worse", (deduplicated.first() as ContinueWatchingItem.NextUp).info.episodeTitle)
+    }
+
     private fun mockWatchedSeriesStateHolder(ongoing: Set<String> = emptySet()): WatchedSeriesStateHolder {
         val mock = mockk<WatchedSeriesStateHolder>(relaxed = true)
         every { mock.isKnownOngoing(any()) } answers { firstArg<String>() in ongoing }

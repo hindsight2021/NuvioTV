@@ -6,7 +6,9 @@ import android.util.Log
 import androidx.media3.common.util.UnstableApi
 import com.nuvio.tv.core.debrid.DirectDebridPlayableResult
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.player.NextEpisodePreWarmer
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
+import com.nuvio.tv.core.playlist.PlaylistManager
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
@@ -673,6 +675,9 @@ private fun PlayerRuntimeController.persistSelectedStreamForReuse(
     val key = streamCacheKey ?: return
     val streamName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName)?.takeIf { it.isNotBlank() }
         ?: title
+    val resolveMeta = stream.clientResolve
+    val isDebrid = stream.isDirectDebrid() ||
+        com.nuvio.tv.data.local.CachedStreamLink.isLikelyDebridCdnUrl(url)
 
     scope.launch {
         streamLinkCacheDataStore.save(
@@ -683,9 +688,17 @@ private fun PlayerRuntimeController.persistSelectedStreamForReuse(
             filename = currentFilename,
             videoHash = currentVideoHash,
             videoSize = currentVideoSize,
+            infoHash = stream.getEffectiveInfoHash() ?: resolveMeta?.infoHash,
+            fileIdx = stream.getEffectiveFileIdx() ?: resolveMeta?.fileIdx,
+            sources = stream.sources ?: resolveMeta?.sources,
             bingeGroup = stream.behaviorHints?.bingeGroup,
             contentLanguage = contentLanguage,
-            year = year
+            year = year,
+            isDebridLink = isDebrid,
+            clientResolveService = resolveMeta?.service,
+            clientResolveMagnet = resolveMeta?.magnetUri,
+            clientResolveType = resolveMeta?.type,
+            clientResolveTorrentName = resolveMeta?.torrentName
         )
     }
 }
@@ -773,11 +786,16 @@ private fun PlayerRuntimeController.openExternalStreamInBrowser(
 
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.switchToSourceStream(
-    stream: Stream
+    stream: Stream,
+    preserveDeadSourceFailoverCount: Boolean = false
 ) {
     sourceStreamsScope?.cancel()
     sourceStreamsScope = null
     sourceStreamsJob = null
+    if (!preserveDeadSourceFailoverCount) {
+        startupSourceFailoverJob?.cancel()
+        startupSourceFailoverJob = null
+    }
     streamRepository.setLocalPluginSearchPaused(true)
     if (openExternalStreamInBrowser(stream = stream, fromEpisodePanel = false)) {
         return
@@ -790,7 +808,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             val resolved = resolveDirectDebridStreamIfNeeded(stream, currentSeason, currentEpisode)
             debridResolveJob = null
             if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
-                switchToSourceStream(resolved)
+                switchToSourceStream(resolved, preserveDeadSourceFailoverCount = preserveDeadSourceFailoverCount)
             } else if (resolved != null) {
                 switchToTorrentSourceStream(resolved)
             } else {
@@ -814,7 +832,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                 val resolved = resolveDirectDebridStreamIfNeeded(stream, currentSeason, currentEpisode)
                 if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
                     debridResolveJob = null
-                    switchToSourceStream(resolved)
+                    switchToSourceStream(resolved, preserveDeadSourceFailoverCount = preserveDeadSourceFailoverCount)
                 } else {
                     debridResolveJob = null
                     _uiState.update {
@@ -857,7 +875,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
 
     // Reset stream-state error flags for the new stream.
     hasRetriedCurrentStreamAfter416 = false
-    resetErrorRetryState()
+    resetErrorRetryState(resetDeadSourceFailoverCount = !preserveDeadSourceFailoverCount)
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     subtitleDisabledByPersistedPreference = false
@@ -1946,6 +1964,11 @@ internal fun PlayerRuntimeController.preResolveNextEpisodeStreamIfNeeded(nextVid
     if (type.equals("cloud", ignoreCase = true)) return
     val nextVideoId = nextVideo.id
     if (preResolvedNextVideoId == nextVideoId && (preResolvedNextStream != null || preResolveNextEpisodeJob?.isActive == true)) {
+        val resolved = preResolvedNextStream
+        if (speculativePreWarmEnabledSetting && resolved != null && preWarmedTargetKey != nextVideoId && preWarmJob?.isActive != true) {
+            val label = "S${nextVideo.season ?: 1}E${nextVideo.episode ?: 1} ${nextVideo.title}".trim()
+            launchSpeculativePreWarmForStream(nextVideoId, label, resolved)
+        }
         return
     }
 
@@ -2045,6 +2068,10 @@ internal fun PlayerRuntimeController.preResolveNextEpisodeStreamIfNeeded(nextVid
                                 PlayerRuntimeController.TAG,
                                 "PRE_RESOLVE: Next episode (${nextVideo.id}) pre-resolved successfully: ${resolved.name ?: resolved.addonName}"
                             )
+                            if (speculativePreWarmEnabledSetting) {
+                                val label = "S${nextVideo.season ?: 1}E${nextVideo.episode ?: 1} ${nextVideo.title}".trim()
+                                launchSpeculativePreWarmForStream(nextVideoId, label, resolved)
+                            }
                         }
                     }
                 }
@@ -2054,6 +2081,180 @@ internal fun PlayerRuntimeController.preResolveNextEpisodeStreamIfNeeded(nextVid
         } catch (e: Throwable) {
             Log.w(PlayerRuntimeController.TAG, "PRE_RESOLVE: Failed to pre-resolve next episode: ${e.message}")
         }
+    }
+}
+
+internal fun PlayerRuntimeController.preWarmQueuedOrAutopilotIfNeeded() {
+    if (!speculativePreWarmEnabledSetting) return
+    val queued = PlaylistManager.peekNext()
+    if (queued != null) {
+        val queuedKey = queued.videoId ?: queued.contentId
+        if (preWarmedTargetKey == queuedKey || preWarmJob?.isActive == true) return
+        val queuedTitle = queued.seriesTitle ?: queued.title
+        val queuedLabel = if (queued.season != null && queued.episode != null) {
+            "Up Next: $queuedTitle S${queued.season}E${queued.episode}"
+        } else {
+            "Up Next: ${queued.title}"
+        }
+        preWarmedTargetKey = queuedKey
+        preWarmJob?.cancel()
+        preWarmJob = scope.launch(Dispatchers.IO) {
+            resolveAndPreWarmTarget(
+                targetKey = queuedKey,
+                targetLabel = queuedLabel,
+                mediaType = queued.mediaType.ifBlank { "series" },
+                videoId = queued.videoId ?: queued.contentId,
+                season = queued.season,
+                episode = queued.episode,
+                title = queuedTitle
+            )
+        }
+        return
+    }
+
+    if (!autopilotEnabledSetting || autopilotDecisionEngine == null) return
+    val apKey = "autopilot:${contentId.orEmpty()}:${currentSeason ?: 0}:${currentEpisode ?: 0}"
+    if (preWarmedTargetKey == apKey || preWarmJob?.isActive == true) return
+    preWarmedTargetKey = apKey
+    preWarmJob?.cancel()
+    preWarmJob = scope.launch(Dispatchers.IO) {
+        try {
+            val decision = autopilotDecisionEngine.selectNextEpisode(
+                currentContentId = contentId,
+                currentSeason = currentSeason,
+                currentEpisode = currentEpisode,
+                currentTitle = _uiState.value.title.ifBlank { null },
+                currentGenres = emptyList(),
+                mode = autopilotModeSetting
+            ) ?: return@launch
+            val cand = decision.candidate
+            val candLabel = if (cand.season != null && cand.episode != null) {
+                "Autopilot: ${cand.title} S${cand.season}E${cand.episode}"
+            } else {
+                "Autopilot: ${cand.title}"
+            }
+            resolveAndPreWarmTarget(
+                targetKey = apKey,
+                targetLabel = candLabel,
+                mediaType = "series",
+                videoId = cand.videoId,
+                season = cand.season,
+                episode = cand.episode,
+                title = cand.title
+            )
+        } catch (_: CancellationException) {
+        } catch (t: Throwable) {
+            Log.w(PlayerRuntimeController.TAG, "PRE_WARM: Autopilot pre-warm failed: ${t.message}")
+        }
+    }
+}
+
+private suspend fun PlayerRuntimeController.resolveAndPreWarmTarget(
+    targetKey: String,
+    targetLabel: String,
+    mediaType: String,
+    videoId: String,
+    season: Int?,
+    episode: Int?,
+    title: String?
+) {
+    try {
+        NextEpisodePreWarmer.updateState(
+            com.nuvio.tv.core.player.PreWarmState.RESOLVING,
+            targetKey = targetKey,
+            targetLabel = targetLabel
+        )
+        val playerSettings = playerSettingsDataStore.playerSettings.first()
+        val installedAddons = addonRepository.getInstalledAddons().first().enabledAddons()
+        val installedAddonOrder = installedAddons.map { it.displayName }
+        var resolvedStream: Stream? = null
+
+        streamRepository.getStreamsFromAllAddons(
+            type = mediaType,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            title = title
+        ).takeWhile { resolvedStream == null }.collect { result ->
+            if (result is NetworkResult.Success && result.data.isNotEmpty()) {
+                val ordered = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                val all = ordered.flatMap { it.streams }
+                val effectiveMode = if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
+                    StreamAutoPlayMode.FIRST_STREAM
+                } else {
+                    playerSettings.streamAutoPlayMode
+                }
+                val match = StreamAutoPlaySelector.selectAutoPlayStream(
+                    streams = all,
+                    mode = effectiveMode,
+                    regexPattern = playerSettings.streamAutoPlayRegex,
+                    source = playerSettings.streamAutoPlaySource,
+                    installedAddonNames = installedAddonOrder.toSet(),
+                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                    preferredBingeGroup = currentStreamBingeGroup,
+                    preferBingeGroupInSelection = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode,
+                    bingeGroupOnly = false
+                ) ?: all.firstOrNull { !it.url.isNullOrBlank() }
+
+                if (match != null) {
+                    resolvedStream = resolveDirectDebridStreamIfNeeded(match, season, episode) ?: match
+                }
+            }
+        }
+
+        val stream = resolvedStream
+        val url = stream?.url
+        if (stream == null || url.isNullOrBlank()) {
+            NextEpisodePreWarmer.updateState(
+                com.nuvio.tv.core.player.PreWarmState.SKIPPED,
+                targetKey = targetKey,
+                targetLabel = targetLabel
+            )
+            return
+        }
+
+        val headers = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
+        val upstreamFactory = PlayerPlaybackNetworking.createHttpDataSourceFactory(headers)
+        NextEpisodePreWarmer.preWarmOpeningSegment(
+            context = context,
+            targetKey = targetKey,
+            targetLabel = targetLabel,
+            url = url,
+            upstreamFactory = upstreamFactory,
+            shouldAbort = {
+                !speculativePreWarmEnabledSetting || isReleasingPlayer || _uiState.value.isBuffering
+            }
+        )
+    } catch (_: CancellationException) {
+    } catch (t: Throwable) {
+        Log.w(PlayerRuntimeController.TAG, "PRE_WARM: Failed to resolve/warm $targetLabel: ${t.message}")
+    }
+}
+
+internal fun PlayerRuntimeController.launchSpeculativePreWarmForStream(
+    targetKey: String,
+    targetLabel: String,
+    stream: Stream
+) {
+    if (!speculativePreWarmEnabledSetting) return
+    val url = stream.url ?: return
+    if (preWarmedTargetKey == targetKey && preWarmJob?.isActive == true) return
+    preWarmedTargetKey = targetKey
+    preWarmJob?.cancel()
+    preWarmJob = scope.launch(Dispatchers.IO) {
+        val headers = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
+        val upstreamFactory = PlayerPlaybackNetworking.createHttpDataSourceFactory(headers)
+        NextEpisodePreWarmer.preWarmOpeningSegment(
+            context = context,
+            targetKey = targetKey,
+            targetLabel = targetLabel,
+            url = url,
+            upstreamFactory = upstreamFactory,
+            shouldAbort = {
+                !speculativePreWarmEnabledSetting || isReleasingPlayer || _uiState.value.isBuffering
+            }
+        )
     }
 }
 
@@ -2133,6 +2334,16 @@ private fun PlayerRuntimeController.playNextCloudLibraryFile(
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.switchToLiveTvChannel(channel: com.nuvio.tv.core.livetv.LiveTvChannel) {
     val url = channel.streamUrl
+    if (channel.isAiNetwork || com.nuvio.tv.core.livetv.AiBroadcastNetwork.isAiBroadcastUrl(url)) {
+        scope.launch {
+            com.nuvio.tv.core.livetv.AiBroadcastTuneCoordinator.tuneAiChannel(
+                context = context,
+                channelId = channel.id,
+                startFromBeginning = false
+            )
+        }
+        return
+    }
     if (url.isNullOrBlank()) {
         com.nuvio.tv.core.livetv.LiveTvManager.tuneToChannel(context, channel)
         return
@@ -2145,6 +2356,10 @@ internal fun PlayerRuntimeController.switchToLiveTvChannel(channel: com.nuvio.tv
     preResolveNextEpisodeJob = null
     preResolvedNextStream = null
     preResolvedNextVideoId = null
+    preWarmJob?.cancel()
+    preWarmJob = null
+    preWarmedTargetKey = null
+    NextEpisodePreWarmer.resetStatus()
 
     flushPlaybackSnapshotForSwitchOrExit()
     resetLoadingOverlayForNewStream()
@@ -2179,5 +2394,15 @@ internal fun PlayerRuntimeController.switchToLiveTvChannel(channel: com.nuvio.tv
     }
 
     initializePlayer(url, emptyMap())
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+fun PlayerRuntimeController.hotSwapToStream(stream: Stream) {
+    val exactPosMs = currentPlaybackPositionMs()?.coerceAtLeast(0L)
+        ?: _playbackTimeline.value.currentPosition.coerceAtLeast(0L)
+    switchToSourceStream(stream = stream, preserveDeadSourceFailoverCount = true)
+    if (exactPosMs > 0L) {
+        _uiState.update { it.copy(pendingSeekPosition = exactPosMs) }
+    }
 }
 

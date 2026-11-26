@@ -94,6 +94,10 @@ class DebridSettingsViewModel @Inject constructor(
         update { dataStore.setPreferredResolverProviderId(providerId) }
     }
 
+    fun setFallbackResolverProviderId(providerId: String) {
+        update { dataStore.setFallbackResolverProviderId(providerId) }
+    }
+
     fun startFormatterQrMode() {
         val ip = DeviceIpAddress.get(context)
         if (ip == null) {
@@ -388,6 +392,7 @@ data class DebridSettingsUiState(
     val premiumizeApiKey: String = "",
     val realDebridApiKey: String = "",
     val preferredResolverProviderId: String = "",
+    val fallbackResolverProviderId: String = "",
     val instantPlaybackPreparationLimit: Int = 0,
     val streamMaxResults: Int = 0,
     val streamSortMode: DebridStreamSortMode = DebridStreamSortMode.DEFAULT,
@@ -425,6 +430,22 @@ data class DebridSettingsUiState(
         get() = resolverProviders.firstOrNull { it.id == preferredResolverProviderId }
             ?: resolverProviders.firstOrNull()
 
+    val fallbackProviderOptions: List<com.nuvio.tv.core.debrid.DebridProvider>
+        get() {
+            val primaryId = activeResolverProvider?.id
+            return resolverProviders.filterNot { it.id == primaryId }
+        }
+
+    val fallbackResolverProvider: com.nuvio.tv.core.debrid.DebridProvider?
+        get() {
+            val others = fallbackProviderOptions
+            if (others.isEmpty()) return null
+            val raw = fallbackResolverProviderId.trim()
+            if (raw.equals(DebridProviders.FALLBACK_NONE, ignoreCase = true)) return null
+            if (raw.isBlank()) return others.firstOrNull()
+            return others.firstOrNull { it.id == raw } ?: others.firstOrNull()
+        }
+
     val hasResolverProvider: Boolean
         get() = activeResolverProvider != null
 
@@ -454,6 +475,7 @@ data class DebridSettingsUiState(
         premiumizeApiKey = settings.premiumizeApiKey,
         realDebridApiKey = settings.realDebridApiKey,
         preferredResolverProviderId = settings.preferredResolverProviderId,
+        fallbackResolverProviderId = settings.fallbackResolverProviderId,
         instantPlaybackPreparationLimit = settings.instantPlaybackPreparationLimit,
         streamMaxResults = settings.streamMaxResults,
         streamSortMode = settings.streamSortMode,

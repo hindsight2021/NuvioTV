@@ -65,4 +65,12 @@ class ContinueWatchingDismissalTest {
         assertFalse(isContinueWatchingNextUpDismissed("show", null, null, isReleaseAlert = false, dismissedKeys = keys))
         assertTrue(isContinueWatchingNextUpDismissed("show", null, null, isReleaseAlert = false, dismissedKeys = setOf("show")))
     }
+
+    @Test
+    fun `series delete dismissal stays dismissed even for release alerts with active progress`() {
+        val key = nextUpSeriesDeleteDismissKey("tt0121955")
+        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 4, isReleaseAlert = true, dismissedKeys = setOf(key), hasActiveProgress = true))
+        assertTrue(isContinueWatchingNextUpDismissed("tt0121955", 29, 5, isReleaseAlert = true, dismissedKeys = setOf(key), hasActiveProgress = true))
+        assertFalse(isContinueWatchingNextUpDismissed("other-show", 1, 1, isReleaseAlert = true, dismissedKeys = setOf(key), hasActiveProgress = true))
+    }
 }

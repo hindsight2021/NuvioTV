@@ -122,6 +122,25 @@ object DebridProviders {
         return services.firstOrNull { it.provider.id == preferredId } ?: services.firstOrNull()
     }
 
+    const val FALLBACK_NONE = "none"
+
+    fun fallbackResolverService(settings: DebridSettings): DebridServiceCredential? {
+        val primary = preferredResolverService(settings) ?: return null
+        val others = configuredResolverServices(settings).filterNot { it.provider.id == primary.provider.id }
+        if (others.isEmpty()) return null
+        val rawFallback = settings.fallbackResolverProviderId.trim()
+        if (rawFallback.equals(FALLBACK_NONE, ignoreCase = true)) return null
+        if (rawFallback.isBlank()) return others.firstOrNull()
+        val fallbackId = byId(rawFallback)?.id
+        return others.firstOrNull { it.provider.id == fallbackId } ?: others.firstOrNull()
+    }
+
+    fun orderedResolverServices(settings: DebridSettings): List<DebridServiceCredential> =
+        listOfNotNull(
+            preferredResolverService(settings),
+            fallbackResolverService(settings)
+        ).distinctBy { it.provider.id }
+
     fun configuredSourceNames(settings: DebridSettings): List<String> {
         return configuredServices(settings).map { instantName(it.provider.id) }
     }

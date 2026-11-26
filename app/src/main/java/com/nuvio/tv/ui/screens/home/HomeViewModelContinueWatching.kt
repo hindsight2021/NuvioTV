@@ -19,6 +19,7 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.isContinueWatchingNextUpDismissed
 import com.nuvio.tv.domain.model.nextUpEpisodeDismissKey
+import com.nuvio.tv.domain.model.nextUpSeriesDeleteDismissKey
 import com.nuvio.tv.domain.model.normalizeLanguageCode
 import com.nuvio.tv.domain.model.countryToLanguageCode
 import com.nuvio.tv.ui.util.parseEpisodeReleaseDate
@@ -398,6 +399,28 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 invalidateDueContinueWatchingMetadata(nextUpSeeds.mapTo(mutableSetOf()) { it.contentId })
                 val daysCap = snapshot.daysCap
                 val dismissedNextUp = snapshot.dismissedNextUp
+                val removedDismissals = cwLastDismissedNextUpKeys - dismissedNextUp
+                cwLastDismissedNextUpKeys = dismissedNextUp
+                if (removedDismissals.isNotEmpty()) {
+                    val unblockedIds = removedDismissals.mapTo(mutableSetOf()) { key ->
+                        when {
+                            key.startsWith("episode|") -> key.removePrefix("episode|").substringBefore('|')
+                            key.startsWith("deleted|") -> key.removePrefix("deleted|")
+                            else -> key.substringBefore('|')
+                        }
+                    }
+                    synchronized(cwNextUpResolutionCache) {
+                        cwNextUpResolutionCache.keys.removeAll { cacheKey ->
+                            val id = cacheKey.substringBefore('|')
+                            id in unblockedIds || cwLastShowIdSiblings[id].orEmpty().any { it in unblockedIds }
+                        }
+                    }
+                    cwNextUpNegativeCacheTimestamps.keys.removeAll { cacheKey ->
+                        val id = cacheKey.substringBefore('|')
+                        id in unblockedIds || cwLastShowIdSiblings[id].orEmpty().any { it in unblockedIds }
+                    }
+                }
+                val activeProgressContentIds = items.mapTo(mutableSetOf()) { it.contentId }
                 logNextUpDecision("dismissed-keys profile=$pipelineProfileId keys=${dismissedNextUp.joinToString()}")
                 val showUnairedNextUp = snapshot.showUnairedNextUp
                 val nextUpFromFurthestEpisode = snapshot.nextUpFromFurthestEpisode
@@ -606,8 +629,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     // badges appear correctly even when the cache was written before the
                     // new season aired (fixes stale isNewSeasonRelease/isReleaseAlert/hasAired).
                     val (freshHasAired, freshIsReleaseAlert, freshIsNewSeasonRelease) = recalculateCachedReleaseBadge(cached)
+                    val cachedHasActiveProgress = snapshot.items.any { areContentIdsSiblings(it.contentId, cached.contentId, cwLastShowIdSiblings) }
                     if (isContinueWatchingNextUpDismissed(cached.contentId, cached.season, cached.episode,
-                            freshIsReleaseAlert, dismissedNextUp)) return@mapNotNull null
+                            freshIsReleaseAlert, dismissedNextUp, cachedHasActiveProgress)) return@mapNotNull null
                     // Respect "show unaired" setting (use recalculated hasAired)
                     if (!freshHasAired && !showUnairedNextUp) return@mapNotNull null
                     // Drop if the series no longer has any watched-episode seeds
@@ -740,6 +764,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     cachedNextUp = cachedNextUp,
                     watchedItems = snapshot.watchedItems,
                     libraryItemIds = effectiveSnapshot.libraryItemIds,
+                    activeProgressContentIds = activeProgressContentIds,
                     debug = debug,
                     onPartialUpdate = { partialNextUpItems ->
                         partialPublishMutex.withLock {
@@ -1051,7 +1076,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             dismissedNextUpKeys = dismissedNextUp,
                             sortMode = continueWatchingSortMode,
                             pipelineProfileId = pipelineProfileId,
-                            persistSnapshot = false
+                            persistSnapshot = false,
+                            activeProgressContentIds = activeProgressContentIds
                         )
                     }
 
@@ -1148,7 +1174,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                                 dismissedNextUpKeys = dismissedNextUp,
                                                 sortMode = continueWatchingSortMode,
                                                 pipelineProfileId = pipelineProfileId,
-                                                persistSnapshot = true
+                                                persistSnapshot = true,
+                                                activeProgressContentIds = activeProgressContentIds
                                             )
                                         }
                                     }
@@ -1186,7 +1213,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                                 dismissedNextUpKeys = dismissedNextUp,
                                                 sortMode = continueWatchingSortMode,
                                                 pipelineProfileId = pipelineProfileId,
-                                                persistSnapshot = false
+                                                persistSnapshot = false,
+                                                activeProgressContentIds = activeProgressContentIds
                                             )
                                         }
                                         val metaForSeed = synchronized(cwMetaCache) {
@@ -1229,7 +1257,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     dismissedNextUpKeys = dismissedNextUp,
                                     sortMode = continueWatchingSortMode,
                                     pipelineProfileId = pipelineProfileId,
-                                    persistSnapshot = true
+                                    persistSnapshot = true,
+                                    activeProgressContentIds = activeProgressContentIds
                                 )
                             }
                         }
@@ -1317,8 +1346,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             (it.info.contentId !in rejectedByFreshPipeline || isResolvedOlder || isDiscoveredOlder) &&
                             // Respect "show unaired" setting for all items including cached.
                             (it.info.hasAired || showUnairedNextUp) &&
-                            !isContinueWatchingNextUpDismissed(it.info.contentId, it.info.season, it.info.episode,
-                                it.info.isReleaseAlert, dismissedNextUp) &&
+                            run {
+                                val hasActiveProgress = snapshot.items.any { item -> areContentIdsSiblings(item.contentId, it.info.contentId, cwLastShowIdSiblings) }
+                                !isContinueWatchingNextUpDismissed(it.info.contentId, it.info.season, it.info.episode,
+                                    it.info.isReleaseAlert, dismissedNextUp, hasActiveProgress)
+                            } &&
                             !watchProgressRepository.isDroppedShow(it.info.contentId)
                         pass
                     }
@@ -1330,6 +1362,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     val currentSeed = currentSeedByContentId[cid]
                     val episodeAlreadyWatched = currentSeed != null &&
                         (currentSeed.first > cached.info.season || (currentSeed.first == cached.info.season && currentSeed.second >= cached.info.episode))
+                    val cachedHasActiveProgress = snapshot.items.any { item -> areContentIdsSiblings(item.contentId, cached.info.contentId, cwLastShowIdSiblings) }
                     !episodeAlreadyWatched &&
                         cid !in freshContentIds &&
                         freshContentIds.none { freshId -> areContentIdsSiblings(cid, freshId, cwLastShowIdSiblings) } &&
@@ -1340,7 +1373,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         ) &&
                         (cid !in rejectedByFreshPipeline || isResolvedOlder) &&
                         !isContinueWatchingNextUpDismissed(cached.info.contentId, cached.info.season, cached.info.episode,
-                            cached.info.isReleaseAlert, dismissedNextUp)
+                            cached.info.isReleaseAlert, dismissedNextUp, cachedHasActiveProgress)
                 }
                 val finalNextUpItems = allNextUpItems + retainedFromCache
                 val normalItems = applyContinueWatchingEnrichmentOverlay(
@@ -1877,6 +1910,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
     cachedNextUp: List<com.nuvio.tv.data.local.CachedNextUpItem> = emptyList(),
     watchedItems: List<com.nuvio.tv.domain.model.WatchedItem> = emptyList(),
     libraryItemIds: Set<String> = emptySet(),
+    activeProgressContentIds: Set<String> = allProgress.mapTo(mutableSetOf()) { it.contentId },
     debug: CwDebugSession? = null,
     onPartialUpdate: suspend (List<ContinueWatchingItem.NextUp>) -> Unit = {}
 ): List<ContinueWatchingItem.NextUp> = withContext(Dispatchers.IO) {
@@ -2014,7 +2048,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
                 val watchedCount = computeWatchedEpisodeCount(remappedProgress.contentId, remappedProgress, watchedItems, allProgress, cwLastShowIdSiblings)
                 val inLibrary = isSeriesInLibrary(remappedProgress.contentId, libraryItemIds, cwLastShowIdSiblings)
                 val remapSiblingIds = (cwLastShowIdSiblings[remappedProgress.contentId].orEmpty() + remappedProgress.contentId)
-                val hasProgress = allProgress.any { it.contentId in remapSiblingIds }
+                val hasProgress = remapSiblingIds.any { it in activeProgressContentIds }
                 val nextUp = buildNextUpItem(
                     progress = remappedProgress,
                     showUnairedNextUp = showUnairedNextUp,
@@ -3111,28 +3145,53 @@ private fun resolveNextUpVideoFromMeta(
         candidateVideos
     }
 
+    var skippedByDismissal: Triple<CwVideoSummary, Boolean, Boolean>? = null
     val nextVideo = unwatchedCandidates.firstOrNull { video ->
         val aired = isEpisodeReleaseAired(
             video.released,
             airBufferHours = BROADCAST_AIR_BUFFER_HOURS,
             postAirBufferHours = POST_BROADCAST_AIR_BUFFER_HOURS
         ) == true
-        isNextUpEpisodeEligible(
+        val eligible = isNextUpEpisodeEligible(
             parseEpisodeReleaseDate(video.released), video.available,
             video.season != watchedEpisodeSeason, showUnairedNextUp, todayLocal,
             hasAired = aired
-        ) && !isContinueWatchingNextUpDismissed(
-            progress.contentId, video.season, video.episode,
-            resolveNextUpReleaseState(progress, video.season ?: seedSeason, video.released, aired).isReleaseAlert,
+        )
+        if (!eligible) return@firstOrNull false
+        val isReleaseAlert = resolveNextUpReleaseState(
+            progress,
+            video.season ?: seedSeason,
+            video.released,
+            aired
+        ).isReleaseAlert
+        val dismissed = isContinueWatchingNextUpDismissed(
+            progress.contentId,
+            video.season,
+            video.episode,
+            isReleaseAlert,
             dismissedKeys,
             hasActiveProgress
         )
+        if (dismissed && skippedByDismissal == null) {
+            skippedByDismissal = Triple(video, isReleaseAlert, hasActiveProgress)
+        }
+        !dismissed
     }
 
     if (nextVideo == null) {
-        logNextUpDecision(
-            "drop contentId=${progress.contentId} name=${progress.name} reason=no-next-video-after-seed seed=${seedSeason}x${seedEpisode} showUnaired=$showUnairedNextUp"
-        )
+        val skipped = skippedByDismissal
+        if (skipped != null) {
+            val (video, isReleaseAlert, activeProgress) = skipped
+            logNextUpDecision(
+                "drop contentId=${progress.contentId} name=${progress.name} reason=dismissed-next-up " +
+                    "seed=${seedSeason}x${seedEpisode} next=${video.season}x${video.episode} " +
+                    "isReleaseAlert=$isReleaseAlert hasActiveProgress=$activeProgress"
+            )
+        } else {
+            logNextUpDecision(
+                "drop contentId=${progress.contentId} name=${progress.name} reason=no-next-video-after-seed seed=${seedSeason}x${seedEpisode} showUnaired=$showUnairedNextUp"
+            )
+        }
         return null
     }
 
@@ -4063,8 +4122,11 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
                 traktSettingsDataStore.addDismissedNextUpKey(nextUpEpisodeDismissKey(id, season, episode))
             }
         }
-        val targetSeason = if (isNextUp) season else null
-        val targetEpisode = if (isNextUp) episode else null
+        // Only clear the targeted episode's progress when episode coordinates are known so
+        // removing an in-progress card from Continue Watching does not wipe the series'
+        // prior completed WatchProgress entries (which would suppress future release alerts).
+        val targetSeason = if (season != null && episode != null) season else null
+        val targetEpisode = if (season != null && episode != null) episode else null
         watchProgressRepository.removeProgress(
             contentId = contentId,
             season = targetSeason,
@@ -4101,6 +4163,7 @@ internal fun HomeViewModel.deleteAllProgressPipeline(contentId: String) {
     viewModelScope.launch {
         for (id in siblingIds) {
             traktSettingsDataStore.addDismissedNextUpKey(id)
+            traktSettingsDataStore.addDismissedNextUpKey(nextUpSeriesDeleteDismissKey(id))
         }
         watchProgressRepository.deleteAllProgressForSeries(contentId)
     }

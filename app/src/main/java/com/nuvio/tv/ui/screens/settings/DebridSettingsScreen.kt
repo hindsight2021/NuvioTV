@@ -108,6 +108,7 @@ fun DebridSettingsContent(
     var activeDeviceAuthDialog by remember { mutableStateOf<String?>(null) }
     var activeStreamPicker by remember { mutableStateOf<DebridStreamPicker?>(null) }
     var showResolverPicker by remember { mutableStateOf(false) }
+    var showFallbackResolverPicker by remember { mutableStateOf(false) }
     var showPrepareCountDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activeResolverProvider = uiState.activeResolverProvider
@@ -183,6 +184,16 @@ fun DebridSettingsContent(
                                 subtitle = stringResource(R.string.debrid_resolve_with_description),
                                 value = activeResolverProvider.displayName,
                                 onClick = { showResolverPicker = true },
+                                enabled = true
+                            )
+                        }
+                        item(key = "debrid_fallback_resolver") {
+                            SettingsActionRow(
+                                title = stringResource(R.string.debrid_fallback_resolver),
+                                subtitle = stringResource(R.string.debrid_fallback_resolver_description),
+                                value = uiState.fallbackResolverProvider?.displayName
+                                    ?: stringResource(R.string.debrid_fallback_none),
+                                onClick = { showFallbackResolverPicker = true },
                                 enabled = true
                             )
                         }
@@ -404,6 +415,18 @@ fun DebridSettingsContent(
                 showResolverPicker = false
             },
             onDismiss = { showResolverPicker = false }
+        )
+    }
+
+    if (showFallbackResolverPicker) {
+        DebridFallbackResolverProviderDialog(
+            providers = uiState.fallbackProviderOptions,
+            selectedProviderId = uiState.fallbackResolverProvider?.id ?: DebridProviders.FALLBACK_NONE,
+            onSelected = { providerId ->
+                viewModel.setFallbackResolverProviderId(providerId)
+                showFallbackResolverPicker = false
+            },
+            onDismiss = { showFallbackResolverPicker = false }
         )
     }
 
@@ -790,6 +813,33 @@ private fun DebridResolverProviderDialog(
             SettingsPickerOption(provider.id, provider.displayName)
         },
         selectedValue = selected,
+        onOptionSelected = onSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
+}
+
+@Composable
+private fun DebridFallbackResolverProviderDialog(
+    providers: List<DebridProvider>,
+    selectedProviderId: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val noneLabel = stringResource(R.string.debrid_fallback_none)
+    val options = buildList {
+        add(SettingsPickerOption(DebridProviders.FALLBACK_NONE, noneLabel))
+        providers.forEach { provider ->
+            add(SettingsPickerOption(provider.id, provider.displayName))
+        }
+    }
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.debrid_fallback_resolver),
+        subtitle = stringResource(R.string.debrid_fallback_resolver_description),
+        options = options,
+        selectedValue = selectedProviderId,
         onOptionSelected = onSelected,
         onDismiss = onDismiss,
         width = 420.dp,

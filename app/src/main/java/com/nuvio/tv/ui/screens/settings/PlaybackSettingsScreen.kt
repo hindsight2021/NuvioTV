@@ -224,6 +224,7 @@ fun PlaybackSettingsContent(
                 onShowContinueWatchingPreScrapeCountDialog = { openDialog { showContinueWatchingPreScrapeCountDialog = true } },
                 onSetContinueWatchingPreScrapeEnabled = { enabled -> coroutineScope.launch { viewModel.setContinueWatchingPreScrapeEnabled(enabled) } },
                 onSetContinueWatchingPreScrapeCount = { count -> coroutineScope.launch { viewModel.setContinueWatchingPreScrapeCount(count) } },
+                onSetSpeculativePreWarmEnabled = { enabled -> coroutineScope.launch { viewModel.setSpeculativePreWarmEnabled(enabled) } },
                 onSetPostPlayRecommendationsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setPostPlayRecommendationsEnabled(enabled) }
                 },

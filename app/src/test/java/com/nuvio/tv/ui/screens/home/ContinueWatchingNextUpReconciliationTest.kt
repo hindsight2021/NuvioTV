@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.model.nextUpSeriesDeleteDismissKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -138,13 +139,58 @@ class ContinueWatchingNextUpReconciliationTest {
         assertEquals(null, snapshot.single().thumbnail)
     }
 
+    @Test
+    fun `reconciliation keeps release alert for bare-dismissed show with active progress`() {
+        val resolved = nextUp(
+            contentId = "tt2342499",
+            season = 13,
+            episode = 7,
+            seedSeason = 13,
+            seedEpisode = 6,
+            isReleaseAlert = true
+        )
+
+        val result = reconcileConclusiveNextUpItems(
+            currentItems = emptyList(),
+            resolvedItems = listOf(resolved),
+            conclusivelyProcessedContentIds = setOf("tt2342499"),
+            dismissedNextUpKeys = setOf("tt2342499"),
+            activeProgressContentIds = setOf("tt2342499")
+        )
+
+        assertEquals(listOf(resolved), result)
+    }
+
+    @Test
+    fun `reconciliation drops release alert when series delete dismiss key is present`() {
+        val resolved = nextUp(
+            contentId = "tt0096697",
+            season = 38,
+            episode = 6,
+            seedSeason = 38,
+            seedEpisode = 5,
+            isReleaseAlert = true
+        )
+
+        val result = reconcileConclusiveNextUpItems(
+            currentItems = emptyList(),
+            resolvedItems = listOf(resolved),
+            conclusivelyProcessedContentIds = setOf("tt0096697"),
+            dismissedNextUpKeys = setOf(nextUpSeriesDeleteDismissKey("tt0096697")),
+            activeProgressContentIds = setOf("tt0096697")
+        )
+
+        assertTrue(result.isEmpty())
+    }
+
     private fun nextUp(
         contentId: String,
         season: Int,
         episode: Int,
         seedSeason: Int,
         seedEpisode: Int,
-        thumbnail: String? = null
+        thumbnail: String? = null,
+        isReleaseAlert: Boolean = false
     ) = ContinueWatchingItem.NextUp(
         NextUpInfo(
             contentId = contentId,
@@ -161,7 +207,8 @@ class ContinueWatchingNextUpReconciliationTest {
             lastWatched = 100L,
             sortTimestamp = 100L,
             seedSeason = seedSeason,
-            seedEpisode = seedEpisode
+            seedEpisode = seedEpisode,
+            isReleaseAlert = isReleaseAlert
         )
     )
 

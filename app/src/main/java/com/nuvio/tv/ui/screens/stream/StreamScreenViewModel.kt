@@ -7,9 +7,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
+import com.nuvio.tv.core.debrid.DirectDebridPlayableResult
 import com.nuvio.tv.core.debrid.DirectDebridResolveResult
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
+import com.nuvio.tv.data.local.CachedStreamLink
+import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.StreamClientResolve
+import com.nuvio.tv.domain.model.StreamDebridCacheStatus
+import kotlinx.coroutines.withTimeoutOrNull
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.torrent.TorrentSettings
@@ -458,10 +464,12 @@ class StreamScreenViewModel @Inject constructor(
             }
 
             if (!autoPlayHandledForSession && playerSettings.streamReuseLastLinkEnabled) {
-                val cached = streamLinkCacheDataStore.getValid(
+                val rawCached = streamLinkCacheDataStore.getValid(
                     contentKey = streamCacheKey,
-                    maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
+                    maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L,
+                    allowExpiredDebridRefresh = true
                 )
+                val cached = rawCached?.let { resolveCachedDebridIfExpired(it) }
                 if (cached != null) {
                     autoPlayHandledForSession = true
                     resolvedAutoPlayTarget = true
@@ -1230,6 +1238,112 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
+    private suspend fun resolveCachedDebridIfExpired(cached: CachedStreamLink): CachedStreamLink? {
+        if (!cached.isDebridUrlExpired()) {
+            return cached
+        }
+        val canRefresh = cached.canRefreshDebridLink() ||
+            (cached.isDebridLink && !cached.infoHash.isNullOrBlank())
+        if (!canRefresh) {
+            streamLinkCacheDataStore.remove(streamCacheKey)
+            return null
+        }
+
+        val probeStream = Stream(
+            name = cached.streamName,
+            title = cached.streamName,
+            description = null,
+            url = null,
+            ytId = null,
+            infoHash = cached.infoHash,
+            fileIdx = cached.fileIdx,
+            externalUrl = null,
+            behaviorHints = StreamBehaviorHints(
+                notWebReady = null,
+                bingeGroup = cached.bingeGroup,
+                countryWhitelist = null,
+                proxyHeaders = null,
+                videoHash = cached.videoHash,
+                videoSize = cached.videoSize,
+                filename = cached.filename
+            ),
+            addonName = cached.streamName,
+            addonLogo = null,
+            sources = cached.sources,
+            clientResolve = cached.clientResolveService?.let { svc ->
+                StreamClientResolve(
+                    type = cached.clientResolveType ?: "torrent",
+                    infoHash = cached.infoHash,
+                    fileIdx = cached.fileIdx,
+                    magnetUri = cached.clientResolveMagnet,
+                    sources = cached.sources,
+                    torrentName = cached.clientResolveTorrentName,
+                    filename = cached.filename,
+                    mediaType = contentType,
+                    mediaId = contentId,
+                    mediaOnlyId = null,
+                    title = title,
+                    season = season,
+                    episode = episode,
+                    service = svc,
+                    serviceIndex = null,
+                    serviceExtension = null,
+                    isCached = true
+                )
+            },
+            debridCacheStatus = if (cached.clientResolveService == null && !cached.infoHash.isNullOrBlank()) {
+                StreamDebridCacheStatus(
+                    providerId = "",
+                    providerName = "",
+                    state = StreamDebridCacheState.CACHED
+                )
+            } else {
+                null
+            }
+        )
+
+        val refreshResult = withTimeoutOrNull(8_000L) {
+            directDebridResolver.resolveToPlayableStream(probeStream, season, episode)
+        }
+        val refreshedStream = (refreshResult as? DirectDebridPlayableResult.Success)?.stream
+        val refreshedUrl = refreshedStream?.getStreamUrl()?.takeIf { it.isNotBlank() }
+        if (refreshedStream == null || refreshedUrl == null) {
+            Log.d(TAG, "Cached debrid link refresh failed for $streamCacheKey; evicting and scraping fresh streams")
+            streamLinkCacheDataStore.remove(streamCacheKey)
+            return null
+        }
+
+        val refreshedFilename = refreshedStream.behaviorHints?.filename ?: cached.filename
+        val refreshedVideoSize = refreshedStream.behaviorHints?.videoSize ?: cached.videoSize
+        streamLinkCacheDataStore.save(
+            contentKey = streamCacheKey,
+            url = refreshedUrl,
+            streamName = cached.streamName,
+            headers = null,
+            filename = refreshedFilename,
+            videoHash = cached.videoHash,
+            videoSize = refreshedVideoSize,
+            infoHash = cached.infoHash,
+            fileIdx = cached.fileIdx,
+            sources = cached.sources,
+            bingeGroup = cached.bingeGroup,
+            contentLanguage = cached.contentLanguage,
+            year = cached.year,
+            isDebridLink = true,
+            clientResolveService = cached.clientResolveService,
+            clientResolveMagnet = cached.clientResolveMagnet,
+            clientResolveType = cached.clientResolveType,
+            clientResolveTorrentName = cached.clientResolveTorrentName
+        )
+        return cached.copy(
+            url = refreshedUrl,
+            cachedAtMs = System.currentTimeMillis(),
+            filename = refreshedFilename,
+            videoSize = refreshedVideoSize,
+            isDebridLink = true
+        )
+    }
+
     suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
@@ -1283,6 +1397,7 @@ class StreamScreenViewModel @Inject constructor(
                 StreamSidecarSubtitles.set(result.url, stream.subtitles)
                 // Save resolved URL to cache for reuse last link
                 if (!result.url.isNullOrBlank()) {
+                    val resolveMeta = stream.clientResolve
                     pendingCacheSaveJob = viewModelScope.launch {
                         streamLinkCacheDataStore.save(
                             contentKey = streamCacheKey,
@@ -1292,9 +1407,17 @@ class StreamScreenViewModel @Inject constructor(
                             filename = resolved.filename,
                             videoHash = resolved.videoHash,
                             videoSize = resolved.videoSize,
+                            infoHash = stream.getEffectiveInfoHash() ?: resolveMeta?.infoHash,
+                            fileIdx = stream.getEffectiveFileIdx() ?: resolveMeta?.fileIdx,
+                            sources = stream.sources ?: resolveMeta?.sources,
                             bingeGroup = resolved.bingeGroup,
                             contentLanguage = contentLanguage,
-                            year = year
+                            year = year,
+                            isDebridLink = true,
+                            clientResolveService = resolveMeta?.service,
+                            clientResolveMagnet = resolveMeta?.magnetUri,
+                            clientResolveType = resolveMeta?.type,
+                            clientResolveTorrentName = resolveMeta?.torrentName
                         )
                     }
                 }
